@@ -1,0 +1,8 @@
+{
+  "appId": "com.warzone.lan",
+  "appName": "Warzone LAN",
+  "webDir": "www",
+  "backgroundColor": "#0b0f14",
+  "server": { "androidScheme": "http", "cleartext": true },
+  "android": { "allowMixedContent": true }
+}

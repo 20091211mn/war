@@ -30,7 +30,7 @@ export function createServer(port = PORT, host = '0.0.0.0') {
     let url;
     try { url = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { res.writeHead(400); res.end('bad request'); return; }
     if (url === '/api/info') {
-      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Private-Network': 'true' });
       res.end(JSON.stringify({ ips: lanAddresses(), port, players: game.humans().length, phase: game.phase }));
       return;
     }

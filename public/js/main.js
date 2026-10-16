@@ -3,8 +3,10 @@ import { Engine, tmp } from './gl.js';
 import { WEAPONS, PRIMARIES, SECONDARIES, OPTICS, MUZZLES, UNDERS, MAGS, computeStats, sanitizeLoadout, defaultLoadout, sanitizeAtt } from '/shared/weapons.js';
 import { buildMap } from '/shared/maps.js';
 import { PLAYER, moveBody, canStand, raycastMap, rayPlayer } from '/shared/physics.js';
+import { scan, probe } from './lan.js';
 import { Snd } from './audio.js';
 import { input, consume, takeLook, initInput, resetInput, isTouchDevice } from './input.js';
+import { icon, gunIcon } from './icons.js';
 import { drawAvatar, drawViewmodel, Effects, drawGrenade, GUNS, sightTop } from './models.js';
 
 const $ = (id) => document.getElementById(id);
@@ -37,7 +39,7 @@ const me = {
 let eng = null, fx = new Effects(), lastT = 0, lastSend = 0, lastPing = 0, lastRadar = 0, emaDt = 0.016, slowCount = 0;
 
 // ---------- الشاشات ----------
-const SCREENS = ['menu', 'lobby', 'loadout', 'pause', 'end', 'err'];
+const SCREENS = ['join', 'menu', 'lobby', 'loadout', 'pause', 'end', 'err'];
 function show(name) { for (const s of SCREENS) $(s).classList.toggle('hidden', s !== name); }
 function hideScreens() { for (const s of SCREENS) $(s).classList.add('hidden'); }
 function showError(title, msg, btn = 'إعادة المحاولة') { $('errTitle').textContent = title; $('errMsg').textContent = msg; $('btnReload').textContent = btn; show('err'); }
@@ -45,12 +47,16 @@ function toast(msg, ms = 2200) { const t = $('toast'); t.textContent = msg; t.cl
 
 // ---------- الشبكة ----------
 function send(o) { if (S.ws && S.ws.readyState === 1) S.ws.send(JSON.stringify(o)); }
+const APP = !!(window.Capacitor && (window.Capacitor.isNativePlatform ? window.Capacitor.isNativePlatform() : true));
+let serverAddr = APP ? '' : location.host, everOpen = false;
 function connect() {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const proto = !APP && location.protocol === 'https:' ? 'wss' : 'ws';
   let ws;
-  try { ws = new WebSocket(`${proto}://${location.host}`); } catch (e) { showError('تعذّر الاتصال', 'لا يمكن فتح الاتصال بالخادم.'); return; }
+  try { ws = new WebSocket(`${proto}://${serverAddr}`); } catch (e) { showError('تعذّر الاتصال', 'لا يمكن فتح الاتصال بالخادم.'); return; }
   S.ws = ws;
+  const openTimer = setTimeout(() => { if (ws.readyState !== 1) { try { ws.close(); } catch { /* */ } } }, 5000);
   ws.onopen = () => {
+    clearTimeout(openTimer); everOpen = true;
     S.connected = true; S.retry = 0;
     send({ t: 'hello', n: settings.name, lo: settings.lo });
     $('menuMsg').textContent = '';
@@ -58,8 +64,10 @@ function connect() {
   };
   ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } try { onMsg(m); } catch (err) { console.error(err); } };
   ws.onclose = () => {
+    clearTimeout(openTimer);
     if (S.ws !== ws) return;
     S.connected = false;
+    if (APP && !everOpen) { $('joinMsg').textContent = 'تعذّر الاتصال بـ ' + serverAddr + ' — تأكد أن الخادم يعمل وأنكما على نفس الشبكة.'; show('join'); return; }
     if (!S.entered) { $('menuMsg').textContent = 'جارٍ الاتصال بالخادم…'; }
     else showError('انقطع الاتصال', 'نحاول إعادة الاتصال تلقائيًا…', 'تحديث الصفحة');
     S.retry++; setTimeout(connect, Math.min(3000, 600 * S.retry));
@@ -69,7 +77,7 @@ function connect() {
 
 function onMsg(m) {
   switch (m.t) {
-    case 'welcome': S.id = m.id; S.maps = m.maps || []; S.remote.clear(); S.players.clear(); fillMaps(); break;
+    case 'welcome': if (APP && $('join') && !$('join').classList.contains('hidden')) show('menu'); S.id = m.id; S.maps = m.maps || []; S.remote.clear(); S.players.clear(); fillMaps(); break;
     case 'full': showError('الغرفة ممتلئة', 'وصلت الغرفة للحد الأقصى من اللاعبين.', 'تحديث الصفحة'); break;
     case 'lobby': onLobby(m); break;
     case 'start': startGame(m); break;
@@ -113,7 +121,7 @@ function renderLobby() {
     for (const p of S.players.values()) if (p.tm === t) {
       n++;
       const li = document.createElement('li'); if (p.id === S.id) li.className = 'me';
-      li.innerHTML = `<span>${p.b ? '🤖 ' : ''}${esc(p.n)}${p.id === S.hostId ? ' 👑' : ''}</span><small>${esc(WEAPONS[p.p] ? WEAPONS[p.p].name : '')}</small>`;
+      li.innerHTML = `<span>${p.b ? '<span class="tag">BOT</span> ' : ''}${esc(p.n)}${p.id === S.hostId ? ' <span class="tag host">المضيف</span>' : ''}</span><small>${esc(WEAPONS[p.p] ? WEAPONS[p.p].name : '')}</small>`;
       ul.appendChild(li);
     }
     $('c' + t).textContent = `(${n})`;
@@ -144,7 +152,7 @@ function renderLoadout() {
     const id = slot === 0 ? settings.lo.p : settings.lo.s;
     const wg = document.createElement('div'); wg.className = 'wgrid';
     for (const wid of ids) {
-      const b = document.createElement('button'); b.className = 'wbtn' + (wid === id ? ' on' : ''); b.textContent = WEAPONS[wid].name;
+      const b = document.createElement('button'); b.className = 'wbtn' + (wid === id ? ' on' : ''); b.innerHTML = gunIcon(WEAPONS[wid].kind, 84, 26) + '<span>' + WEAPONS[wid].name + '</span>';
       b.onclick = () => { if (slot === 0) settings.lo.p = wid; else settings.lo.s = wid; commitLoadout(); };
       wg.appendChild(b);
     }
@@ -210,6 +218,37 @@ function bindUI() {
   $('sens').oninput = (e) => { settings.sens = Number(e.target.value); store.set('sens', settings.sens); applySettings(); };
   $('vol').oninput = (e) => { settings.vol = Number(e.target.value); store.set('vol', settings.vol); applySettings(); };
   $('quality2').onchange = (e) => { settings.quality = Number(e.target.value); store.set('quality', settings.quality); applySettings(); };
+}
+function joinTo(addr) {
+  addr = addr.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  if (!addr) return;
+  if (!/:\d+$/.test(addr)) addr += ':3000';
+  serverAddr = addr; everOpen = false; $('joinMsg').textContent = 'جارٍ الاتصال بـ ' + addr + '…';
+  const rec = store.get('recent', []).filter((a) => a !== addr); rec.unshift(addr); store.set('recent', rec.slice(0, 4));
+  if (S.ws) { const o = S.ws; S.ws = null; try { o.close(); } catch { /* */ } }
+  connect();
+}
+let scanCtl = null;
+function bindJoin() {
+  const list = $('srvlist');
+  const addSrv = (s) => {
+    const b = document.createElement('button'); b.className = 'srv';
+    b.innerHTML = `<span>${icon('wifi', 18)} ${s.local ? 'هذا الجهاز' : 'لعبة'} — ${s.players} لاعب · ${s.phase === 'lobby' ? 'في الغرفة' : 'مباراة جارية'}</span><small>${s.host}:${s.port}</small>`;
+    b.onclick = () => { if (scanCtl) scanCtl.stop = true; joinTo(`${s.host}:${s.port}`); };
+    list.appendChild(b);
+  };
+  const rec = store.get('recent', []);
+  for (const a of rec) { const b = document.createElement('button'); b.className = 'srv'; b.innerHTML = `<span>آخر اتصال</span><small>${a}</small>`; b.onclick = () => joinTo(a); list.appendChild(b); }
+  $('btnScan').onclick = async () => {
+    if (scanCtl) scanCtl.stop = true; scanCtl = { stop: false }; const my = scanCtl;
+    list.innerHTML = ''; $('joinMsg').textContent = 'جارٍ البحث في الشبكة…'; $('btnScan').disabled = true;
+    let n = 0;
+    await scan((s) => { n++; addSrv(s); }, (p) => { $('scanBar').style.width = (p * 100) + '%'; }, my);
+    $('btnScan').disabled = false;
+    if (!my.stop) $('joinMsg').textContent = n ? 'اختر لعبة من القائمة.' : 'لم يتم العثور على ألعاب. تأكد أن الخادم يعمل أو اكتب العنوان يدويًا.';
+  };
+  $('btnManual').onclick = () => joinTo($('manual').value);
+  $('manual').value = rec[0] || '';
 }
 function pause() {
   if (!S.inGame || S.paused || S.ended) return;
@@ -302,7 +341,7 @@ function onShot(m) {
     if (e[3]) fx.spark(e[0], e[1], e[2], [0.8, 0.1, 0.1], 4, 3); else fx.spark(e[0], e[1], e[2], [0.8, 0.75, 0.6], 3, 2.5);
   }
   const d = Math.hypot(m.o[0] - me.x, m.o[2] - me.z), st = WEAPONS[m.w];
-  Snd.shot(st ? st.kind : 'rifle', clamp(1 - d / (m.s ? 40 : 110), 0, 1) * 0.9, panOf({ x: m.o[0], z: m.o[2] }), !!m.s);
+  Snd.shot(st ? st.kind : 'rifle', clamp(1 - d / (m.s ? 40 : 110), 0, 1) * 0.9, panOf({ x: m.o[0], z: m.o[2] }), !!m.s, clamp(d / 110, 0, 1));
 }
 function onHit(m) {
   if (m.v === S.id) {
@@ -320,9 +359,9 @@ function nameOf(id) { const p = S.players.get(id); return p ? p.n : '؟'; }
 function teamOf(id) { const p = S.players.get(id); return p ? p.tm : 0; }
 function onKill(m) {
   const k = S.players.get(m.k), v = S.players.get(m.v);
-  const w = m.w === 'gren' ? '💣' : (WEAPONS[m.w] ? WEAPONS[m.w].name : '');
+  const w = m.w === 'gren' ? 'قنبلة' : (WEAPONS[m.w] ? WEAPONS[m.w].name : '');
   const d = document.createElement('div'); d.className = teamOf(m.k) === 0 ? 'r' : 'b';
-  d.innerHTML = `${esc(k ? k.n : '؟')} ${m.h ? '🎯' : '←'} ${esc(v ? v.n : '؟')} <small>${esc(w)}</small>`;
+  d.innerHTML = `${esc(k ? k.n : '؟')} ${m.h ? icon('head', 13) : '←'} ${esc(v ? v.n : '؟')} <small>${esc(w)}</small>`;
   const feed = $('feed'); feed.appendChild(d); while (feed.children.length > 5) feed.removeChild(feed.firstChild); setTimeout(() => d.remove(), 6000);
   if (k) k.k++; if (v) v.d++;
   if (m.v === S.id) {
@@ -337,13 +376,13 @@ function onKill(m) {
 function onBoom(m) {
   fx.boom(m.x, m.y, m.z);
   const d = Math.hypot(m.x - me.x, m.z - me.z);
-  Snd.boom(clamp(1 - d / 70, 0, 1), panOf({ x: m.x, z: m.z }));
+  Snd.boom(clamp(1 - d / 70, 0, 1), panOf({ x: m.x, z: m.z }), clamp(d / 70, 0, 1));
 }
 function onEnd(m) {
   S.ended = true; resetInput(); if (input.resetAds) { input.resetAds(); input.resetCrouch(); }
   try { document.exitPointerLock && document.exitPointerLock(); } catch { /* */ }
   const mine = me.team;
-  $('endTitle').textContent = m.win < 0 ? 'تعادل!' : (m.win === mine ? '🏆 فريقك فاز!' : 'خسر فريقك');
+  $('endTitle').textContent = m.win < 0 ? 'تعادل!' : (m.win === mine ? 'فريقك فاز!' : 'خسر فريقك');
   $('endTitle').style.color = m.win < 0 ? '#ffb020' : (m.win === 0 ? 'var(--red)' : 'var(--blue)');
   $('endBoard').innerHTML = boardHtml(m.sc);
   $('endMsg').textContent = S.hostId === S.id ? 'اضغط للعودة إلى الغرفة (أو تعود تلقائيًا بعد ثوانٍ).' : 'ستعود إلى الغرفة تلقائيًا بعد ثوانٍ…';
@@ -355,7 +394,7 @@ function boardHtml(sc) {
   for (const t of [0, 1]) {
     const rows = [...S.players.values()].filter((p) => p.tm === t).sort((a, b) => b.k - a.k || a.d - b.d);
     h += `<div class="bt t${t}"><b style="font-size:18px">${t === 0 ? 'الأحمر' : 'الأزرق'} — ${sc ? sc[t] : S.score[t]}</b><table><tr><th>اللاعب</th><th>قتل</th><th>موت</th></tr>`;
-    for (const p of rows) h += `<tr class="${p.id === S.id ? 'me' : ''}"><td>${p.b ? '🤖 ' : ''}${esc(p.n)}</td><td>${p.k}</td><td>${p.d}</td></tr>`;
+    for (const p of rows) h += `<tr class="${p.id === S.id ? 'me' : ''}"><td>${p.b ? '<span class="tag">BOT</span> ' : ''}${esc(p.n)}</td><td>${p.k}</td><td>${p.d}</td></tr>`;
     h += '</table></div>';
   }
   return h + '</div>';
@@ -366,7 +405,7 @@ function renderBoard() { $('board').innerHTML = boardHtml(); }
 function curStats() { return me.st[me.w]; }
 function updateAmmoHud() {
   const st = curStats(); if (!st) return; const am = me.ammo[me.w];
-  $('wname').textContent = st.name; $('mag').textContent = am.mag; $('res').textContent = am.res; $('gcount').textContent = '💣 ' + me.grenades;
+  $('wname').textContent = st.name; $('mag').textContent = am.mag; $('res').textContent = am.res; $('gcount').innerHTML = icon('gren', 14) + ' ' + me.grenades;
 }
 function startReload(now) {
   const st = curStats(), am = me.ammo[me.w];
@@ -506,7 +545,7 @@ function updateRemotes(dt, now) {
         if (d < 24) {
           const eyeY = me.camY + me.eyeH, dy = r.y + 1 - eyeY, L = Math.hypot(d, dy) || 1;
           const blocked = raycastMap(S.map, me.x, eyeY, me.z, (r.x - me.x) / L, dy / L, (r.z - me.z) / L, L) !== Infinity;
-          Snd.step(Math.pow(1 - d / 24, 2) * (blocked ? 0.25 : 0.55), panOf(r));
+          Snd.step(Math.pow(1 - d / 24, 2) * (blocked ? 0.25 : 0.55), panOf(r), clamp(d / 24, 0, 1));
         }
       }
     }
@@ -611,14 +650,17 @@ function frame(ts) {
 
 // ---------- الإقلاع ----------
 function boot() {
+  document.querySelectorAll('[data-ic]').forEach((el) => { el.outerHTML = icon(el.dataset.ic, Number(el.dataset.s) || 28); });
   bindUI();
   try { eng = new Engine($('gl')); eng.resize(settings.quality); }
   catch (e) { showError('جهازك لا يدعم الرسم ثلاثي الأبعاد', String(e.message || e), 'إعادة المحاولة'); return; }
   initInput($('gl'), { pause: () => { if (S.paused) resume(); else pause(); }, unlocked: () => { if (S.inGame && !S.ended && !S.paused && !input.touch) pause(); }, canLock: () => S.inGame && !S.paused && !S.ended && !!$('gl').requestPointerLock });
   applySettings();
   window.addEventListener('resize', () => eng && eng.resize());
-  show('menu'); connect();
+  if (APP) { $('btnChange').classList.remove('hidden'); $('btnChange').onclick = () => location.reload(); }
+  if (APP) { bindJoin(); show('join'); $('btnScan').click(); } else { show('menu'); connect(); }
   requestAnimationFrame(frame);
+  try { if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(() => {}); } catch { /* */ }
   window.__wz = { S, me, eng }; // للاختبارات
 }
 boot();
