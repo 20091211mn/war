@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Warzone">
+<meta name="theme-color" content="#0b0f14">
+<title>Warzone LAN</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<!-- الواجهة أثناء اللعب -->
+<div id="hud" class="hidden">
+  <div id="scorebar"><span id="sc0" class="red">0</span><span id="timer">10:00</span><span id="sc1" class="blue">0</span></div>
+  <canvas id="radar" width="260" height="260"></canvas>
+  <div id="feed"></div>
+  <div id="names"></div>
+  <div id="cross"><i class="cl"></i><i class="cr"></i><i class="ct"></i><i class="cb"></i></div>
+  <div id="hitm"><i></i><i></i><i></i><i></i></div>
+  <div id="dmgdirs"></div>
+  <div id="vign"></div>
+  <div id="hpbox"><div id="hpfill"></div><span id="hpnum">100</span></div>
+  <div id="ammobox"><div id="wname">—</div><div><b id="mag">0</b><small> / <span id="res">0</span></small></div><div id="gcount">💣 2</div></div>
+  <div id="stat"></div>
+  <div id="toast"></div>
+  <div id="prot" class="hidden">حماية الظهور</div>
+</div>
+<div id="scope" class="hidden"><div class="h"></div><div class="v"></div></div>
+<div id="board" class="hidden"></div>
+<div id="deadmsg" class="hidden"></div>
+
+<!-- أدوات اللمس -->
+<div id="touch" class="hidden">
+  <div id="lookzone"></div>
+  <div id="joyzone"></div>
+  <div id="joybase"><div id="joyknob"></div></div>
+  <div class="tbtn" id="b-fire2">🔥</div>
+  <div class="tbtn" id="b-fire">🔥</div>
+  <div class="tbtn" id="b-ads">🎯</div>
+  <div class="tbtn" id="b-jump">⤒</div>
+  <div class="tbtn" id="b-crouch">⤓</div>
+  <div class="tbtn" id="b-reload">↻</div>
+  <div class="tbtn" id="b-swap">⇄</div>
+  <div class="tbtn" id="b-gren">💣</div>
+  <div class="tbtn small" id="b-board">☰</div>
+  <div class="tbtn small" id="b-pause">⏸</div>
+</div>
+
+<!-- الشاشات -->
+<div id="menu" class="screen">
+  <div class="card">
+    <h1>WARZONE <span>LAN</span></h1>
+    <p class="sub">حرب فرق ثلاثية الأبعاد — الأحمر ضد الأزرق</p>
+    <label>اسمك<input id="name" maxlength="14" placeholder="اسم اللاعب" autocomplete="off"></label>
+    <label>جودة الرسم
+      <select id="quality"><option value="0.6">منخفضة (أسرع)</option><option value="0.8" selected>متوسطة</option><option value="1">عالية</option></select>
+    </label>
+    <button id="btnEnter" class="primary big">ادخل اللعبة</button>
+    <p id="menuMsg" class="msg"></p>
+    <p class="hint">على آيفون: افتح الرابط في Safari ثم «مشاركة ← إضافة إلى الشاشة الرئيسية» لملء الشاشة.</p>
+  </div>
+</div>
+
+<div id="lobby" class="screen hidden">
+  <div class="top"><b>غرفة اللعب</b><span id="addr"></span><span id="ping"></span></div>
+  <div class="cols">
+    <div class="col t0"><h3>الفريق الأحمر <small id="c0"></small></h3><ul id="t0"></ul><button data-team="0">انضم للأحمر</button></div>
+    <div class="col t1"><h3>الفريق الأزرق <small id="c1"></small></h3><ul id="t1"></ul><button data-team="1">انضم للأزرق</button></div>
+    <div class="col set">
+      <label>الخريطة<select id="cfgMap"></select></label>
+      <label>حد النقاط<select id="cfgScore"><option>10</option><option>20</option><option>30</option><option>50</option><option>100</option></select></label>
+      <label>مدة المباراة<select id="cfgTime"><option value="180">3 دقائق</option><option value="300">5 دقائق</option><option value="600">10 دقائق</option><option value="900">15 دقيقة</option></select></label>
+      <label>بوتات (الحد الأدنى لكل فريق)<select id="cfgFill"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label>
+      <button id="btnLoadout">🔧 تجهيز العتاد</button>
+      <button id="btnStart" class="primary">▶ ابدأ المباراة</button>
+      <p id="hostMsg" class="msg"></p>
+    </div>
+  </div>
+</div>
+
+<div id="loadout" class="screen hidden">
+  <div class="top"><b>تجهيز العتاد</b><button id="btnLoDone" class="primary">تم ✓</button></div>
+  <div class="cols lo">
+    <div class="col"><h3>السلاح الرئيسي</h3><div id="loP"></div></div>
+    <div class="col"><h3>السلاح الثانوي</h3><div id="loS"></div></div>
+  </div>
+</div>
+
+<div id="pause" class="screen hidden">
+  <div class="card">
+    <h2>إيقاف مؤقت</h2>
+    <p class="hint">اللعبة لا تتوقف على الخادم أثناء فتح هذه القائمة.</p>
+    <label>حساسية النظر<input type="range" id="sens" min="1" max="10" step="0.5" value="5"></label>
+    <label>مستوى الصوت<input type="range" id="vol" min="0" max="1" step="0.05" value="0.7"></label>
+    <label>جودة الرسم<select id="quality2"><option value="0.5">منخفضة جدًا</option><option value="0.6">منخفضة</option><option value="0.8">متوسطة</option><option value="1">عالية</option></select></label>
+    <button id="btnResume" class="primary big">استئناف</button>
+    <button id="btnLo2">🔧 تعديل العتاد (يُطبّق عند الظهور القادم)</button>
+    <button id="btnBack">العودة إلى الغرفة</button>
+    <button id="btnFull">ملء الشاشة</button>
+  </div>
+</div>
+
+<div id="end" class="screen hidden"><div class="card wide"><h2 id="endTitle"></h2><div id="endBoard"></div><p id="endMsg" class="msg"></p><button id="btnEndBack" class="primary">العودة إلى الغرفة</button></div></div>
+<div id="err" class="screen hidden"><div class="card"><h2 id="errTitle">تنبيه</h2><p id="errMsg"></p><button id="btnReload" class="primary">إعادة المحاولة</button></div></div>
+<div id="rotate"><div>↻<br>دوّر الجهاز أفقيًا للعب</div></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
