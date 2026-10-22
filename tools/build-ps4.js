@@ -1,0 +1,22 @@
+// يبني صفحة واحدة مستقلة (HTML+CSS+JS مصغّرة ومحوّلة لمتصفح PS4/Safari القديم) ثم يولّد ps4/src/game.h
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import esbuild from 'esbuild';
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const target = ['es2017'];
+const shared = { name: 'shared', setup(b) { b.onResolve({ filter: /^\/shared\// }, (a) => ({ path: path.join(root, a.path) })); } };
+const js = await esbuild.build({ entryPoints: [path.join(root, 'public/js/main.js')], bundle: true, format: 'iife', target, minify: true, write: false, plugins: [shared], legalComments: 'none' });
+const css = await esbuild.transform(fs.readFileSync(path.join(root, 'public/style.css'), 'utf8'), { loader: 'css', target, minify: true });
+let html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+html = html.replace(/<link rel="manifest"[^>]*>/, '').replace(/<link rel="stylesheet" href="style.css">/, () => '<style>' + css.code + '</style>');
+const code = js.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
+html = html.replace('<script type="module" src="js/main.js"></script>', () => '<script>window.__PS4=1;' + code + '</script>');
+const buf = Buffer.from(html, 'utf8');
+fs.mkdirSync(path.join(root, 'ps4/out'), { recursive: true });
+fs.writeFileSync(path.join(root, 'ps4/out/page.html'), buf);
+let h = '// مولَّد تلقائيًا من tools/build-ps4.js\n#define GAME_HTML_LEN ' + buf.length + 'u\nstatic const unsigned char GAME_HTML[] = {\n';
+for (let i = 0; i < buf.length; i += 24) h += Array.from(buf.subarray(i, i + 24)).join(',') + ',\n';
+h += '0};\n';
+fs.writeFileSync(path.join(root, 'ps4/src/game.h'), h);
+console.log('PS4 page:', (buf.length / 1024).toFixed(0), 'KB');

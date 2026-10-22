@@ -1,0 +1,56 @@
+name: Build PS4 PKG
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['ps4/**', 'public/**', 'shared/**', 'tools/build-ps4.js', '.github/workflows/ps4.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  pkg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install deps
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y clang lld jq
+          npm install --no-audit --no-fund esbuild
+      - name: Build embedded game page
+        run: node tools/build-ps4.js
+      - name: Download OpenOrbis toolchain
+        run: |
+          URL=$(curl -sL https://api.github.com/repos/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/latest | jq -r '[.assets[] | select(.name|test("linux|toolchain";"i"))][0].browser_download_url')
+          echo "toolchain: $URL"
+          mkdir -p /tmp/oo && curl -sL "$URL" -o /tmp/oo/tc.pkg
+          cd /tmp/oo && (tar -xf tc.pkg 2>/dev/null || unzip -q tc.pkg)
+          LX=$(find /tmp/oo -name link.x | head -1)
+          echo "OO_PS4_TOOLCHAIN=$(dirname "$LX")" >> "$GITHUB_ENV"
+          chmod -R +x "$(dirname "$LX")/bin" || true
+      - name: Prepare project from toolchain sample
+        working-directory: ps4
+        run: |
+          cp -r "$OO_PS4_TOOLCHAIN/samples/networking/sce_sys" ./sce_sys
+          cp ../public/icon-512.png sce_sys/icon0.png
+          ls -R sce_sys | head -20
+      - name: Build PKG
+        working-directory: ps4
+        run: make
+      - name: List PKG
+        run: ls -la ps4/*.pkg
+      - name: Upload PKG
+        uses: actions/upload-artifact@v4
+        with:
+          name: Warzone-ps4-pkg
+          path: ps4/*.pkg
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ps4-latest
+          name: Warzone (PS4 PKG)
+          files: ps4/*.pkg
