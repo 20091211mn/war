@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   pkg:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,6 +21,14 @@ jobs:
         run: |
           sudo apt-get update -y && sudo apt-get install -y clang lld jq
           npm install --no-audit --no-fund esbuild
+      - name: Install libssl1.1 (PkgTool.Core needs it)
+        run: |
+          cd /tmp
+          for U in http://security.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2_amd64.deb; do
+            curl -fsSL "$U" -o libssl1.1.deb && break
+          done
+          sudo dpkg -i libssl1.1.deb
+          ls /usr/lib/x86_64-linux-gnu/ | grep -E "libssl|libcrypto"
       - name: Build embedded game page
         run: node tools/build-ps4.js
       - name: Download OpenOrbis toolchain
@@ -40,6 +48,9 @@ jobs:
           ls -R sce_sys | head -20
       - name: Build PKG
         working-directory: ps4
+        env:
+          CLR_OPENSSL_VERSION_OVERRIDE: '1.1'
+          DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: '1'
         run: make
       - name: List PKG
         run: ls -la ps4/*.pkg
