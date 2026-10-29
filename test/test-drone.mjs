@@ -1,0 +1,38 @@
+// اختبار الطائرة المسيّرة في المتصفح: إطلاق، طيران، رسم، تفجير، هبوط
+import { createServer } from '../server/server.js';
+import { chromium } from 'playwright';
+import fs from 'node:fs';
+const srv = await createServer(0, '127.0.0.1'); const url = `http://127.0.0.1:${srv.port}/`;
+const out = process.env.SHOTS || '/tmp/claude-0/shots'; fs.mkdirSync(out, { recursive: true });
+const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+let fails = 0; const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fails++; };
+const errs = [];
+const page = await (await browser.newContext({ viewport: { width: 960, height: 540 } })).newPage();
+page.on('pageerror', (e) => errs.push(e.message)); page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
+await page.goto(url); await page.fill('#name', 'طيار'); await page.click('#btnSolo'); await page.waitForSelector('#lobby:not(.hidden)');
+await page.selectOption('#cfgMap', '2'); await page.selectOption('#cfgFill', '4'); await page.waitForTimeout(300);
+await page.click('#btnStart'); await page.waitForFunction(() => window.__wz.me.alive, null, { timeout: 8000 }); await page.waitForTimeout(1500);
+await page.evaluate(() => { const g = window.__wz.S.host.game; g.players.get(window.__wz.S.id).prot = Date.now() + 1e9; });
+console.log('1) إطلاق وطيران');
+const x0 = await page.evaluate(() => window.__wz.me.x);
+await page.keyboard.press('KeyB'); await page.waitForFunction(() => !!window.__wz.me.drone, null, { timeout: 4000 });
+ok(true, 'الطائرة انطلقت'); await page.waitForTimeout(300); ok(await page.evaluate(() => !document.getElementById('dronehud').classList.contains('hidden')), 'واجهة الطائرة ظاهرة');
+await page.keyboard.down('KeyW'); await page.keyboard.down('Space'); await page.waitForTimeout(1800); await page.keyboard.up('KeyW'); await page.keyboard.up('Space');
+const st = await page.evaluate(() => ({ d: { ...window.__wz.me.drone }, bx: window.__wz.me.x, n: window.__wz.S.drones.size }));
+ok(Math.hypot(st.d.x - x0, st.d.z - 0) > 0.5 || Math.abs(st.d.y - 2) > 0.3, `الطائرة تحركت (${st.d.x.toFixed(1)},${st.d.y.toFixed(1)})`);
+ok(Math.abs(st.bx - x0) < 0.01, 'جسم اللاعب ثابت أثناء الطيران');
+ok(st.n === 1, 'الخادم يبث الطائرة'); 
+await page.screenshot({ path: `${out}/drone.png` });
+await page.evaluate(() => { window.__wz.me.yaw += 3.14; }); // الجسم يظهر للطائرة؟ تبديل الاتجاه فقط
+console.log('2) هبوط وتفجير');
+await page.keyboard.press('KeyB'); await page.waitForFunction(() => !window.__wz.me.drone, null, { timeout: 3000 }); ok(true, 'هبوط الطائرة');
+await page.keyboard.press('KeyB'); await page.waitForTimeout(400); ok(await page.evaluate(() => !window.__wz.me.drone), 'لا إطلاق أثناء الشحن');
+await page.evaluate(() => { window.__wz.me.droneCd = 0; const g = window.__wz.S.host.game; g.players.get(window.__wz.S.id).droneCd = 0; });
+await page.keyboard.press('KeyB'); await page.waitForFunction(() => !!window.__wz.me.drone, null, { timeout: 4000 });
+await page.mouse.move(400, 300); await page.keyboard.press('KeyH');
+await page.evaluate(() => window.__wz.send({ t: 'dboom' }));
+await page.waitForFunction(() => !window.__wz.me.drone, null, { timeout: 3000 }); ok(true, 'التفجير ينهي الطائرة');
+ok(await page.evaluate(() => window.__wz.me.alive), 'الطيار حي (بعيد عن الانفجار)');
+ok(errs.length === 0, 'لا أخطاء في المتصفح ' + errs.join(' | '));
+await browser.close(); srv.close && srv.close();
+console.log(fails ? `فشل: ${fails}` : 'نجح اختبار الطائرة ✓'); process.exit(fails ? 1 : 0);

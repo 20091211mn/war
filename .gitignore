@@ -1,0 +1,11 @@
+*.log
+node_modules/
+/www/
+/android/
+/ps4/build/
+/ps4/sce_sys/
+/ps4/*.pkg
+/ps4/*.gp4
+/ps4/eboot.bin
+/ps4/out/
+/ps4/assets/

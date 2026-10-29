@@ -1,0 +1,95 @@
+name: Build PS4 PKG
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['ps4/**', 'public/**', 'shared/**', 'tools/build-ps4.js', '.github/workflows/ps4.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  pkg:
+    runs-on: ubuntu-22.04
+    env:
+      CLR_OPENSSL_VERSION_OVERRIDE: '1.1'
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install deps
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y clang lld jq
+          npm install --no-audit --no-fund esbuild
+      - name: Install libssl1.1 (PkgTool.Core needs it)
+        run: |
+          cd /tmp
+          for U in http://security.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2_amd64.deb; do
+            curl -fsSL "$U" -o libssl1.1.deb && break
+          done
+          sudo dpkg -i libssl1.1.deb
+      - name: Build embedded game page
+        run: node tools/build-ps4.js
+      - name: Download OpenOrbis toolchain
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          URL=""
+          for i in 1 2 3 4 5; do
+            URL=$(curl -sL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" https://api.github.com/repos/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/latest | jq -r '[(.assets // [])[] | select(.name|test("linux|toolchain";"i"))][0].browser_download_url // empty')
+            [ -n "$URL" ] && break
+            echo "retry $i (API returned no assets)"; sleep 8
+          done
+          [ -n "$URL" ] || { echo "could not find toolchain asset"; exit 1; }
+          echo "toolchain: $URL"
+          mkdir -p /tmp/oo && curl -sL "$URL" -o /tmp/oo/tc.pkg
+          cd /tmp/oo && (tar -xf tc.pkg 2>/dev/null || unzip -q tc.pkg)
+          LX=$(find /tmp/oo -name link.x | head -1)
+          echo "OO_PS4_TOOLCHAIN=$(dirname "$LX")" >> "$GITHUB_ENV"
+          chmod -R +x "$(dirname "$LX")/bin" || true
+      # كل الحزم تُبنى من عينة hello_world التي ثبت أنها تعمل (نفس Makefile وsce_sys والأيقونة) ويتغير الكود فقط
+      - name: Build baseline + variants A (minimal) and B (full game server)
+        run: |
+          S="$OO_PS4_TOOLCHAIN/samples"
+          mk() { # name  tid  cid-suffix(16)  main.cpp  [page.html]
+            rm -rf "$S/$1"; cp -r "$S/hello_world" "$S/$1"
+            rm -rf "$S/$1/hello_world"; mkdir -p "$S/$1/$1"
+            cp "$4" "$S/$1/$1/main.cpp"
+            if [ -n "$5" ]; then cp "$5" "$S/$1/$1/game.h"; fi
+            ( cd "$S/$1"
+              if [ -n "$6" ]; then sed -i "s/^LIBS .*/& -lSceSystemService\nEXTRAFLAGS := -DAUTOLAUNCH/" Makefile; fi
+              sed -i "s/BREW00[0-9]*/$2/g; s/IV0000-$2_00-[A-Z0-9]*/IV0000-$2_00-$3/; s/^TITLE .*/TITLE       := $1/" Makefile
+              grep -n "TITLE\|CONTENT_ID" Makefile | head -4
+              make
+              cp ./*.pkg "$GITHUB_WORKSPACE/$1.pkg" )
+          }
+          # baseline: hello الأصلية بمعرّف مختلف
+          rm -rf "$S/hello_base"; cp -r "$S/hello_world" "$S/hello_base"
+          mkdir -p "$S/hello_base/hello_base" && mv "$S/hello_base/hello_world/"* "$S/hello_base/hello_base/" && rmdir "$S/hello_base/hello_world"
+          ( cd "$S/hello_base"; sed -i 's/BREW00[0-9]*/BREW00780/g; s/IV0000-BREW00780_00-[A-Z0-9]*/IV0000-BREW00780_00-HELLOBASE0000000/' Makefile; make; cp ./*.pkg "$GITHUB_WORKSPACE/hello-baseline.pkg" )
+          mk wzA BREW00781 WZVARIANTA000000 "$GITHUB_WORKSPACE/ps4/src/variant_a.cpp"
+          mk wzB BREW00782 WZVARIANTB000000 "$GITHUB_WORKSPACE/ps4/src/main.cpp" "$GITHUB_WORKSPACE/ps4/out/game.h"
+          mk wzC BREW00783 WZVARIANTC000000 "$GITHUB_WORKSPACE/ps4/src/main.cpp" "$GITHUB_WORKSPACE/ps4/out/game.h" auto
+          ls -la "$GITHUB_WORKSPACE"/*.pkg
+      - name: Upload PKGs
+        uses: actions/upload-artifact@v4
+        with:
+          name: Warzone-ps4-pkgs
+          path: |
+            hello-baseline.pkg
+            wzA.pkg
+            wzB.pkg
+            wzC.pkg
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ps4-latest
+          name: Warzone (PS4 PKGs)
+          files: |
+            hello-baseline.pkg
+            wzA.pkg
+            wzB.pkg
+            wzC.pkg
