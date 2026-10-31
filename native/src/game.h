@@ -6,6 +6,9 @@
 #include <string>
 #include <cstdlib>
 
+#ifndef BUILD_ID
+#define BUILD_ID 0
+#endif
 struct Input{
   float mx=0,my=0;      // حركة: x يمين، y أمام
   float lx=0,ly=0;      // نظر: x يمين، y أعلى (معدّل)
@@ -373,7 +376,7 @@ struct Game{
   void renderMenu(){
     static float mt=0; mt+=0.016f; int showMap=menu==1?menuSel:mapIdx;
     Cam c{0,6,0,mt*0.2f,-0.15f,1.2f}; if(w.id!=showMap)w.load(showMap); r.setCam(c); r.world(w); int W=r.W,H=r.H,sc=std::max(1,H/270); rect(0,0,W,H,0xFF000000,0.5f); rect(0,0,W,H/6,0xFF000000,0.35f); rect(0,H-H/6,W,H/6,0xFF000000,0.35f);
-    textC(W/2+sc*2,H/9+sc*2,"WARZONE",sc*6,0xFF300800); textC(W/2,H/9,"WARZONE",sc*6,0xFFFF5040); rect(W/2-tw("WARZONE",sc*6)/2,H/9+46*sc,tw("WARZONE",sc*6),2*sc,0xFFFF5040); textC(W/2,H/9+52*sc,"NATIVE PS4 EDITION",sc*2,0xFFC0C8D0);
+    textC(W/2+sc*2,H/9+sc*2,"WARZONE",sc*6,0xFF300800); textC(W/2,H/9,"WARZONE",sc*6,0xFFFF5040); rect(W/2-tw("WARZONE",sc*6)/2,H/9+46*sc,tw("WARZONE",sc*6),2*sc,0xFFFF5040); {char bb[40];snprintf(bb,40,"NATIVE PS4 EDITION   BUILD %d",BUILD_ID);textC(W/2,H/9+52*sc,bb,sc*2,0xFFC0C8D0);}
     char b[96];
     if(menu==3){ textC(W/2,H/2-10*sc,"STARTING NETWORK...",sc*3,0xFFFFFFFF); snprintf(b,96,"STEP: %s",netWhat); textC(W/2,H/2+20*sc,b,sc*2,0xFFFFD060); return; }
     if(menu==2){
