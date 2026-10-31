@@ -2,6 +2,7 @@
 #pragma once
 #include "render.h"
 #include "font.h"
+#include "ar.h"
 #include "net.h"
 #include "ws.h"
 #include <string>
@@ -358,8 +359,20 @@ struct Game{
   // ---- واجهة ----
   void px(int x,int y,uint32_t c){ if(x>=0&&y>=0&&x<r.W&&y<r.H)r.fb[y*r.W+x]=c; }
   void rect(int x,int y,int w2,int h2,uint32_t c,float a=1){ for(int j=std::max(0,y);j<std::min(r.H,y+h2);j++)for(int i=std::max(0,x);i<std::min(r.W,x+w2);i++){ if(a>=1)r.fb[j*r.W+i]=c; else { uint32_t o=r.fb[j*r.W+i]; auto m=[&](int sh){int A=(o>>sh)&255,B=(c>>sh)&255;return (uint32_t)(A+(B-A)*a)<<sh;}; r.fb[j*r.W+i]=0xFF000000u|m(16)|m(8)|m(0);} } }
-  void text(int x,int y,const char*s,int sc,uint32_t col){ int cx=x; for(;*s;s++){ if(*s=='\n'){cx=x;y+=8*sc;continue;} const uint8_t*g=glyphOf(*s); if(g)for(int j=0;j<7;j++)for(int i=0;i<5;i++)if(g[j]&(16>>i))rect(cx+i*sc,y+j*sc,sc,sc,col); cx+=6*sc; } }
-  int tw(const char*s,int sc){return (int)strlen(s)*6*sc;}
+  // خط حقيقي: sc*9 = حجم الخط بالبكسل ؛ يدعم العربية
+  static int fontEm(int sc){ return std::max(8,sc*9); }
+  static const FGlyph* fgFor(int em,uint32_t cp,int&base){ const FGlyph*a;int n; if(em<=22){a=FG_S;n=FN_S;base=16;} else if(em<=44||cp>=0x80){a=FG_M;n=FN_M;base=32;} else {a=FG_L;n=FN_L;base=64;}
+    const FGlyph*g=AR::find(a,n,cp); if(!g&&cp!=0x20){ g=AR::find(a,n,'?'); } return g; }
+  int tw(const char*s,int sc){ int em=fontEm(sc),best=0,cur=0; for(auto cp:AR::visual(s)){ if(cp=='\n'){best=std::max(best,cur);cur=0;continue;} int base; const FGlyph*g=fgFor(em,cp,base); cur+=g?(int)(g->adv16/16.0f*em/base+0.5f):em/3; } return std::max(best,cur); }
+  void text(int x,int y,const char*s,int sc,uint32_t col){ int em=fontEm(sc); std::string line; const char*p=s; int ly=y;
+    auto flush=[&](){ int cx=x,bl=ly+7*sc; for(auto cp:AR::visual(line.c_str())){ int base; const FGlyph*g=fgFor(em,cp,base); if(!g){cx+=em/3;continue;} float k=(float)em/base;
+        if(g->w){ int dw=std::max(1,(int)(g->w*k+0.5f)),dh=std::max(1,(int)(g->h*k+0.5f)); int dx=cx+(int)(g->bx*k+(g->bx<0?-0.5f:0.5f)),dy=bl-(int)(g->by*k+0.5f); const uint8_t*src=FDATA+g->off;
+          for(int j=0;j<dh;j++){ int py=dy+j; if(py<0||py>=r.H)continue; float fy=(j+0.5f)/k-0.5f; int y0=(int)floorf(fy); float ty=fy-y0; int y1=std::min(g->h-1,y0+1); y0=std::max(0,y0);
+            for(int i=0;i<dw;i++){ int px=dx+i; if(px<0||px>=r.W)continue; float fx=(i+0.5f)/k-0.5f; int x0=(int)floorf(fx); float tx=fx-x0; int x1=std::min(g->w-1,x0+1); x0=std::max(0,x0);
+              float a=(src[y0*g->w+x0]*(1-tx)+src[y0*g->w+x1]*tx)*(1-ty)+(src[y1*g->w+x0]*(1-tx)+src[y1*g->w+x1]*tx)*ty; a/=255.f; if(a<0.04f)continue;
+              uint32_t o=r.fb[py*r.W+px]; auto m=[&](int sh){int A=(o>>sh)&255,B=(col>>sh)&255;return (uint32_t)(A+(B-A)*a)<<sh;}; r.fb[py*r.W+px]=0xFF000000u|m(16)|m(8)|m(0); } } }
+        cx+=(int)(g->adv16/16.0f*k+0.5f); } line.clear(); };
+    for(;*p;p++){ if(*p=='\n'){ flush(); ly+=em*3/2; } else line+=*p; } flush(); }
   void textC(int cx,int y,const char*s,int sc,uint32_t col){text(cx-tw(s,sc)/2,y,s,sc,col);}
   void hud(){
     int W=r.W,H=r.H,sc=std::max(1,H/270); Ent&me=e[meI]; const WeaponDef&d=WEAPONS[me.wpn];
@@ -382,33 +395,47 @@ struct Game{
     if(role)text(6*sc,H-30*sc,role==1?"LAN HOST":role==2?"LAN CLIENT":"ANDROID LAN",sc,0xFF80E0FF);
     if(role==3){ char tb[16]; snprintf(tb,16,"%d:%02d",g_aclTime/60,g_aclTime%60); textC(W/2,16*sc,tb,sc*2,0xFFE0E0E0); }
     if(over){ rect(0,0,W,H,0xFF000000,0.55f); textC(W/2,H/2-20*sc,winner==0?"RED TEAM WINS":"BLUE TEAM WINS",sc*3,winner==0?0xFFFF6060:0xFF6090FF); textC(W/2,H/2+10*sc,role==2?"WAITING FOR HOST":"X = PLAY AGAIN",sc*2,0xFFFFFFFF); }
-    if(paused){ rect(0,0,W,H,0xFF000000,0.6f); textC(W/2,H/2-12*sc,"PAUSED",sc*3,0xFFFFFFFF); textC(W/2,H/2+14*sc,"OPTIONS = RESUME   O = MENU",sc*2,0xFFB0B0B0); char sb[40];snprintf(sb,40,"SENSITIVITY < %.1f >",sens);textC(W/2,H/2+34*sc,sb,sc*2,0xFFFFFFFF); {char sw[40];snprintf(sw,40,"R1: STICKS %s",swapSticks?"LEFT=LOOK RIGHT=MOVE":"LEFT=MOVE RIGHT=LOOK");textC(W/2,H/2+54*sc,sw,sc,0xFF80E0FF);} }
+    if(paused){ rect(0,0,W,H,0xFF000000,0.6f); textC(W/2,H/2-12*sc,"إيقاف مؤقت",sc*3,0xFFFFFFFF); textC(W/2,H/2+14*sc,"OPTIONS: متابعة    O: القائمة",sc*2,0xFFB0B0B0); char sb[40];snprintf(sb,40,"SENSITIVITY < %.1f >",sens);textC(W/2,H/2+34*sc,sb,sc*2,0xFFFFFFFF); {char sw[40];snprintf(sw,40,"R1: STICKS %s",swapSticks?"LEFT=LOOK RIGHT=MOVE":"LEFT=MOVE RIGHT=LOOK");textC(W/2,H/2+54*sc,sw,sc,0xFF80E0FF);} }
   }
+  // ---- عناصر واجهة بنمط نسخة أندرويد ----
+  static constexpr uint32_t C_PANEL=0xFF141B24,C_LINE=0xFF243040,C_BTN=0xFF1B2430,C_BTNH=0xFF2A3A50,C_TXT=0xFFE8EEF6,C_MUT=0xFF8FA0B4,C_ACC=0xFFFFB020;
+  void rrect(int x,int y,int w2,int h2,int rad,uint32_t c,float a=1){ rad=std::min(rad,std::min(w2,h2)/2);
+    for(int j=std::max(0,y);j<std::min(r.H,y+h2);j++)for(int i=std::max(0,x);i<std::min(r.W,x+w2);i++){
+      int cx=std::min(std::max(i,x+rad),x+w2-1-rad),cy=std::min(std::max(j,y+rad),y+h2-1-rad); float d=std::sqrt((float)((i-cx)*(i-cx)+(j-cy)*(j-cy))); float cov=d<=rad-0.5f?1.f:d<rad+0.5f?(rad+0.5f-d):0.f; if(cov<=0)continue; float al=a*cov;
+      uint32_t o=r.fb[j*r.W+i]; auto m=[&](int sh){int A=(o>>sh)&255,B=(c>>sh)&255;return (uint32_t)(A+(B-A)*al)<<sh;}; r.fb[j*r.W+i]=0xFF000000u|m(16)|m(8)|m(0); } }
+  void card(int x,int y,int w2,int h2,int sc){ rrect(x,y,w2,h2,8*sc,C_LINE); rrect(x+1,y+1,w2-2,h2-2,8*sc-1,C_PANEL,0.96f); }
+  void btn(int x,int y,int w2,int h2,int sc,const char*label,bool sel,bool prim){
+    if(prim){ rrect(x,y,w2,h2,6*sc,sel?0xFFFFC85A:C_ACC); for(int j=0;j<h2;j++){ float t=(float)j/h2; rect(x+3*sc,y+j,w2-6*sc,1,0xFFE08A00,t*0.35f); } textC(x+w2/2,y+h2/2-4*sc,label,sc,0xFF1A1200); }
+    else { rrect(x,y,w2,h2,6*sc,sel?C_ACC:C_LINE); rrect(x+1,y+1,w2-2,h2-2,6*sc-1,sel?C_BTNH:C_BTN); textC(x+w2/2,y+h2/2-4*sc,label,sc,C_TXT); } }
+  void menuBg(){ rect(0,0,r.W,r.H,0xFF0B0F14,0.80f); for(int j=0;j<r.H;j+=2){ float t=std::fabs((j-r.H*0.3f)/r.H); rect(0,j,r.W,2,0xFF0B0F14,std::min(0.45f,t*0.6f)); } }
+  void titlePanel(int sc,int x,int w2,int y){ int cx=x+w2/2; textC(cx,y,"WARZONE",sc*4,C_TXT); rect(cx-30*sc,y+42*sc,30*sc,2*sc,0xFFE23B3B); rect(cx,y+42*sc,30*sc,2*sc,0xFF3B82F6);
+    textC(cx,y+56*sc,"حرب فرق ثلاثية الأبعاد — الأحمر ضد الأزرق",sc,C_MUT); char bb[48]; snprintf(bb,48,"BUILD %d",BUILD_ID); textC(cx,y+72*sc,bb,std::max(1,sc-1),0xFF607080); }
   void renderMenu(){
     static float mt=0; mt+=0.016f; int showMap=menu==1?menuSel:mapIdx;
-    Cam c{0,6,0,mt*0.2f,-0.15f,1.2f}; if(w.id!=showMap)w.load(showMap); r.setCam(c); r.world(w); int W=r.W,H=r.H,sc=std::max(1,H/270); rect(0,0,W,H,0xFF000000,0.5f); rect(0,0,W,H/6,0xFF000000,0.35f); rect(0,H-H/6,W,H/6,0xFF000000,0.35f);
-    textC(W/2+sc*2,H/9+sc*2,"WARZONE",sc*6,0xFF300800); textC(W/2,H/9,"WARZONE",sc*6,0xFFFF5040); rect(W/2-tw("WARZONE",sc*6)/2,H/9+46*sc,tw("WARZONE",sc*6),2*sc,0xFFFF5040); {char bb[40];snprintf(bb,40,"NATIVE PS4 EDITION   BUILD %d",BUILD_ID);textC(W/2,H/9+52*sc,bb,sc*2,0xFFC0C8D0);}
-    char b[96];
+    Cam c{0,6,0,mt*0.2f,-0.15f,1.2f}; if(w.id!=showMap)w.load(showMap); r.setCam(c); r.world(w); int W=r.W,H=r.H,sc=std::max(1,H/270); menuBg();
+    char b[96]; int sm=std::max(1,sc-1);
     if(menu>=5){ aclRenderMenu(); return; }
-    if(menu==3){ textC(W/2,H/2-10*sc,"STARTING NETWORK...",sc*3,0xFFFFFFFF); snprintf(b,96,"STEP: %s",netWhat); textC(W/2,H/2+20*sc,b,sc*2,0xFFFFD060); textC(W/2,H/2+44*sc,"O = CANCEL",sc*2,0xFFB0B0B0); return; }
+    if(menu==3){ int cw=W*6/10,ch=H/2,cx=(W-cw)/2,cy=(H-ch)/2; card(cx,cy,cw,ch,sc); textC(W/2,cy+ch/2-18*sc,"جارٍ تشغيل الشبكة…",sc*2,C_TXT); snprintf(b,96,"STEP: %s",netWhat); textC(W/2,cy+ch/2+10*sc,b,sc,C_ACC); textC(W/2,cy+ch-16*sc,"O: إلغاء",sm,C_MUT); return; }
     if(menu==2){
-      textC(W/2,H/3,"JOIN LAN GAME",sc*3,0xFFFFFFFF);
-      if(joining)textC(W/2,H/2,"CONNECTING...",sc*3,0xFFFFD060);
-      else if(hosts.empty())textC(W/2,H/2,"SEARCHING FOR HOSTS...",sc*2,0xFFB0B0B0);
-      else for(int i=0;i<(int)hosts.size();i++){ snprintf(b,96,"%s %s  MAP %d  PLAYERS %d/%d",i==hostSel?">":" ",hosts[i].name,hosts[i].map+1,hosts[i].players,hosts[i].maxp); textC(W/2,H/2+i*12*sc,b,sc*2,i==hostSel?0xFFFFFFFF:0xFF909090); }
-      if(msgT>0)textC(W/2,H*3/4,msg,sc*2,0xFFFF6060);
-      textC(W/2,H-20*sc,"UP/DOWN = SELECT   X = JOIN   O = BACK",sc*2,0xFFB0B0B0); return; }
-    static const char*MN[5]={"WAREHOUSE","DESERT RUINS","CITY STREET","POLAR BASE","SHAS DESERT"};
-    const char*dn[3]={"EASY","NORMAL","HARD"},*md[4]={"SOLO VS BOTS","HOST PS4 LAN","JOIN PS4 LAN","JOIN ANDROID GAME"};
-    int bw=W*6/10,bx=(W-bw)/2,rh=22*sc,gap=6*sc,y0=H*4/10; uint32_t acc[3]={0xFFFF6040,0xFFFFC040,0xFF50E080};
-    auto row=[&](int i,const char*label,const char*val,uint32_t col){ int y=y0+i*(rh+gap); bool sel=menuRow==i; rect(bx,y,bw,rh,sel?0xFF202830:0xFF101418,sel?0.85f:0.55f); rect(bx,y,4*sc,rh,sel?col:0xFF404850);
-      text(bx+12*sc,y+rh/2-7*sc,label,sc*2,sel?0xFFFFFFFF:0xFF909090); char v[48]; snprintf(v,48,"%s %s %s",sel?"<":" ",val,sel?">":" "); text(bx+bw-tw(v,sc*2)-10*sc,y+rh/2-7*sc,v,sc*2,sel?col:0xFF808890); };
-    char v[48]; snprintf(v,48,"%d  %s",menuSel+1,MN[menuSel%5]);
-    row(0,"MAP",v,acc[0]); row(1,"DIFFICULTY",dn[diff],acc[1]); row(2,"MODE",md[mode],acc[2]);
-    { int y=y0+3*(rh+gap)+4*sc; rect(bx,y,bw,rh,0xFF1C6030,0.95f); rect(bx,y,4*sc,rh,0xFF50E080); textC(W/2,y+rh/2-7*sc,mode==0?"X  START GAME":mode==1?"X  HOST GAME":mode==2?"X  FIND PS4 GAMES":"X  FIND ANDROID GAMES",sc*2,0xFFFFFFFF); }
-    if(msgT>0)textC(W/2,y0-16*sc,msg,sc*2,0xFFFF6060);
-    textC(W/2,H-30*sc,"DPAD: CHOOSE    X: CONFIRM    OPTIONS: PAUSE    R1: SWAP STICKS",sc,0xFFB0B8C0);
-    textC(W/2,H-20*sc,"R2 FIRE   L2 AIM   X JUMP   O CROUCH   SQ RELOAD   L1 R1 WEAPON",sc,0xFF808890);
+      int cw=W*6/10,ch=H*7/10,cx=(W-cw)/2,cy=(H-ch)/2; card(cx,cy,cw,ch,sc); textC(W/2,cy+10*sc,"انضم إلى لعبة شبكة محلية",sc*2,C_TXT);
+      if(joining)textC(W/2,H/2,"جارٍ الاتصال…",sc*2,C_ACC);
+      else if(hosts.empty())textC(W/2,H/2-6*sc,"جارٍ البحث عن ألعاب على شبكتك…",sc,C_MUT);
+      else for(int i=0;i<(int)hosts.size();i++){ snprintf(b,96,"%s   MAP %d   %d/%d",hosts[i].name,hosts[i].map+1,hosts[i].players,hosts[i].maxp); btn(cx+10*sc,cy+40*sc+i*24*sc,cw-20*sc,20*sc,sc,b,i==hostSel,false); }
+      if(msgT>0)textC(W/2,cy+ch-34*sc,msg,sc,0xFFFF6060);
+      textC(W/2,cy+ch-16*sc,"D-pad: تحديد    X: انضمام    O: رجوع",sm,C_MUT); return; }
+    static const char*MN[5]={"المستودع","أطلال الصحراء","شارع المدينة","القاعدة القطبية","صحراء الشاص"};
+    const char*dn[3]={"سهل","عادي","صعب"},*md[4]={"ضد البوتات","استضافة PS4","انضمام PS4","انضمام أندرويد"};
+    const char*go[4]={"العب منفردًا ضد البوتات","استضف لعبة شبكة محلية","انضم إلى لعبة PS4","انضم إلى لعبة أندرويد"};
+    int rh=20*sc,gap=6*sc,pad=12*sc,cw=W*45/100,ch=pad*2+3*(rh+gap)+rh+8*sc+6*sc+10*sc,cx=W/16,cy=(H-ch)/2+4*sc;
+    card(cx,cy,cw,ch,sc);
+    auto sel_=[&](int i,const char*label,const char*val,uint32_t col){ int y=cy+pad+i*(rh+gap),x=cx+pad,w2=cw-pad*2; bool sel=menuRow==i; rrect(x,y,w2,rh,6*sc,sel?col:C_LINE); rrect(x+1,y+1,w2-2,rh-2,6*sc-1,sel?C_BTNH:C_BTN);
+      int ty=y+rh/2-4*sc; text(x+w2-8*sc-tw(label,sc),ty,label,sc,C_MUT); textC(x+w2*3/10,ty,val,sc,sel?C_TXT:0xFFB8C4D4); if(sel){ text(x+8*sc,ty,"◀",sc,col); text(x+w2*11/20,ty,"▶",sc,col); } };
+    sel_(0,"الخريطة",MN[menuSel%5],0xFFE23B3B); sel_(1,"الصعوبة",dn[diff],C_ACC); sel_(2,"الوضع",md[mode],0xFF3B82F6);
+    btn(cx+pad,cy+pad+3*(rh+gap)+4*sc,cw-pad*2,rh+4*sc,sc,go[mode],menuRow==3,true);
+    if(msgT>0)textC(cx+cw/2,cy+ch-14*sc,msg,sm,0xFFFF6060);
+    titlePanel(sc,W*55/100,W*38/100,H/2-60*sc);
+    textC(W*55/100+W*19/100,H/2+30*sc,"اللعب المنفرد بدون إنترنت",sc,C_MUT); textC(W*55/100+W*19/100,H/2+44*sc,"والشبكة المحلية بين PS4 وأندرويد",sc,C_MUT);
+    textC(W/2,H-14*sc,"D-pad: اختيار    X: تأكيد    Options: إيقاف مؤقت",std::max(1,sc-1),0xFF607080);
   }
 };
 #include "acl.h"

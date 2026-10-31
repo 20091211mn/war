@@ -126,33 +126,33 @@ void Game::aclUpdate(float dt,const Input&in){
   prev=in;
 }
 void Game::aclRenderMenu(){
-  if(!ac)return; ACl&A=*ac; int W=r.W,H=r.H,sc=std::max(1,H/270); static float mt=0; mt+=0.016f;
-  if(w.id!=menuSel)w.load(menuSel); Cam c{0,6,0,mt*0.2f,-0.15f,1.2f}; r.setCam(c); r.world(w); rect(0,0,W,H,0xFF000000,0.55f);
-  textC(W/2,H/10,"JOIN ANDROID GAME",sc*4,0xFFFFFFFF); char b[96]; uint32_t dim=0xFF909090;
+  if(!ac)return; ACl&A=*ac; int W=r.W,H=r.H,sc=std::max(1,H/270),sm=std::max(1,sc-1); char b[96];
+  int cw=W*66/100,ch=H*84/100,cx=(W-cw)/2,cy=(H-ch)/2; card(cx,cy,cw,ch,sc);
+  textC(W/2,cy+8*sc,"انضم إلى لعبة أندرويد",sc*2,C_TXT); rect(W/2-24*sc,cy+30*sc,48*sc,2*sc,C_ACC);
   if(menu==5){
     int done=A.scan?A.scan->done.load():0,total=A.scan?A.scan->total.load():0;
-    if(A.hits.empty())textC(W/2,H/2-8*sc,total?"SEARCHING FOR PHONES ON YOUR NETWORK...":"PREPARING SCAN...",sc*2,0xFFFFD060);
-    for(int i=0;i<(int)A.hits.size();i++){ char ib[24]; ipStr(A.hits[i].ip,ib); snprintf(b,96,"%s %s   PLAYERS %d   %s",i==A.sel?">":" ",ib,A.hits[i].players,A.hits[i].phase.c_str()); textC(W/2,H/3+i*14*sc,b,sc*2,i==A.sel?0xFFFFFFFF:dim); }
-    if(total){ int bw=W/2; rect(W/4,H*3/4,bw,4*sc,0xFF202830); rect(W/4,H*3/4,bw*done/std::max(1,total),4*sc,0xFF50E080); }
-    textC(W/2,H-34*sc,"X: JOIN    SQUARE: TYPE IP    O: BACK",sc*2,0xFFB0B8C0);
-    textC(W/2,H-20*sc,"START LAN HOSTING IN THE PHONE APP FIRST",sc,dim);
+    if(A.hits.empty())textC(W/2,H/2-10*sc,total?"جارٍ البحث عن هواتف على شبكتك…":"جارٍ التجهيز…",sc,C_ACC);
+    for(int i=0;i<(int)A.hits.size()&&i<6;i++){ char ib[24]; ipStr(A.hits[i].ip,ib); snprintf(b,96,"%s     %d  لاعب",ib,A.hits[i].players); btn(cx+12*sc,cy+42*sc+i*24*sc,cw-24*sc,20*sc,sc,b,i==A.sel,i==A.sel); }
+    if(total){ int bw=cw-24*sc; rrect(cx+12*sc,cy+ch-34*sc,bw,4*sc,2*sc,C_LINE); rrect(cx+12*sc,cy+ch-34*sc,std::max(4*sc,bw*done/std::max(1,total)),4*sc,2*sc,C_ACC); }
+    textC(W/2,cy+ch-26*sc,"شغّل «استضف لعبة شبكة محلية» في تطبيق الأندرويد أولاً",sm,C_MUT);
+    textC(W/2,cy+ch-14*sc,"X: انضمام    Square: كتابة IP    O: رجوع",sm,C_MUT);
   } else if(menu==6){
-    textC(W/2,H/6,"TYPE THE PHONE IP",sc*2,0xFFFFD060);
-    snprintf(b,96,"%s_",A.ipTxt.c_str()); textC(W/2,H/6+22*sc,b,sc*4,0xFFFFFFFF);
-    static const char*K[13]={"1","2","3","4","5","6","7","8","9",".","0","DEL","CONNECT"};
-    int kw=34*sc,kh=20*sc,gx=W/2-kw*3/2,gy=H/6+60*sc;
-    for(int i=0;i<13;i++){ int cx,cy,w2; if(i<12){ cx=gx+(i%3)*kw; cy=gy+(i/3)*kh; w2=kw-4*sc; } else { cx=gx; cy=gy+4*kh; w2=kw*3-4*sc; }
-      rect(cx,cy,w2,kh-4*sc,i==A.pk?0xFF50E080:0xFF202830); textC(cx+w2/2,cy+(kh-4*sc)/2-3*sc,K[i],sc*2,i==A.pk?0xFF000000:0xFFFFFFFF); }
-    if(msgT>0)textC(W/2,H-48*sc,"INVALID IP",sc*2,0xFFFF6060);
-    textC(W/2,H-30*sc,"D-PAD: MOVE    X: PRESS    SQUARE: DELETE    O: BACK",sc,0xFFB0B8C0);
-  } else if(menu==7){ textC(W/2,H/2-8*sc,"CONNECTING...",sc*3,0xFFFFD060); snprintf(b,96,"STEP: %s",A.ws.what()); textC(W/2,H/2+20*sc,b,sc*2,dim); textC(W/2,H/2+44*sc,"O = CANCEL",sc*2,dim);
+    rrect(W/2-70*sc,cy+38*sc,140*sc,22*sc,6*sc,C_ACC); rrect(W/2-70*sc+1,cy+38*sc+1,140*sc-2,22*sc-2,6*sc-1,C_BTN);
+    snprintf(b,96,"%s_",A.ipTxt.c_str()); textC(W/2,cy+38*sc+11*sc-5*sc,b,sc*2,C_TXT);
+    static const char*K[13]={"1","2","3","4","5","6","7","8","9",".","0","⌫","اتصال"};
+    int kw=34*sc,kh=17*sc,gx=W/2-kw*3/2,gy=cy+66*sc;
+    for(int i=0;i<13;i++){ int x,y,w2; if(i<12){ x=gx+(i%3)*kw; y=gy+(i/3)*kh; w2=kw-3*sc; } else { x=gx; y=gy+4*kh; w2=kw*3-3*sc; }
+      btn(x,y,w2,kh-3*sc,sc,i==11?"DEL":K[i],i==A.pk,i==12); }
+    if(msgT>0)textC(W/2,cy+ch-26*sc,"عنوان IP غير صالح",sc,0xFFFF6060);
+    textC(W/2,cy+ch-14*sc,"D-pad: تحريك    X: إدخال    Square: حذف    O: رجوع",sm,C_MUT);
+  } else if(menu==7){ textC(W/2,H/2-14*sc,"جارٍ الاتصال…",sc*2,C_ACC); snprintf(b,96,"STEP: %s",A.ws.what()); textC(W/2,H/2+10*sc,b,sc,C_MUT); textC(W/2,cy+ch-14*sc,"O: إلغاء",sm,C_MUT);
   } else if(menu==8){
-    static const char*MN[5]={"WAREHOUSE","DESERT RUINS","CITY STREET","POLAR BASE","SHAS DESERT"}; snprintf(b,96,"ROOM  -  MAP %d %s",A.cfgMap+1,MN[A.cfgMap%5]); textC(W/2,H/5,b,sc*2,0xFFFFD060);
-    int y=H/4+10*sc; for(auto&l:A.lobby){ bool me2=l.id==A.myId; snprintf(b,96,"%s%s%s",l.id==A.hostId?"[HOST] ":"",cleanName(l.n,l.id,l.b).c_str(),me2?"  (YOU)":""); text(W/4,y,b,sc*2,l.tm?0xFF6090FF:0xFFFF6060); y+=11*sc; if(y>H*3/4)break; }
-    snprintf(b,96,"PRIMARY %s   SECONDARY %s",A.loP.c_str(),A.loS.c_str()); textC(W/2,H-52*sc,b,sc*2,0xFFFFFFFF);
-    textC(W/2,H-38*sc,A.myId==A.hostId?"X: START MATCH":"WAITING FOR HOST TO START",sc*2,A.myId==A.hostId?0xFF50E080:dim);
-    textC(W/2,H-24*sc,"LEFT/RIGHT: PRIMARY   UP/DOWN: SECONDARY   SQUARE: SWITCH TEAM   O: LEAVE",sc,0xFFB0B8C0);
+    static const char*MN[5]={"المستودع","أطلال الصحراء","شارع المدينة","القاعدة القطبية","صحراء الشاص"}; snprintf(b,96,"%s",MN[A.cfgMap%5]); textC(W/2,cy+38*sc,b,sc,C_ACC);
+    int y=cy+54*sc; for(auto&l:A.lobby){ bool me2=l.id==A.myId; snprintf(b,96,"%s%s%s",l.id==A.hostId?"★ ":"",cleanName(l.n,l.id,l.b).c_str(),me2?"   (أنت)":"");
+      rrect(cx+16*sc,y,cw-32*sc,15*sc,5*sc,l.tm?0xFF3B82F6:0xFFE23B3B,me2?0.55f:0.28f); text(cx+24*sc,y+4*sc,b,sc,C_TXT); y+=17*sc; if(y>cy+ch-56*sc)break; }
+    snprintf(b,96,"%s  /  %s",A.loP.c_str(),A.loS.c_str()); textC(W/2,cy+ch-44*sc,b,sm,C_TXT);
+    bool hostMe=A.myId==A.hostId; btn(cx+cw/4,cy+ch-36*sc,cw/2,18*sc,sc,hostMe?"ابدأ المباراة":"بانتظار المضيف…",hostMe,hostMe);
+    textC(W/2,cy+ch-12*sc,"D-pad: الأسلحة    Square: تبديل الفريق    O: مغادرة",sm,C_MUT);
   }
-  if(msgT>0)textC(W/2,H*2/3,msg,sc*2,0xFFFF6060);
+  if(msgT>0&&menu!=6)textC(W/2,cy+ch-48*sc,msg,sc,0xFFFF6060);
 }
-void Game::aclMenuNav(const Input&){}
