@@ -1,4 +1,5 @@
 // Warzone — العميل: الشبكة (منفرد/استضافة/انضمام)، الواجهة، اللعب، المركبات
+import { BUILD } from './version.js';
 import { Engine, tmp } from './gl.js';
 import { WEAPONS, PRIMARIES, SECONDARIES, OPTICS, MUZZLES, UNDERS, MAGS, computeStats, sanitizeLoadout } from '/shared/weapons.js';
 import { buildMap } from '/shared/maps.js';
@@ -105,18 +106,24 @@ function startSolo() {
   beginSession(); S.leaving = true; stopHost(); S.leaving = false;
   S.host = new LocalHost(); attach(S.host.link(), 'solo');
 }
+function envReport() {
+  const C = window.Capacitor; let plat = 'لا Capacitor', avail = '-';
+  try { if (C) { plat = (C.getPlatform ? C.getPlatform() : '?') + (C.isNativePlatform && C.isNativePlatform() ? ' (أصلي)' : ' (ويب)'); avail = C.isPluginAvailable ? String(C.isPluginAvailable('LanHost')) : '?'; } } catch { /* */ }
+  return `إصدار ${BUILD} · ${plat} · إضافة الاستضافة: ${avail}`;
+}
+try { setTimeout(() => { const e = document.getElementById('envInfo'); if (e) e.textContent = envReport(); }, 0); } catch { /* */ }
 function getPlugin() {
   try { if (window.Capacitor && window.Capacitor.registerPlugin) return window.Capacitor.registerPlugin('LanHost'); } catch { /* */ }
   return null;
 }
 async function startHost() {
   const plugin = getPlugin();
-  if (!plugin) { $('menuMsg').textContent = 'الاستضافة متاحة داخل التطبيق فقط.'; return; }
+  if (!plugin) { $('menuMsg').textContent = 'الاستضافة متاحة داخل تطبيق الأندرويد فقط (هذه الصفحة تعمل كموقع أو بنسخة قديمة). ' + envReport(); return; }
   beginSession(); stopHost();
   const host = new LocalHost(); host.game.cfg.fill = 0;
   $('menuMsg').textContent = 'جارٍ بدء الاستضافة…';
   try { S.lanInfo = await host.startLan(plugin, 3000); }
-  catch (e) { host.stop().catch(() => {}); $('menuMsg').textContent = 'تعذّر بدء الاستضافة: ' + (e && e.message ? e.message : e); return; }
+  catch (e) { host.stop().catch(() => {}); $('menuMsg').textContent = 'تعذّر بدء الاستضافة: ' + (e && e.message ? e.message : e) + ' | ' + envReport(); return; }
   $('menuMsg').textContent = '';
   S.host = host; attach(host.link(), 'host');
 }
