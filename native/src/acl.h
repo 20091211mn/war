@@ -3,7 +3,7 @@
 #include <map>
 
 struct Game::ACl{
-  WsClient ws; std::shared_ptr<ScanState> scan; std::vector<ScanHit> hits; int sel=0; int ip[4]={192,168,1,100}; int ipSel=3; bool ipEdit=false;
+  WsClient ws; std::shared_ptr<ScanState> scan; std::vector<ScanHit> hits; int sel=0; int ip[4]={192,168,1,100}; int ipSel=3; bool ipEdit=false; std::string ipTxt; int pk=0;
   int myId=0,hostId=0,epoch=0,cfgMap=0; std::string phase="lobby"; bool welcomed=false; float stT=0,pingT=0,connT=0; std::string err; uint32_t hostIp=0; int hostPort=3000;
   struct LP{int id=0;std::string n;int tm=0,b=0;std::string p,s;}; std::vector<LP> lobby;
   std::map<int,int> idx; std::string loP="carbine",loS="pistol"; int slot=0; int slotAm[2][2]={{-1,0},{-1,0}};
@@ -53,9 +53,15 @@ void Game::aclUpdate(float dt,const Input&in){
       if(in.reload&&!prev.reload){ menu=6; }
       if(in.back&&!prev.back){ aclStop(); }
     } else {
-      if(rt)A.ipSel=std::min(3,A.ipSel+1); if(lf)A.ipSel=std::max(0,A.ipSel-1); if(up)A.ip[A.ipSel]=(A.ip[A.ipSel]+1)%256; if(dn)A.ip[A.ipSel]=(A.ip[A.ipSel]+255)%256;
-      if(in.swapN&&!prev.swapN)A.ip[A.ipSel]=(A.ip[A.ipSel]+10)%256; if(in.swapP&&!prev.swapP)A.ip[A.ipSel]=(A.ip[A.ipSel]+246)%256;
-      if(in.confirm&&!prev.confirm){ char b[24]; snprintf(b,24,"%d.%d.%d.%d",A.ip[0],A.ip[1],A.ip[2],A.ip[3]); A.hostIp=inet_addr(b); A.hostPort=3000; if(A.scan)A.scan->stop=true; A.ws.connectTo(A.hostIp,3000); A.connT=0; menu=7; }
+      if(A.ipTxt.empty()){ uint32_t li=localIp(); if(li){ char lb[24]; ipStr(li,lb); std::string t=lb; size_t d=t.rfind('.'); A.ipTxt=t.substr(0,d+1); } else A.ipTxt="192.168."; }
+      if(rt&&A.pk<12&&A.pk%3<2)A.pk++; if(lf&&A.pk<12&&A.pk%3>0)A.pk--;
+      if(up){ if(A.pk==12)A.pk=10; else if(A.pk>=3)A.pk-=3; } if(dn){ if(A.pk>=9&&A.pk<12)A.pk=12; else if(A.pk<9)A.pk+=3; }
+      if(in.reload&&!prev.reload&&!A.ipTxt.empty())A.ipTxt.pop_back();
+      if(in.confirm&&!prev.confirm){
+        static const char*K[12]={"1","2","3","4","5","6","7","8","9",".","0","<"};
+        if(A.pk<12){ const char*k=K[A.pk]; if(k[0]=='<'){ if(!A.ipTxt.empty())A.ipTxt.pop_back(); } else if(A.ipTxt.size()<15)A.ipTxt+=k; }
+        else { in_addr_t ip=inet_addr(A.ipTxt.c_str()); if(ip!=INADDR_NONE){ A.hostIp=ip; A.hostPort=3000; if(A.scan)A.scan->stop=true; A.ws.connectTo(A.hostIp,3000); A.connT=0; menu=7; } else { msgT=2; } }
+      }
       if(in.back&&!prev.back)menu=5;
     }
     prev=in; return; }
@@ -131,9 +137,14 @@ void Game::aclRenderMenu(){
     textC(W/2,H-34*sc,"X: JOIN    SQUARE: TYPE IP    O: BACK",sc*2,0xFFB0B8C0);
     textC(W/2,H-20*sc,"START LAN HOSTING IN THE PHONE APP FIRST",sc,dim);
   } else if(menu==6){
-    textC(W/2,H/3,"ENTER HOST IP",sc*2,0xFFFFD060); snprintf(b,96,"%d . %d . %d . %d",A.ip[0],A.ip[1],A.ip[2],A.ip[3]); textC(W/2,H/2,b,sc*4,0xFFFFFFFF);
-    int cw=tw(b,sc*4); int x0=W/2-cw/2; for(int i=0;i<A.ipSel;i++){ char t2[8]; snprintf(t2,8,"%d . ",A.ip[i]); x0+=tw(t2,sc*4); } char t3[8]; snprintf(t3,8,"%d",A.ip[A.ipSel]); rect(x0,H/2+30*sc,tw(t3,sc*4),3*sc,0xFF50E080);
-    textC(W/2,H-34*sc,"LEFT/RIGHT: PART    UP/DOWN: +-1    L1/R1: +-10    X: CONNECT    O: BACK",sc,0xFFB0B8C0);
+    textC(W/2,H/6,"TYPE THE PHONE IP",sc*2,0xFFFFD060);
+    snprintf(b,96,"%s_",A.ipTxt.c_str()); textC(W/2,H/6+22*sc,b,sc*4,0xFFFFFFFF);
+    static const char*K[13]={"1","2","3","4","5","6","7","8","9",".","0","DEL","CONNECT"};
+    int kw=34*sc,kh=20*sc,gx=W/2-kw*3/2,gy=H/6+60*sc;
+    for(int i=0;i<13;i++){ int cx,cy,w2; if(i<12){ cx=gx+(i%3)*kw; cy=gy+(i/3)*kh; w2=kw-4*sc; } else { cx=gx; cy=gy+4*kh; w2=kw*3-4*sc; }
+      rect(cx,cy,w2,kh-4*sc,i==A.pk?0xFF50E080:0xFF202830); textC(cx+w2/2,cy+(kh-4*sc)/2-3*sc,K[i],sc*2,i==A.pk?0xFF000000:0xFFFFFFFF); }
+    if(msgT>0)textC(W/2,H-48*sc,"INVALID IP",sc*2,0xFFFF6060);
+    textC(W/2,H-30*sc,"D-PAD: MOVE    X: PRESS    SQUARE: DELETE    O: BACK",sc,0xFFB0B8C0);
   } else if(menu==7){ textC(W/2,H/2-8*sc,"CONNECTING...",sc*3,0xFFFFD060); snprintf(b,96,"STEP: %s",A.ws.what()); textC(W/2,H/2+20*sc,b,sc*2,dim); textC(W/2,H/2+44*sc,"O = CANCEL",sc*2,dim);
   } else if(menu==8){
     static const char*MN[5]={"WAREHOUSE","DESERT RUINS","CITY STREET","POLAR BASE","SHAS DESERT"}; snprintf(b,96,"ROOM  -  MAP %d %s",A.cfgMap+1,MN[A.cfgMap%5]); textC(W/2,H/5,b,sc*2,0xFFFFD060);
