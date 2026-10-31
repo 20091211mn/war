@@ -33,7 +33,7 @@ jobs:
         run: node tools/export-native.js
       - name: Host sanity test (software renderer + bots)
         run: |
-          cd native/src && g++ -O2 -std=c++17 -o /tmp/hl headless.cpp && /tmp/hl 0 10 && /tmp/hl 4 10
+          cd native/src && g++ -O2 -std=c++17 -o /tmp/hl headless.cpp && /tmp/hl 0 10 && /tmp/hl 4 10 && g++ -O2 -std=c++17 -o /tmp/nt nettest.cpp && /tmp/nt
       - name: Download OpenOrbis toolchain
         env:
           GH_TOKEN: ${{ github.token }}
