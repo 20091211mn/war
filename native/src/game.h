@@ -24,7 +24,7 @@ struct Tracer{float x0,y0,z0,x1,y1,z1,t;};
 
 struct Game{
   World w; Renderer r; std::vector<Ent> e; std::vector<Tracer> tr;
-  int mapIdx=0,scoreLim=30,score[2]={0,0},nBots=6,diff=0; float sens=1.0f; bool swapTrig=false,swapL=false,swapSticks=true; float t=0,hitMark=0,dmgFlash=0; bool over=false; int winner=0;
+  int mapIdx=0,scoreLim=30,score[2]={0,0},nBots=6,diff=0; float sens=1.0f; bool swapTrig=false,swapL=false,swapSticks=false; float t=0,hitMark=0,dmgFlash=0; bool over=false; int winner=0;
   int prim=0; Input prev; bool paused=false; float msgT=0; char msg[64]={0}; int shotsFeed[4]={-1,-1,-1,-1}; std::string feed[4]; float feedT[4]={};
   int menu=1,menuSel=0; // 1 = قائمة البداية
   void init(int rw,int rh){ r.init(rw,rh); startMatch(mapIdx); }
