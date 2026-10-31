@@ -18,8 +18,8 @@ for (let i = 0; i < MAP_COUNT; i++) {
 }
 o += `struct MapDef{float W,D;int nb,nd,nv,nr,nbl;const Box*boxes;const Box*deco;const P2*red;const P2*blue;const V3*veh;const float(*cols)[3];int ncol;float sky[3],hor[3],ground[3],fog[3];float fogN,fogF;float sun[3];float amb,sunI;};\nstatic const MapDef MAPS[]={${names.join(',\n')}};\n`;
 const ws = Object.values(WEAPONS);
-o += 'struct WeaponDef{const char*id;float dmg,head,rpm;int autof,pellets,mag,mags;float reload,hip,ads,recoilV,recoilH,r0,r1,minMul,move,zoom;};\n';
-o += `static const int WEAPON_COUNT=${ws.length};\nstatic const WeaponDef WEAPONS[]={${Object.entries(WEAPONS).map(([id, w]) => `{"${id}",${w.dmg},${w.head},${w.rpm},${w.auto ? 1 : 0},${w.pellets},${w.mag},${w.mags},${w.reload},${w.hip},${w.ads},${w.recoilV},${w.recoilH},${w.range[0]},${w.range[1]},${w.minMul},${w.move},${w.zoom}}`).join(',\n')}};\n`;
+o += 'struct WeaponDef{const char*id;float dmg,head,rpm;int autof,pellets,mag,mags;float reload,hip,ads,recoilV,recoilH,r0,r1,minMul,move,zoom;int type;};\n';
+o += `static const int WEAPON_COUNT=${ws.length};\nstatic const WeaponDef WEAPONS[]={${Object.entries(WEAPONS).map(([id, w]) => `{"${id}",${w.dmg},${w.head},${w.rpm},${w.auto ? 1 : 0},${w.pellets},${w.mag},${w.mags},${w.reload},${w.hip},${w.ads},${w.recoilV},${w.recoilH},${w.range[0]},${w.range[1]},${w.minMul},${w.move},${w.zoom},${w.type === 'primary' ? 0 : 1}}`).join(',\n')}};\n`;
 o += 'struct GPart{float x,y,z,sx,sy,sz;char c;};\nstruct GunDef{float mz,sy;int np;GPart p[10];int hasMag;float mag[6];};\n';
 o += `static const GunDef GUNDEFS[]={${Object.values(WEAPONS).map((w) => { const g = GUNS[w.kind]; return `{${g.mz},${g.sy},${g.parts.length},{${g.parts.map((q) => `{${q.slice(0, 6).join(',')},'${q[6]}'}`).join(',')}},${g.mag ? 1 : 0},{${(g.mag || [0, 0, 0, 0, 0, 0]).join(',')}}}`; }).join(',\n')}};\n`;
 fs.writeFileSync('native/gen/data.h', o);
