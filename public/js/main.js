@@ -112,13 +112,16 @@ function envReport() {
   return `إصدار ${BUILD} · ${plat} · إضافة الاستضافة: ${avail}`;
 }
 try { setTimeout(() => { const e = document.getElementById('envInfo'); if (e) e.textContent = envReport(); }, 0); } catch { /* */ }
+let pluginErr = '';
 function getPlugin() {
-  try { if (window.Capacitor && window.Capacitor.registerPlugin) return window.Capacitor.registerPlugin('LanHost'); } catch { /* */ }
+  const C = window.Capacitor; if (!C) { pluginErr = 'no Capacitor'; return null; }
+  try { if (C.Plugins && C.Plugins.LanHost) return C.Plugins.LanHost; } catch (e) { pluginErr = String(e); }
+  try { if (C.registerPlugin) return (window.__lanHost ||= C.registerPlugin('LanHost')); pluginErr = 'no registerPlugin'; } catch (e) { pluginErr = String(e && e.message || e); }
   return null;
 }
 async function startHost() {
   const plugin = getPlugin();
-  if (!plugin) { $('menuMsg').textContent = 'الاستضافة متاحة داخل تطبيق الأندرويد فقط (هذه الصفحة تعمل كموقع أو بنسخة قديمة). ' + envReport(); return; }
+  if (!plugin) { $('menuMsg').textContent = 'الاستضافة متاحة داخل تطبيق الأندرويد فقط (' + pluginErr + '). ' + envReport(); return; }
   beginSession(); stopHost();
   const host = new LocalHost(); host.game.cfg.fill = 0;
   $('menuMsg').textContent = 'جارٍ بدء الاستضافة…';
