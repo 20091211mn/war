@@ -15,7 +15,7 @@ int main(int,char**){
   SDL_Surface*surf=SDL_GetWindowSurface(win);
   if(SDL_NumJoysticks()>0)pad=SDL_JoystickOpen(0);
   const int RW=960,RH=540; static Game g; g.menu=1; g.init(RW,RH);
-  uint32_t last=SDL_GetTicks(); bool dbg=false; bool dprev=false; float acc=0,fpsT=0; int fpsN=0; float fps=60; int curW=RW;
+  uint32_t last=SDL_GetTicks(); bool dbg=false; bool dprev=false,sprev=false,r1prev=false; float acc=0,fpsT=0; int fpsN=0; float fps=60; int curW=RW;
   float smx=0,smy=0; float rest[12]={0}; int calib=0; int wiz=pad?0:13; int tbtn[2]={18,19}; int bmap[7]={0,1,2,4,5,11,9}; int skipGuard=0; int wax[6]={1,0,2,3,4,5}; float wsg[6]={-1,1,1,-1,1,1}; int held=0; bool waitRel=false;
   for(;;){
     SDL_Event ev; while(SDL_PollEvent(&ev)){}
@@ -47,16 +47,17 @@ int main(int,char**){
     auto ax=[&](int k){return wsg[k]*(axisF(wax[k])-rest[wax[k]]);}; // موجب = (أعلى/يمين/ضغط)
     float lx,ly,rx,ry; stick(ax(1),ax(0),lx,ly); // lx=يمين, ly=أعلى
     stick(ax(2),ax(3),rx,ry);
+    if(g.swapSticks){std::swap(lx,rx);std::swap(ly,ry);}
     if(calib<40){lx=ly=rx=ry=0;}
     float a=std::min(1.f,dt*14.f); smx+=(lx-smx)*a; smy+=(ly-smy)*a; if(std::fabs(lx)<0.01f&&std::fabs(smx)<0.05f)smx=0; if(std::fabs(ly)<0.01f&&std::fabs(smy)<0.05f)smy=0;
     in.mx=smx; in.my=smy;
     float rm=std::sqrt(rx*rx+ry*ry); float cv=rm*rm*1.9f+rm*0.45f; float rk=rm>0.001f?cv/rm:0;
     in.lx=rx*rk; in.ly=ry*rk*0.75f;
     bool tl=(wax[4]>=0&&ax(4)>0.6f)||(tbtn[0]>=0&&btn(tbtn[0])), tr2=(wax[5]>=0&&ax(5)>0.6f)||(tbtn[1]>=0&&btn(tbtn[1]));
-    if(g.swapTrig)std::swap(tl,tr2); in.fire=tr2; in.ads=tl;
+    if(g.swapTrig)std::swap(tl,tr2); in.fire=tr2; in.ads=tl; if(g.swapL){ bool l3=btn(bmap[5]); in.sprint=tl; in.ads=l3; }
     in.jump=btn(bmap[0]); in.crouch=btn(bmap[1]); in.reload=btn(bmap[2]); in.swapP=btn(bmap[3]); in.swapN=btn(bmap[4]); in.sprint=btn(bmap[5]); in.start=btn(bmap[6]); in.confirm=btn(bmap[0]); in.back=btn(bmap[1]);
     if(g.menu||g.paused){ if(btn(16))in.mx=1; else if(btn(15))in.mx=-1; if(g.menu){ in.my=btn(13)?1.f:btn(14)?-1.f:0.f; } }
-    bool d4=btn(3); if(d4&&!dprev){ if(g.menu||g.paused)g.swapTrig=!g.swapTrig; else dbg=!dbg; } dprev=d4;
+    bool d4=btn(3); if(d4&&!dprev){ if(g.menu||g.paused)g.swapTrig=!g.swapTrig; else dbg=!dbg; } dprev=d4; bool sq=btn(bmap[2]); if(sq&&!sprev&&(g.menu||g.paused))g.swapL=!g.swapL; sprev=sq; bool r1=btn(bmap[4]); if(r1&&!r1prev&&(g.menu||g.paused))g.swapSticks=!g.swapSticks; r1prev=r1;
     // خطوات ثابتة 60Hz حتى لا تتأثر الحركة بانخفاض الإطارات
     acc+=dt; int steps=0; while(acc>=1.f/60.f&&steps<4){ g.update(1.f/60.f,in); acc-=1.f/60.f; steps++; } if(steps==4)acc=0;
     if(g.menu)g.renderMenu(); else g.render();
