@@ -16,6 +16,7 @@ struct Renderer {
     ux=-fy*rz*0+ (0*fz-rz*fy); uy=rz*fx-rx*fz; uz=rx*fy-0*fx;
     focal=(H*0.5f)/std::tan(c.fov*0.5f);
   }
+  void clear_black(){std::fill(fb.begin(),fb.end(),0xFF000000u);}
   void clear(){
     const MapDef&d=*m; // سماء متدرجة
     for(int y=0;y<H;y++){
