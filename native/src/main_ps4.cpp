@@ -15,29 +15,35 @@ int main(int,char**){
   SDL_Surface*surf=SDL_GetWindowSurface(win);
   if(SDL_NumJoysticks()>0)pad=SDL_JoystickOpen(0);
   const int RW=960,RH=540; static Game g; g.menu=1; g.init(RW,RH);
-  uint32_t last=SDL_GetTicks(); bool dbg=false; bool dprev=false;
+  uint32_t last=SDL_GetTicks(); bool dbg=false; bool dprev=false; float acc=0,fpsT=0; int fpsN=0; float fps=60; int curW=RW;
+  float smx=0,smy=0;
   for(;;){
     SDL_Event ev; while(SDL_PollEvent(&ev)){}
     SDL_JoystickUpdate();
     if(!pad&&SDL_NumJoysticks()>0)pad=SDL_JoystickOpen(0);
-    uint32_t now=SDL_GetTicks(); float dt=(now-last)/1000.f; last=now; if(dt>0.05f)dt=0.05f; if(dt<=0)dt=0.001f;
+    uint32_t now=SDL_GetTicks(); float dt=(now-last)/1000.f; last=now; if(dt>0.1f)dt=0.1f; if(dt<=0)dt=0.001f;
+    fpsT+=dt; fpsN++; if(fpsT>=1.f){fps=fpsN/fpsT;fpsT=0;fpsN=0;
+      int want=fps<38?640:(fps>58&&curW==640?960:curW); if(want!=curW){curW=want;g.r.init(curW,curW*9/16);} }
     Input in;
-    float lx=dz(axisF(0)),ly=dz(axisF(1)),rx=dz(axisF(2)),ry=dz(axisF(3));
-    in.mx=lx; in.my=-ly;
-    in.lx=rx*std::fabs(rx)*3.6f+rx*0.8f; in.ly=-ry*std::fabs(ry)*2.4f-ry*0.6f;
-    // أزرار: 0 X,1 O,2 □,3 △,4 L1,5 R1,9 OPTIONS,11 L3,13-16 dpad,18 L2,19 R2
+    // مدخل أعمى: دائرة ميتة شعاعية + تنعيم الحركة
+    auto stick=[&](float x,float y,float&ox,float&oy){float m=std::sqrt(x*x+y*y);const float D=0.16f;if(m<D){ox=oy=0;return;}float k=(m-D)/(1-D);if(k>1)k=1;ox=x/m*k;oy=y/m*k;};
+    float lx,ly,rx,ry; stick(axisF(0),axisF(1),lx,ly); stick(axisF(2),axisF(3),rx,ry);
+    float a=std::min(1.f,dt*14.f); smx+=(lx-smx)*a; smy+=(-ly-smy)*a; if(std::fabs(lx)<0.01f&&std::fabs(smx)<0.05f)smx=0; if(std::fabs(ly)<0.01f&&std::fabs(smy)<0.05f)smy=0;
+    in.mx=smx; in.my=smy;
+    float rm=std::sqrt(rx*rx+ry*ry); float cv=rm*rm*1.9f+rm*0.45f; float rk=rm>0.001f?cv/rm:0;
+    in.lx=rx*rk; in.ly=-ry*rk*0.75f;
     in.fire=btn(19)||axisF(5)>0.3f; in.ads=btn(18)||axisF(4)>0.3f;
     in.jump=btn(0); in.crouch=btn(1); in.reload=btn(2); in.swapP=btn(4); in.swapN=btn(5); in.sprint=btn(11); in.start=btn(9); in.confirm=btn(0); in.back=btn(1);
+    if(g.menu||g.paused){ if(btn(16))in.mx=1; else if(btn(15))in.mx=-1; if(g.menu){ in.my=btn(13)?1.f:btn(14)?-1.f:0.f; } }
     bool d4=btn(3); if(d4&&!dprev)dbg=!dbg; dprev=d4;
-    if(g.menu){ if(btn(16))in.mx=1; else if(btn(15))in.mx=-1; }
-    g.update(dt,in);
+    // خطوات ثابتة 60Hz حتى لا تتأثر الحركة بانخفاض الإطارات
+    acc+=dt; int steps=0; while(acc>=1.f/60.f&&steps<4){ g.update(1.f/60.f,in); acc-=1.f/60.f; steps++; } if(steps==4)acc=0;
     if(g.menu)g.renderMenu(); else g.render();
-    if(dbg){ char b[96]; snprintf(b,96,"AX %d %d %d %d %d %d",(int)(axisF(0)*100),(int)(axisF(1)*100),(int)(axisF(2)*100),(int)(axisF(3)*100),(int)(axisF(4)*100),(int)(axisF(5)*100)); g.text(40,60,b,2,0xFFFFFF00);
-      std::string s; for(int i=0;i<24;i++)if(btn(i)){char c[8];snprintf(c,8,"%d ",i);s+=c;} g.text(40,80,("BTN "+s).c_str(),2,0xFFFFFF00); snprintf(b,96,"DT %d MS",(int)(dt*1000)); g.text(40,100,b,2,0xFFFFFF00); }
-    // رفع الإطار 2x إلى سطح النافذة
-    SDL_LockSurface(surf); uint32_t*dst=(uint32_t*)surf->pixels; int pitch=surf->pitch/4,sw=surf->w,sh=surf->h;
-    int sx=sw/RW>1?sw/RW:1,sy=sh/RH>1?sh/RH:1; int ox=(sw-RW*sx)/2,oy=(sh-RH*sy)/2;
-    for(int y=0;y<RH;y++){ const uint32_t*s=&g.r.fb[y*RW]; for(int k=0;k<sy;k++){ uint32_t*d=dst+(oy+y*sy+k)*pitch+ox; for(int x=0;x<RW;x++){uint32_t c=s[x];for(int q=0;q<sx;q++)*d++=c;} } }
+    if(dbg){ char b[96]; snprintf(b,96,"FPS %d RES %d",(int)fps,g.r.W); g.text(40,40,b,2,0xFFFFFF00); snprintf(b,96,"AX %d %d %d %d %d %d",(int)(axisF(0)*100),(int)(axisF(1)*100),(int)(axisF(2)*100),(int)(axisF(3)*100),(int)(axisF(4)*100),(int)(axisF(5)*100)); g.text(40,60,b,2,0xFFFFFF00);
+      std::string s; for(int i=0;i<24;i++)if(btn(i)){char c[8];snprintf(c,8,"%d ",i);s+=c;} g.text(40,80,("BTN "+s).c_str(),2,0xFFFFFF00); }
+    SDL_LockSurface(surf); uint32_t*dst=(uint32_t*)surf->pixels; int pitch=surf->pitch/4,sw=surf->w,sh=surf->h; int RWc=g.r.W,RHc=g.r.H;
+    static std::vector<int> xm; if((int)xm.size()!=sw||xm.empty()||xm[0]!=-RWc){xm.assign(sw,0);for(int x=0;x<sw;x++)xm[x]=x*RWc/sw;}
+    for(int y=0;y<sh;y++){ const uint32_t*sr=&g.r.fb[(y*RHc/sh)*RWc]; uint32_t*d=dst+y*pitch; for(int x=0;x<sw;x++)d[x]=sr[xm[x]]; }
     SDL_UnlockSurface(surf); SDL_UpdateWindowSurface(win);
   }
 }
