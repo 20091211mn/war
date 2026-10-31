@@ -53,10 +53,10 @@ int main(int,char**){
     float rm=std::sqrt(rx*rx+ry*ry); float cv=rm*rm*1.9f+rm*0.45f; float rk=rm>0.001f?cv/rm:0;
     in.lx=rx*rk; in.ly=ry*rk*0.75f;
     bool tl=(wax[4]>=0&&ax(4)>0.6f)||(tbtn[0]>=0&&btn(tbtn[0])), tr2=(wax[5]>=0&&ax(5)>0.6f)||(tbtn[1]>=0&&btn(tbtn[1]));
-    in.fire=tr2; in.ads=tl;
+    if(g.swapTrig)std::swap(tl,tr2); in.fire=tr2; in.ads=tl;
     in.jump=btn(bmap[0]); in.crouch=btn(bmap[1]); in.reload=btn(bmap[2]); in.swapP=btn(bmap[3]); in.swapN=btn(bmap[4]); in.sprint=btn(bmap[5]); in.start=btn(bmap[6]); in.confirm=btn(bmap[0]); in.back=btn(bmap[1]);
     if(g.menu||g.paused){ if(btn(16))in.mx=1; else if(btn(15))in.mx=-1; if(g.menu){ in.my=btn(13)?1.f:btn(14)?-1.f:0.f; } }
-    bool d4=btn(3); if(d4&&!dprev)dbg=!dbg; dprev=d4;
+    bool d4=btn(3); if(d4&&!dprev){ if(g.menu||g.paused)g.swapTrig=!g.swapTrig; else dbg=!dbg; } dprev=d4;
     // خطوات ثابتة 60Hz حتى لا تتأثر الحركة بانخفاض الإطارات
     acc+=dt; int steps=0; while(acc>=1.f/60.f&&steps<4){ g.update(1.f/60.f,in); acc-=1.f/60.f; steps++; } if(steps==4)acc=0;
     if(g.menu)g.renderMenu(); else g.render();
