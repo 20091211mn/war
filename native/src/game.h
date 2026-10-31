@@ -24,7 +24,7 @@ struct Tracer{float x0,y0,z0,x1,y1,z1,t;};
 
 struct Game{
   World w; Renderer r; std::vector<Ent> e; std::vector<Tracer> tr;
-  int mapIdx=0,scoreLim=30,score[2]={0,0},nBots=6,diff=0; float sens=1.0f; bool swapTrig=false,swapL=false,swapSticks=false; float t=0,hitMark=0,dmgFlash=0; bool over=false; int winner=0;
+  int mapIdx=0,scoreLim=30,score[2]={0,0},nBots=6,diff=0; float sens=1.0f; bool swapTrig=false,swapL=false,swapSticks=true; float t=0,hitMark=0,dmgFlash=0; bool over=false; int winner=0;
   int prim=0; Input prev; bool paused=false; float msgT=0; char msg[64]={0}; int shotsFeed[4]={-1,-1,-1,-1}; std::string feed[4]; float feedT[4]={};
   int menu=1,menuSel=0; // 1 = قائمة البداية
   void init(int rw,int rh){ r.init(rw,rh); startMatch(mapIdx); }
@@ -215,7 +215,7 @@ struct Game{
     rect(rx0+rs-sc,ry0+rs-sc,2*sc,2*sc,0xFFFFFFFF);
     if(msgT>0)textC(W/2,H/3,msg,sc*2,0xFFFFFFFF);
     if(over){ rect(0,0,W,H,0xFF000000,0.55f); textC(W/2,H/2-20*sc,winner==0?"RED TEAM WINS":"BLUE TEAM WINS",sc*3,winner==0?0xFFFF6060:0xFF6090FF); textC(W/2,H/2+10*sc,"X = PLAY AGAIN",sc*2,0xFFFFFFFF); }
-    if(paused){ rect(0,0,W,H,0xFF000000,0.6f); textC(W/2,H/2-12*sc,"PAUSED",sc*3,0xFFFFFFFF); textC(W/2,H/2+14*sc,"OPTIONS = RESUME   O = MENU",sc*2,0xFFB0B0B0); char sb[40];snprintf(sb,40,"SENSITIVITY < %.1f >",sens);textC(W/2,H/2+34*sc,sb,sc*2,0xFFFFFFFF); {char sw[40];snprintf(sw,40,"TRIANGLE: SWAP L2/R2 (%s)",swapTrig?"SWAPPED":"NORMAL");textC(W/2,H/2+54*sc,sw,sc,0xFF80E0FF);snprintf(sw,40,"SQUARE: SWAP L2/L3 (%s)",swapL?"SWAPPED":"NORMAL");textC(W/2,H/2+63*sc,sw,sc,0xFF80E0FF);snprintf(sw,40,"R1: SWAP MOVE/LOOK STICKS (%s)",swapSticks?"SWAPPED":"NORMAL");textC(W/2,H/2+72*sc,sw,sc,0xFF80E0FF);} }
+    if(paused){ rect(0,0,W,H,0xFF000000,0.6f); textC(W/2,H/2-12*sc,"PAUSED",sc*3,0xFFFFFFFF); textC(W/2,H/2+14*sc,"OPTIONS = RESUME   O = MENU",sc*2,0xFFB0B0B0); char sb[40];snprintf(sb,40,"SENSITIVITY < %.1f >",sens);textC(W/2,H/2+34*sc,sb,sc*2,0xFFFFFFFF); {char sw[40];snprintf(sw,40,"R1: STICKS %s",swapSticks?"LEFT=LOOK RIGHT=MOVE":"LEFT=MOVE RIGHT=LOOK");textC(W/2,H/2+54*sc,sw,sc,0xFF80E0FF);} }
   }
   void renderMenu(){
     Cam c{0,6,0,t*0.2f,-0.15f,1.2f}; t+=0.016f; r.setCam(c); // خلفية: الخريطة المختارة
@@ -223,7 +223,7 @@ struct Game{
     textC(W/2,H/5,"WARZONE",sc*6,0xFFFF5040); textC(W/2,H/5+50*sc,"NATIVE PS4",sc*2,0xFFB0B0B0);
     char b[64]; snprintf(b,64,"< MAP %d / %d >",menuSel+1,MAP_COUNT); textC(W/2,H/2,b,sc*3,0xFFFFFFFF);
     {const char*dn[3]={"EASY","NORMAL","HARD"};char db[40];snprintf(db,40,"DIFFICULTY ^v : %s",dn[diff]);textC(W/2,H/2+22*sc,db,sc*2,0xFFFFD060);}
-    {char sw[40];snprintf(sw,40,"TRIANGLE: SWAP L2/R2 (%s)",swapTrig?"SWAPPED":"NORMAL");textC(W/2,H/2+34*sc+0,sw,sc,0xFF80E0FF);snprintf(sw,40,"SQUARE: SWAP L2/L3 (%s)",swapL?"SWAPPED":"NORMAL");textC(W/2,H/2+34*sc+9*sc,sw,sc,0xFF80E0FF);snprintf(sw,40,"R1: SWAP MOVE/LOOK STICKS (%s)",swapSticks?"SWAPPED":"NORMAL");textC(W/2,H/2+34*sc+18*sc,sw,sc,0xFF80E0FF);}
+    {char sw[40];snprintf(sw,40,"R1: STICKS %s",swapSticks?"LEFT=LOOK RIGHT=MOVE":"LEFT=MOVE RIGHT=LOOK");textC(W/2,H/2+34*sc,sw,sc,0xFF80E0FF);}
     textC(W/2,H/2+60*sc,"X = START   OPTIONS = PAUSE   DPAD = SELECT",sc,0xFFB0B0B0);
     textC(W/2,H/2+72*sc,"L STICK MOVE  R STICK LOOK  R2 FIRE  L2 AIM  X JUMP  O CROUCH  SQ RELOAD  L1/R1 WEAPON",sc,0xFF909090);
   }
