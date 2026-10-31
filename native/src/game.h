@@ -154,24 +154,24 @@ struct Game{
     if(role!=2)updateWeapon(meI,dt,trig);
   }
   // ======== شبكة ========
-  void netClose(){ if(role==2&&sock.fd>=0){NetHello h{T_BYE,NET_VER};sock.send(hostAddr,&h,sizeof h);} sock.close_(); beaconRx.close_(); beaconTx.close_(); role=0; meI=0; joining=false; for(auto&c:cli)c=Cli(); }
+  void netClose(){ if(role==2&&sock.ready()){NetHello h{T_BYE,NET_VER};sock.send(hostAddr,&h,sizeof h);} sock.close_(); beaconRx.close_(); beaconTx.close_(); role=0; meI=0; joining=false; for(auto&c:cli)c=Cli(); }
   int humans()const{int n=0;for(auto&p:e)if(p.remote)n++;return n+(role==1?1:0);}
   // بدء مرحلي: menu=3 يعرض اسم الخطوة الجارية. الهدف: 1 مضيف ، 2 ردهة ، 3 انضمام
   void netBegin(int goal){ netGoal=goal; netSt=0; netPhase=0; menu=3; netWhat="START"; }
   void netStartStep(){
-    int r=0; Udp*u=nullptr; int port=0; bool bc=false;
-    if(netGoal==1){ if(netPhase==0){u=&sock;port=PORT_GAME;} else {u=&beaconTx;bc=true;} }
-    else if(netGoal==2){ u=&beaconRx; port=PORT_BEACON; }
-    else { u=&sock; }
-    if(netSt==0&&((netGoal==1&&netPhase==0)||netGoal!=1||netPhase==1)){ u->close_(); }
-    r=u->stepOpen(port,bc,netSt,netWhat);
-    if(r<0){ char m[64]; snprintf(m,64,"NETWORK ERROR AT %s",netWhat); say(m); msgT=6; netClose(); menu=1; return; }
-    if(r==1){ netSt=0;
-      if(netGoal==1&&netPhase==0){netPhase=1;return;}
-      if(netGoal==1){ role=1; meI=0; for(auto&c:cli)c=Cli(); menu=0; startMatch(menuSel); say("HOSTING LAN GAME - WAITING FOR PLAYERS"); msgT=8; snapT=inT=beaconT=0; }
-      else if(netGoal==2){ menu=2; hosts.clear(); hostSel=0; joining=false; }
-      else { hostAddr=pendJoin; joining=true; joinT=0; menu=2; NetHello h{T_HELLO,NET_VER}; sock.send(hostAddr,&h,sizeof h); }
-    }
+    Udp*u=nullptr; int id=0,port=0; bool bc=false;
+    if(netGoal==1){ if(netPhase==0){u=&sock;id=0;port=PORT_GAME;} else {u=&beaconTx;id=2;bc=true;} }
+    else if(netGoal==2){ u=&beaconRx;id=1;port=PORT_BEACON; }
+    else { u=&sock;id=3; }
+    if(netSt==0){ u->open(id,port,bc); netSt=1; netWhat="WORKER"; return; }
+    netWhat=u->what(); int st=u->state();
+    if(st<0){ char m[64]; snprintf(m,64,"NETWORK ERROR AT %s",netWhat); say(m); msgT=6; netClose(); menu=1; return; }
+    if(st!=1)return; // ما زال الخيط يعمل (أو عالق: الشاشة تعرض الخطوة والمستخدم يلغي بـ O)
+    netSt=0;
+    if(netGoal==1&&netPhase==0){netPhase=1;return;}
+    if(netGoal==1){ role=1; meI=0; for(auto&c:cli)c=Cli(); menu=0; startMatch(menuSel); say("HOSTING LAN GAME - WAITING FOR PLAYERS"); msgT=8; snapT=inT=beaconT=0; }
+    else if(netGoal==2){ menu=2; hosts.clear(); hostSel=0; joining=false; }
+    else { hostAddr=pendJoin; joining=true; joinT=0; menu=2; NetHello h{T_HELLO,NET_VER}; sock.send(hostAddr,&h,sizeof h); }
   }
   void hostStart(){ netBegin(1); }
   void lobbyStart(){ netBegin(2); }
@@ -237,7 +237,7 @@ struct Game{
         inT+=dt; if(inT>=1.f/30){ inT=0; const Ent&p=e[meI]; NetInput n; n.t=T_INPUT;n.slot=(uint8_t)meI;n.seq=++netSeq;n.x=p.b.x;n.y=p.b.y;n.z=p.b.z;n.yaw=p.yaw;n.pitch=p.pitch;
           n.flags=(lastIn.fire?1:0)|(p.crouch?2:0)|(lastIn.reload?4:0)|(p.sprint?8:0)|(p.moving?16:0)|(lastIn.ads?32:0); n.wpn=prim; sock.send(hostAddr,&n,sizeof n); } }
     }
-    if(menu==2&&beaconRx.fd>=0){ while(beaconRx.recv(pk)){ if(pk.n<(int)sizeof(NetBeacon)||pk.d[0]!=T_BEACON)continue; NetBeacon bc; memcpy(&bc,pk.d,sizeof bc); bool f=false;
+    if(menu==2&&beaconRx.ready()){ while(beaconRx.recv(pk)){ if(pk.n<(int)sizeof(NetBeacon)||pk.d[0]!=T_BEACON)continue; NetBeacon bc; memcpy(&bc,pk.d,sizeof bc); bool f=false;
         for(auto&h:hosts)if(h.a.sin_addr.s_addr==pk.from.sin_addr.s_addr){h.map=bc.map;h.players=bc.players;h.seen=0;f=true;}
         if(!f){ HostEnt he; he.a=mkAddr(pk.from.sin_addr.s_addr,PORT_GAME); he.map=bc.map;he.players=bc.players;he.maxp=bc.maxp;memcpy(he.name,bc.name,16);he.name[15]=0;he.seen=0; hosts.push_back(he);} }
       for(auto&h:hosts)h.seen+=dt; hosts.erase(std::remove_if(hosts.begin(),hosts.end(),[](HostEnt&h){return h.seen>4.f;}),hosts.end()); if(hostSel>=(int)hosts.size())hostSel=std::max(0,(int)hosts.size()-1); }
@@ -259,7 +259,7 @@ struct Game{
       if(msgT>0)msgT-=dt;
       if((in.confirm&&!prev.confirm)||(in.start&&!prev.start)){ if(mode==0){menu=0;role=0;meI=0;startMatch(menuSel);} else if(mode==1)hostStart(); else lobbyStart(); }
       prev=in; return; }
-    if(menu==3){ netStartStep(); prev=in; return; }
+    if(menu==3){ netStartStep(); if(in.back&&!prev.back){ netClose(); menu=1; } prev=in; return; }
     if(menu==2){
       netPump(dt); if(msgT>0)msgT-=dt;
       bool up=in.my>0.5f&&prev.my<=0.5f,dn=in.my<-0.5f&&prev.my>=-0.5f; if(up&&hostSel>0)hostSel--; if(dn&&hostSel+1<(int)hosts.size())hostSel++;
@@ -378,7 +378,7 @@ struct Game{
     Cam c{0,6,0,mt*0.2f,-0.15f,1.2f}; if(w.id!=showMap)w.load(showMap); r.setCam(c); r.world(w); int W=r.W,H=r.H,sc=std::max(1,H/270); rect(0,0,W,H,0xFF000000,0.5f); rect(0,0,W,H/6,0xFF000000,0.35f); rect(0,H-H/6,W,H/6,0xFF000000,0.35f);
     textC(W/2+sc*2,H/9+sc*2,"WARZONE",sc*6,0xFF300800); textC(W/2,H/9,"WARZONE",sc*6,0xFFFF5040); rect(W/2-tw("WARZONE",sc*6)/2,H/9+46*sc,tw("WARZONE",sc*6),2*sc,0xFFFF5040); {char bb[40];snprintf(bb,40,"NATIVE PS4 EDITION   BUILD %d",BUILD_ID);textC(W/2,H/9+52*sc,bb,sc*2,0xFFC0C8D0);}
     char b[96];
-    if(menu==3){ textC(W/2,H/2-10*sc,"STARTING NETWORK...",sc*3,0xFFFFFFFF); snprintf(b,96,"STEP: %s",netWhat); textC(W/2,H/2+20*sc,b,sc*2,0xFFFFD060); return; }
+    if(menu==3){ textC(W/2,H/2-10*sc,"STARTING NETWORK...",sc*3,0xFFFFFFFF); snprintf(b,96,"STEP: %s",netWhat); textC(W/2,H/2+20*sc,b,sc*2,0xFFFFD060); textC(W/2,H/2+44*sc,"O = CANCEL",sc*2,0xFFB0B0B0); return; }
     if(menu==2){
       textC(W/2,H/3,"JOIN LAN GAME",sc*3,0xFFFFFFFF);
       if(joining)textC(W/2,H/2,"CONNECTING...",sc*3,0xFFFFD060);
