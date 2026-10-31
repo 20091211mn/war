@@ -37,7 +37,20 @@ struct Udp{
     if(port&&bind(fd,(sockaddr*)&a,sizeof a)<0){close(fd);fd=-1;return false;}
     return true;
   }
-  bool recv(Pkt&p){ if(fd<0)return false; socklen_t l=sizeof p.from; int n=recvfrom(fd,p.d,sizeof p.d,0,(sockaddr*)&p.from,&l); if(n<=0)return false; p.n=n; return true; }
+  // فتح على خطوات (خطوة لكل إطار) لمعرفة أين يتجمد الجهاز إن حدث
+  // يعيد: 0 جارٍ ، 1 تم ، -1 فشل ؛ st يحمل رقم الخطوة ، what اسم الخطوة
+  int stepOpen(int port,bool bcast,int&st,const char*&what){
+    int one=1;
+    switch(st){
+      case 0: what="SOCKET"; fd=socket(AF_INET,SOCK_DGRAM,0); if(fd<0)return -1; st++; return 0;
+      case 1: what="REUSE"; setsockopt(fd,SOL_SOCKET,SO_REUSEADDR,&one,sizeof one); st++; return 0;
+      case 2: what="BROADCAST"; if(bcast)setsockopt(fd,SOL_SOCKET,SO_BROADCAST,&one,sizeof one); st++; return 0;
+      case 3: what="NONBLOCK"; fcntl(fd,F_SETFL,fcntl(fd,F_GETFL,0)|O_NONBLOCK); st++; return 0;
+      case 4: { what="BIND"; if(port){ sockaddr_in a; memset(&a,0,sizeof a); a.sin_family=AF_INET; a.sin_addr.s_addr=htonl(INADDR_ANY); a.sin_port=htons(port); if(bind(fd,(sockaddr*)&a,sizeof a)<0){close(fd);fd=-1;return -1;} } st++; return 1; }
+    }
+    return 1;
+  }
+  bool recv(Pkt&p){ if(fd<0)return false; socklen_t l=sizeof p.from; int n=recvfrom(fd,p.d,sizeof p.d,MSG_DONTWAIT,(sockaddr*)&p.from,&l); if(n<=0)return false; p.n=n; return true; }
   void send(const sockaddr_in&to,const void*d,int n){ if(fd>=0)sendto(fd,d,n,0,(const sockaddr*)&to,sizeof to); }
   void close_(){ if(fd>=0)close(fd); fd=-1; }
 };

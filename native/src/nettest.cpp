@@ -6,7 +6,7 @@ int main(){
   Input idle,mv; mv.my=1; mv.fire=true; int ok=0;
   for(int f=0;f<60*12;f++){
     h.update(1/60.f,idle); c.update(1/60.f,f>120?mv:idle); h.render(); if(c.role==2)c.render();
-    if(f==10)printf("client role %d joining %d meI %d ents %zu\n",c.role,c.joining,c.meI,c.e.size());
+    if(f==40)printf("client role %d joining %d meI %d ents %zu\n",c.role,c.joining,c.meI,c.e.size());
     if(f==60*12-1){ printf("end: host humans %d | client role %d meI %d alive %d pos %.1f,%.1f | host view of client: pos %.1f,%.1f ammo %d | score %d-%d host %d-%d\n",h.humans(),c.role,c.meI,c.e[c.meI].alive,c.e[c.meI].b.x,c.e[c.meI].b.z,h.e[c.meI].b.x,h.e[c.meI].b.z,h.e[c.meI].ammo,c.score[0],c.score[1],h.score[0],h.score[1]); }
   }
   // دقة: الأعداء عند العميل = المضيف تقريبا
