@@ -54,12 +54,11 @@ function pivot(o, P, x, y, z, rx, ox, oy, oz, sx, sy, sz) {
 export function drawAvatar(eng, a, t) {
   // a: {x,y,z,yaw,pitch,crouch,team,moving,sprint,stats,deadT(<0 حي), flash, phase, sit, lean}
   const dead = a.deadT >= 0;
-  const cs = a.crouch ? 0.69 : 1;
   let P;
   if (dead) {
-    const k = Math.min(1, a.deadT / 0.35);
-    P = trs(tmp(), a.x, a.y + 0.18 * k, a.z, a.yaw, -Math.PI / 2 * k, 1, 1, 1);
-  } else P = trs(tmp(), a.x, a.y, a.z, a.yaw, 0, 1, cs, 1);
+    const k = Math.min(1, a.deadT / 0.4), e = 1 - (1 - k) * (1 - k);
+    P = trs(tmp(), a.x, a.y + 0.17 * e, a.z, a.yaw, -Math.PI / 2 * e, 1, 1, 1);
+  } else P = trs(tmp(), a.x, a.y, a.z, a.yaw, 0, 1, 1, 1);
   const tc = TEAM[a.team] || TEAM[0], td = TEAM_D[a.team] || TEAM_D[0], pants = [0.17, 0.18, 0.15], boot = [0.08, 0.07, 0.07], vest = [0.2, 0.22, 0.2], glove = [0.1, 0.1, 0.11];
   if (a.far && !dead) { // مستوى تفصيل منخفض للبعيد: 5 مكعبات فقط
     const cb = (x, y, z, sx, sy, sz, c) => eng.cubeAt(mul(tmp(), P, trs(tmp(), x, y, z, 0, 0, sx, sy, sz)), c[0], c[1], c[2], false);
@@ -67,45 +66,64 @@ export function drawAvatar(eng, a, t) {
     if (a.stats) cb(0.12, 1.2, -0.35, 0.06, 0.08, 0.6, vest);
     return;
   }
-  const mv = a.moving && !dead ? 1 : 0, sw = Math.sin(a.phase) * 0.75 * mv;
   const cube = (m, c, unlit) => eng.cubeAt(m, c[0], c[1], c[2], unlit);
-  // ساقان: فخذ + ساق + حذاء (وضع الجلوس: الفخذ أفقي)
-  const legs = (x, rot) => {
-    if (a.sit && !dead) {
+  if (dead) { // استلقاء: أطراف مفتوحة قليلاً
+    const k = Math.min(1, a.deadT / 0.4), sp = 0.12 * k;
+    cube(mul(tmp(), P, trs(tmp(), -0.12 - sp, 0.4, 0.02, 0, 0, 0.2, 0.8, 0.22)), pants); cube(mul(tmp(), P, trs(tmp(), 0.12 + sp, 0.4, 0, 0, 0, 0.2, 0.8, 0.22)), pants);
+    cube(mul(tmp(), P, trs(tmp(), 0, 1.1, 0, 0, 0, 0.44, 0.58, 0.25)), tc); cube(mul(tmp(), P, trs(tmp(), 0, 1.13, 0.015, 0, 0, 0.5, 0.46, 0.29)), vest);
+    cube(mul(tmp(), P, trs(tmp(), 0, 1.0, 0.2, 0, 0, 0.36, 0.42, 0.14)), [0.18, 0.2, 0.16]);
+    cube(mul(tmp(), P, trs(tmp(), 0, 1.58, 0, 0, 0, 0.21, 0.23, 0.22)), C.s); eng.sphereAt(mul(tmp(), P, trs(tmp(), 0, 1.64, 0.01, 0, 0, 0.34, 0.27, 0.35)), td[0] * 0.9, td[1] * 0.9, td[2] * 0.9, false);
+    cube(mul(tmp(), P, trs(tmp(), 0.36 + sp * 2, 1.2, 0, 0, 0, 0.12, 0.54, 0.12)), td); cube(mul(tmp(), P, trs(tmp(), -0.36 - sp * 2, 1.2, 0, 0, 0, 0.12, 0.54, 0.12)), td);
+    return;
+  }
+  // ---- مشية واقعية: فخذ + ساق بثني الركبة ، اهتزاز الجذع ، ميلان عند الركض ، انحناء حقيقي ----
+  const mv = a.moving ? 1 : 0, cr = !!a.crouch, sit = !!a.sit;
+  const amp = (a.sprint ? 0.95 : 0.68) * (cr ? 0.45 : 1) * mv;
+  const hipY = 0.84 - (cr && !sit ? 0.34 : 0), bob = Math.abs(Math.sin(a.phase)) * 0.032 * mv * (a.sprint ? 1.7 : 1) * (cr ? 0.5 : 1);
+  const L = sit ? 0 : (a.sprint ? 0.2 : 0) + (cr ? 0.1 : 0) + 0.02 * Math.sin(a.phase * 2) * mv;
+  const legs = (x, ph) => {
+    if (sit) {
       cube(mul(tmp(), P, trs(tmp(), x, 0.62, -0.2, 0, 0, 0.19, 0.18, 0.5)), pants);
       cube(mul(tmp(), P, trs(tmp(), x, 0.3, -0.42, 0, 0, 0.17, 0.5, 0.18)), pants);
       cube(mul(tmp(), P, trs(tmp(), x, 0.06, -0.5, 0, 0, 0.2, 0.12, 0.34)), boot);
-    } else {
-      cube(pivot(tmp(), P, x, 0.8, 0, rot, 0, -0.3, 0, 0.2, 0.62, 0.22), pants);
-      cube(pivot(tmp(), P, x, 0.8, 0, rot, 0, -0.74, -0.02, 0.21, 0.16, 0.3), boot);
+      return;
     }
+    const th = Math.sin(ph) * amp + (cr ? 0.85 : 0), flex = Math.max(0, Math.cos(ph)) * 0.85 * mv * (cr ? 0.5 : 1) + (cr ? 1.7 : 0), sa = th - flex;
+    const hy = hipY + bob * 0.5, ky = hy - 0.42 * Math.cos(th), kz = -0.42 * Math.sin(th);
+    cube(mul(tmp(), P, trs(tmp(), x, hy - 0.21 * Math.cos(th), -0.21 * Math.sin(th), 0, th, 0.2, 0.44, 0.22)), pants);
+    cube(mul(tmp(), P, trs(tmp(), x, ky - 0.21 * Math.cos(sa), kz - 0.21 * Math.sin(sa), 0, sa, 0.18, 0.44, 0.2)), pants);
+    const ay = ky - 0.42 * Math.cos(sa), az = kz - 0.42 * Math.sin(sa);
+    cube(mul(tmp(), P, trs(tmp(), x, ay - 0.05, az - 0.08, 0, sa * 0.35, 0.21, 0.14, 0.3)), boot);
   };
-  legs(-0.12, sw); legs(0.12, -sw);
-  // الجزء العلوي (قد يميل خارج المركبة)
-  const U = a.lean ? mul(tmp(), P, trs(tmp(), a.lean[0], 0.02, a.lean[1], 0, 0, 1, 1, 1)) : P;
-  cube(mul(tmp(), U, trs(tmp(), 0, 1.1, 0, 0, 0, 0.44, 0.58, 0.25)), tc);                 // قميص
-  cube(mul(tmp(), U, trs(tmp(), 0, 1.13, 0.015, 0, 0, 0.5, 0.46, 0.29)), vest);           // سترة واقية
-  cube(mul(tmp(), U, trs(tmp(), 0, 1.22, -0.15, 0, 0, 0.36, 0.2, 0.05)), [0.26, 0.28, 0.25]); // لوح أمامي
-  for (const px of [-0.14, 0, 0.14]) cube(mul(tmp(), U, trs(tmp(), px, 0.98, -0.16, 0, 0, 0.1, 0.12, 0.06)), [0.16, 0.17, 0.15]); // جيوب
-  cube(mul(tmp(), U, trs(tmp(), 0, 1.0, 0.2, 0, 0, 0.36, 0.42, 0.14)), [0.18, 0.2, 0.16]);  // حقيبة ظهر
-  cube(mul(tmp(), U, trs(tmp(), 0, 0.92, 0, 0, 0, 0.5, 0.1, 0.3)), [0.1, 0.1, 0.11]);       // حزام
-  cube(mul(tmp(), U, trs(tmp(), 0, 1.44, 0, 0, 0, 0.11, 0.1, 0.11)), C.s);                  // رقبة
-  // الرأس: وجه + خوذة + نظارة
-  const HP = mul(tmp(), U, trs(tmp(), 0, 1.58, 0, 0, a.pitch * 0.5, 1, 1, 1));
+  legs(-0.12, a.phase); legs(0.12, a.phase + Math.PI);
+  // الجزء العلوي: يدور حول الورك (ميلان) وقد يميل خارج المركبة
+  const U0 = a.lean ? mul(tmp(), P, trs(tmp(), a.lean[0], 0.02, a.lean[1], 0, 0, 1, 1, 1)) : P;
+  const U = mul(tmp(), U0, trs(tmp(), 0, sit ? 0.84 : hipY + bob, 0, 0, L, 1, 1, 1));
+  const Y0 = 0.84, up = (x, y, z, sx, sy, sz) => mul(tmp(), U, trs(tmp(), x, y - Y0, z, 0, 0, sx, sy, sz));
+  cube(up(0, 1.1, 0, 0.44, 0.58, 0.25), tc);                 // قميص
+  cube(up(0, 1.13, 0.015, 0.5, 0.46, 0.29), vest);           // سترة واقية
+  cube(up(0, 1.22, -0.15, 0.36, 0.2, 0.05), [0.26, 0.28, 0.25]); // لوح أمامي
+  for (const px of [-0.14, 0, 0.14]) cube(up(px, 0.98, -0.16, 0.1, 0.12, 0.06), [0.16, 0.17, 0.15]); // جيوب
+  cube(up(0, 1.0, 0.2, 0.36, 0.42, 0.14), [0.18, 0.2, 0.16]);  // حقيبة ظهر
+  cube(up(0, 0.92, 0, 0.5, 0.1, 0.3), [0.1, 0.1, 0.11]);       // حزام
+  cube(up(0, 1.44, 0, 0.11, 0.1, 0.11), C.s);                  // رقبة
+  // الرأس: وجه + خوذة + نظارة (يتبع النظر مع تعويض الميلان)
+  const HP = mul(tmp(), U, trs(tmp(), 0, 1.58 - Y0, 0, 0, a.pitch * 0.5 - L, 1, 1, 1));
   cube(mul(tmp(), HP, trs(tmp(), 0, 0, 0, 0, 0, 0.21, 0.23, 0.22)), C.s);
   eng.sphereAt(mul(tmp(), HP, trs(tmp(), 0, 0.06, 0.01, 0, 0, 0.34, 0.27, 0.35)), td[0] * 0.9, td[1] * 0.9, td[2] * 0.9, false);
   cube(mul(tmp(), HP, trs(tmp(), 0, 0.02, -0.115, 0, 0, 0.23, 0.07, 0.03)), [0.05, 0.06, 0.08]);
   cube(mul(tmp(), HP, trs(tmp(), 0, -0.1, -0.08, 0, 0, 0.18, 0.05, 0.08)), [0.12, 0.12, 0.12]);
   const st = a.stats;
-  const ap = a.sprint ? 0.2 : a.pitch;
+  const ap = a.sprint ? 0.2 : a.pitch, br = 0.015 * Math.sin(a.phase * 0.5 + (t || 0) * 2);
   const arm = (x, rot, len = 0.54) => {
-    cube(pivot(tmp(), U, x, 1.36, 0, rot, 0, -len / 2, 0, 0.12, len, 0.12), td);
-    cube(pivot(tmp(), U, x, 1.36, 0, rot, 0, -len - 0.02, 0, 0.1, 0.1, 0.1), glove);
+    rot -= L;
+    cube(pivot(tmp(), U, x, 1.36 - Y0, 0, rot, 0, -len / 2, 0, 0.12, len, 0.12), td);
+    cube(pivot(tmp(), U, x, 1.36 - Y0, 0, rot, 0, -len - 0.02, 0, 0.1, 0.1, 0.1), glove);
   };
-  if (st && !dead) {
+  if (st) {
     const base = a.sprint ? 0.9 : Math.PI / 2;
-    arm(0.27, base + ap - 0.12); arm(-0.27, base + ap + 0.12);
-    const G = pivot(tmp(), U, 0.12, 1.3, 0, ap, 0, -0.05, -0.38, 1, 1, 1);
+    arm(0.27, base + ap - 0.12 + br); arm(-0.27, base + ap + 0.12 + br);
+    const G = pivot(tmp(), U, 0.12, 1.3 - Y0, 0, ap - L, 0, -0.05, -0.38, 1, 1, 1);
     drawGun(eng, G, st, a.flash || 0);
   } else { arm(0.27, 0.05); arm(-0.27, -0.05); }
 }
