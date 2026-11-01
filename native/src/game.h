@@ -410,7 +410,7 @@ struct Game{
     for(auto&k:sparks){ float a=std::min<float>(1.f,k.t*5.f); r.obb(k.x,k.y,k.z,0.025f,0.025f,0.025f,0,0,1.f,0.7f*a+0.2f,0.2f,false,false); }
     if(role==3)aclRender3D();
     // مجسّم السلاح (نفس قطع نسخة أندرويد)
-    if(me.alive&&drive<0){ r.flush(); std::fill(r.zb.begin(),r.zb.end(),0.f); const GunDef&g=GUNDEFS[me.wpn]; float k=adsHeld?1.f:0.f; float top=g.sy;
+    if(me.alive&&drive<0){ r.flush(); r.zBias=1000.f; const GunDef&g=GUNDEFS[me.wpn]; float k=adsHeld?1.f:0.f; float top=g.sy;
       static float bob=0; bob+=me.moving?(me.sprint?0.17f:0.11f):0; float bx=sinf(bob)*0.008f*(me.moving?1:0),by=fabsf(cosf(bob))*0.008f*(me.moving?1:0);
       float x=0.17f*(1-k)+0*k+bx,y=-0.17f*(1-k)+(-top-0.002f)*k+by,z=-0.33f*(1-k)-0.36f*k; float kick=me.flash>0?0.045f:0.f; z+=kick; float rx=kick*1.2f,ry=0.f;
       if(me.reloadT>=0){float sn=sinf(me.reloadT/WEAPONS[me.wpn].reload*3.14159f);y-=sn*0.13f;rx-=sn*0.5f;x+=sn*0.03f;}
@@ -426,7 +426,11 @@ struct Game{
   }
   // ---- واجهة ----
   void px(int x,int y,uint32_t c){ if(x>=0&&y>=0&&x<r.W&&y<r.H)r.fb[y*r.W+x]=c; }
-  void rect(int x,int y,int w2,int h2,uint32_t c,float a=1){ r.flush(); for(int j=std::max(0,y);j<std::min(r.H,y+h2);j++)for(int i=std::max(0,x);i<std::min(r.W,x+w2);i++){ if(a>=1)r.fb[j*r.W+i]=c; else { uint32_t o=r.fb[j*r.W+i]; auto m=[&](int sh){int A=(o>>sh)&255,B=(c>>sh)&255;return (uint32_t)(A+(B-A)*a)<<sh;}; r.fb[j*r.W+i]=0xFF000000u|m(16)|m(8)|m(0);} } }
+  void blendSpan(int y,int x0,int x1,uint32_t c,float a){ if(y<0||y>=r.H)return; x0=std::max(0,x0); x1=std::min(r.W,x1); if(x1<=x0||a<=0)return; uint32_t*row=&r.fb[(size_t)y*r.W];
+    if(a>=0.999f){ std::fill(row+x0,row+x1,c|0xFF000000u); return; }
+    uint32_t ia=(uint32_t)(a*256.f+0.5f),na=256-ia,crb=(c&0xFF00FFu)*ia,cg=(c&0x00FF00u)*ia;
+    for(int i=x0;i<x1;i++){ uint32_t o=row[i]; uint32_t rb=(((o&0xFF00FFu)*na+crb)>>8)&0xFF00FFu; uint32_t g=(((o&0x00FF00u)*na+cg)>>8)&0x00FF00u; row[i]=0xFF000000u|rb|g; } }
+  void rect(int x,int y,int w2,int h2,uint32_t c,float a=1){ r.flush(); for(int j=std::max(0,y);j<std::min(r.H,y+h2);j++)blendSpan(j,x,x+w2,c,a); }
   // خط حقيقي: sc*9 = حجم الخط بالبكسل ؛ يدعم العربية
   static int fontEm(int sc){ return std::max(8,sc*9); }
   static const FGlyph* fgFor(int em,uint32_t cp,int&base){ const FGlyph*a;int n; if(em<=22){a=FG_S;n=FN_S;base=16;} else if(em<=44||cp>=0x80){a=FG_M;n=FN_M;base=32;} else {a=FG_L;n=FN_L;base=64;}
@@ -454,7 +458,8 @@ struct Game{
       int secs=role==3?g_aclTime:std::max(0,600-(int)t); snprintf(b,64,"%d:%02d",secs/60,secs%60); textC(W/2,py+ph/2-4*sc,b,sc,0xFFE8EEF6); }
     // ---- رادار دائري (أعلى اليسار) ----
     int R=30*sc,rcx=8*sc+R,rcy=8*sc+R; float fxw=-sinf(me.yaw),fzw=-cosf(me.yaw),rxw=cosf(me.yaw),rzw=-sinf(me.yaw);
-    for(int j=-R;j<=R;j++)for(int i=-R;i<=R;i++){ int d2=i*i+j*j; if(d2>R*R)continue; int X=rcx+i,Y=rcy+j; if(X<0||Y<0||X>=W||Y>=H)continue; uint32_t o=r.fb[Y*W+X]; float al=d2>(R-sc)*(R-sc)?0.85f:0.55f; uint32_t c2=d2>(R-sc)*(R-sc)?0xFF8FA0B4:0xFF0B0F14; auto m=[&](int sh){int A=(o>>sh)&255,B2=(c2>>sh)&255;return (uint32_t)(A+(B2-A)*al)<<sh;}; r.fb[Y*W+X]=0xFF000000u|m(16)|m(8)|m(0); }
+    r.flush(); for(int j=-R;j<=R;j++){ int xo=(int)sqrtf((float)(R*R-j*j)+0.5f); int in2=(R-sc)*(R-sc)-j*j; int xi=in2>0?(int)sqrtf((float)in2):-1; int Y=rcy+j;
+      if(xi<0){ blendSpan(Y,rcx-xo,rcx+xo+1,0xFF8FA0B4,0.85f); } else { blendSpan(Y,rcx-xo,rcx-xi,0xFF8FA0B4,0.85f); blendSpan(Y,rcx+xi+1,rcx+xo+1,0xFF8FA0B4,0.85f); blendSpan(Y,rcx-xi,rcx+xi+1,0xFF0B0F14,0.55f); } }
     auto dot=[&](float wx,float wz,uint32_t col,int sz){ float dx=wx-me.b.x,dz=wz-me.b.z; float lr=dx*rxw+dz*rzw,lf=dx*fxw+dz*fzw; float k=(R-2*sc)/40.f; int X=rcx+(int)(lr*k),Y=rcy-(int)(lf*k); int ddx=X-rcx,ddy=Y-rcy; if(ddx*ddx+ddy*ddy>(R-2*sc)*(R-2*sc))return; rect(X-sz/2,Y-sz/2,sz,sz,col); };
     for(auto&v:vh)dot(v.x,v.z,v.dead?0xFF606060:0xFFFFD23B,3*sc);
     for(auto&o:e){ if(!o.alive||&o==&me)continue; dot(o.b.x,o.b.z,o.team?0xFF5080FF:0xFFFF5050,2*sc); }
@@ -484,10 +489,12 @@ struct Game{
   }
   // ---- عناصر واجهة بنمط نسخة أندرويد ----
   static constexpr uint32_t C_PANEL=0xFF141B24,C_LINE=0xFF243040,C_BTN=0xFF1B2430,C_BTNH=0xFF2A3A50,C_TXT=0xFFE8EEF6,C_MUT=0xFF8FA0B4,C_ACC=0xFFFFB020;
-  void rrect(int x,int y,int w2,int h2,int rad,uint32_t c,float a=1){ rad=std::min(rad,std::min(w2,h2)/2);
-    for(int j=std::max(0,y);j<std::min(r.H,y+h2);j++)for(int i=std::max(0,x);i<std::min(r.W,x+w2);i++){
-      int cx=std::min(std::max(i,x+rad),x+w2-1-rad),cy=std::min(std::max(j,y+rad),y+h2-1-rad); float d=sqrtf((float)((i-cx)*(i-cx)+(j-cy)*(j-cy))); float cov=d<=rad-0.5f?1.f:d<rad+0.5f?(rad+0.5f-d):0.f; if(cov<=0)continue; float al=a*cov;
-      uint32_t o=r.fb[j*r.W+i]; auto m=[&](int sh){int A=(o>>sh)&255,B=(c>>sh)&255;return (uint32_t)(A+(B-A)*al)<<sh;}; r.fb[j*r.W+i]=0xFF000000u|m(16)|m(8)|m(0); } }
+  void rrect(int x,int y,int w2,int h2,int rad,uint32_t c,float a=1){ r.flush(); rad=std::min(rad,std::min(w2,h2)/2);
+    for(int j=std::max(0,y);j<std::min(r.H,y+h2);j++){ int cy=std::min(std::max(j,y+rad),y+h2-1-rad); int dy=j-cy;
+      if(dy==0){ blendSpan(j,x,x+w2,c,a); continue; }
+      blendSpan(j,x+rad,x+w2-rad,c,a);
+      for(int side=0;side<2;side++){ int i0=side?x+w2-rad:x,i1=side?x+w2:x+rad,cx=side?x+w2-1-rad:x+rad;
+        for(int i=i0;i<i1;i++){ int dx=i-cx; float d=sqrtf((float)(dx*dx+dy*dy)); float cov=d<=rad-0.5f?1.f:d<rad+0.5f?(rad+0.5f-d):0.f; if(cov>0)blendSpan(j,i,i+1,c,a*cov); } } } }
   void card(int x,int y,int w2,int h2,int sc){ rrect(x,y,w2,h2,8*sc,C_LINE); rrect(x+1,y+1,w2-2,h2-2,8*sc-1,C_PANEL,0.96f); }
   void btn(int x,int y,int w2,int h2,int sc,const char*label,bool sel,bool prim){
     if(prim){ rrect(x,y,w2,h2,6*sc,sel?0xFFFFC85A:C_ACC); for(int j=0;j<h2;j++){ float t=(float)j/h2; rect(x+3*sc,y+j,w2-6*sc,1,0xFFE08A00,t*0.35f); } textC(x+w2/2,y+h2/2-4*sc,label,sc,0xFF1A1200); }
