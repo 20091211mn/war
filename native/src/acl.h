@@ -21,7 +21,7 @@ void Game::aclStart(uint32_t ip,int port){
 void Game::aclStop(){ if(ac){ ac->ws.close(); if(ac->scan)ac->scan->stop=true; delete ac; ac=nullptr; } role=0; meI=0; e.assign(1,Ent()); menu=1; paused=false; mapIdx=std::min(mapIdx,MAP_COUNT-1); startMatch(menuSel); }
 void Game::aclShoot(const std::string&dj){ if(!ac)return; std::string m="{\"t\":\"shoot\",\"w\":"+std::to_string(ac->slot)+",\"d\":["+dj+"]}"; ac->ws.send(m); }
 void Game::aclReload(){ if(ac)ac->ws.send("{\"t\":\"rl\"}"); }
-void Game::aclGrenade(){ if(!ac||meI>=(int)e.size())return; Ent&p=e[meI]; float cp=std::cos(p.pitch); char b[120]; snprintf(b,120,"{\"t\":\"gren\",\"d\":[%.4f,%.4f,%.4f]}",-std::sin(p.yaw)*cp,std::sin(p.pitch),-std::cos(p.yaw)*cp); ac->ws.send(b); }
+void Game::aclGrenade(){ if(!ac||meI>=(int)e.size())return; Ent&p=e[meI]; float cp=cosf(p.pitch); char b[120]; snprintf(b,120,"{\"t\":\"gren\",\"d\":[%.4f,%.4f,%.4f]}",-sinf(p.yaw)*cp,sinf(p.pitch),-cosf(p.yaw)*cp); ac->ws.send(b); }
 void Game::aclSwapSlot(){
   if(!ac||meI>=(int)e.size())return; Ent&p=e[meI]; ac->slotAm[ac->slot][0]=p.ammo; ac->slotAm[ac->slot][1]=p.mags; ac->slot^=1;
   int wi=weaponIdx(ac->slot?ac->loS:ac->loP); giveWeapon(p,wi); if(ac->slotAm[ac->slot][0]>=0){p.ammo=ac->slotAm[ac->slot][0];p.mags=ac->slotAm[ac->slot][1];}

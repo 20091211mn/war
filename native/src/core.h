@@ -19,15 +19,15 @@ struct World {
   std::vector<std::vector<int>> cells; std::vector<int> mark; int stamp=0;
   void load(int idx){
     id=idx; m=&MAPS[idx]; boxes.assign(m->boxes,m->boxes+m->nb);
-    ox=-m->W/2-3; oz=-m->D/2-3; nx=(int)std::ceil((m->W+6)/CS)+1; nz=(int)std::ceil((m->D+6)/CS)+1;
+    ox=-m->W/2-3; oz=-m->D/2-3; nx=(int)ceilf((m->W+6)/CS)+1; nz=(int)ceilf((m->D+6)/CS)+1;
     cells.assign(nx*nz,{}); mark.assign(boxes.size(),0); stamp=0;
-    auto ci=[&](float v,float o,int n){return std::max(0,std::min(n-1,(int)std::floor((v-o)/CS)));};
+    auto ci=[&](float v,float o,int n){return std::max(0,std::min(n-1,(int)floorf((v-o)/CS)));};
     for(int k=0;k<(int)boxes.size();k++){const Box&b=boxes[k];
       int i0=ci(b.x0-0.6f,ox,nx),i1=ci(b.x1+0.6f,ox,nx),j0=ci(b.z0-0.6f,oz,nz),j1=ci(b.z1+0.6f,oz,nz);
       for(int j=j0;j<=j1;j++)for(int i=i0;i<=i1;i++)cells[j*nx+i].push_back(k);}
   }
   const std::vector<int>& cellAt(float x,float z)const{
-    int i=std::max(0,std::min(nx-1,(int)std::floor((x-ox)/CS))),j=std::max(0,std::min(nz-1,(int)std::floor((z-oz)/CS)));
+    int i=std::max(0,std::min(nx-1,(int)floorf((x-ox)/CS))),j=std::max(0,std::min(nz-1,(int)floorf((z-oz)/CS)));
     return cells[j*nx+i];
   }
 };
@@ -36,7 +36,7 @@ static inline float rayBox(float ox,float oy,float oz,float dx,float dy,float dz
   float tmin=0,tmax=1e30f;
   const float o[3]={ox,oy,oz},d[3]={dx,dy,dz},lo[3]={x0,y0,z0},hi[3]={x1,y1,z1};
   for(int a=0;a<3;a++){
-    if(std::fabs(d[a])<1e-9f){ if(o[a]<lo[a]||o[a]>hi[a]) return 1e30f; }
+    if(fabsf(d[a])<1e-9f){ if(o[a]<lo[a]||o[a]>hi[a]) return 1e30f; }
     else{ float t1=(lo[a]-o[a])/d[a],t2=(hi[a]-o[a])/d[a]; if(t1>t2)std::swap(t1,t2);
       if(t1>tmin)tmin=t1; if(t2<tmax)tmax=t2; if(tmin>tmax) return 1e30f; }
   }
@@ -45,11 +45,11 @@ static inline float rayBox(float ox,float oy,float oz,float dx,float dy,float dz
 
 static float raycastMap(World&w,float ox,float oy,float oz,float dx,float dy,float dz,float maxT){
   float best=maxT; const int CS=World::CS;
-  int cx=std::max(0,std::min(w.nx-1,(int)std::floor((ox-w.ox)/CS))),cz=std::max(0,std::min(w.nz-1,(int)std::floor((oz-w.oz)/CS)));
+  int cx=std::max(0,std::min(w.nx-1,(int)floorf((ox-w.ox)/CS))),cz=std::max(0,std::min(w.nz-1,(int)floorf((oz-w.oz)/CS)));
   int sx=dx>0?1:-1,sz=dz>0?1:-1;
-  float tdx=std::fabs(dx)>1e-9f?CS/std::fabs(dx):1e30f,tdz=std::fabs(dz)>1e-9f?CS/std::fabs(dz):1e30f;
-  float tmx=std::fabs(dx)>1e-9f?(((dx>0?(cx+1)*CS+w.ox:cx*CS+w.ox))-ox)/dx:1e30f;
-  float tmz=std::fabs(dz)>1e-9f?(((dz>0?(cz+1)*CS+w.oz:cz*CS+w.oz))-oz)/dz:1e30f;
+  float tdx=fabsf(dx)>1e-9f?CS/fabsf(dx):1e30f,tdz=fabsf(dz)>1e-9f?CS/fabsf(dz):1e30f;
+  float tmx=fabsf(dx)>1e-9f?(((dx>0?(cx+1)*CS+w.ox:cx*CS+w.ox))-ox)/dx:1e30f;
+  float tmz=fabsf(dz)>1e-9f?(((dz>0?(cz+1)*CS+w.oz:cz*CS+w.oz))-oz)/dz:1e30f;
   int id=++w.stamp;
   for(int g=0;g<400;g++){
     for(int k:w.cells[cz*w.nx+cx]){ if(w.mark[k]==id)continue; w.mark[k]=id; const Box&b=w.boxes[k];
