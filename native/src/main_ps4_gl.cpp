@@ -101,9 +101,13 @@ int main(int,char**){
   wzlog("== main start build %d variant %d threads %d ==",(int)BUILD_ID,(int)WZ_VARIANT,(int)WZ_THREADS);
   setvbuf(stdout,NULL,_IONBF,0);
   wzlog("gl first"); if(!glInit()){wzlog("glInit FAILED");for(;;);} wzlog("gl up");
+#ifdef WZ_SKIP_USINIT
+  wzlog("skip sceUserServiceInitialize (Piglet/privileged may have done it)");
+#else
   OrbisUserServiceInitializeParams up; up.priority=ORBIS_KERNEL_PRIO_FIFO_LOWEST; wzlog("calling userservice init"); int ur=sceUserServiceInitialize(&up); wzlog("userservice init ret=0x%x",(unsigned)ur);
+#endif
+  int uid=0; wzlog("calling get initial user"); int gr=sceUserServiceGetInitialUser(&uid); wzlog("get initial user ret=0x%x uid=%d",(unsigned)gr,uid);
   wzlog("calling scePadInit"); int pr=scePadInit(); wzlog("scePadInit ret=0x%x",(unsigned)pr);
-  int uid=0; sceUserServiceGetInitialUser(&uid);
   padH=scePadOpen(uid,0,0,NULL); wzlog("pad open %d",padH);
   static Game g; wzlog("game constructed"); g.r.startThreads(WZ_THREADS); wzlog("threads started"); g.menu=1; g.init(WZ_IW,WZ_IH); wzlog("game init"); static std::vector<uint32_t> upb(WZ_IW*WZ_IH); wzlog("upload buf ok");
   wzlog("entering loop");
