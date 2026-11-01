@@ -55,16 +55,15 @@ jobs:
             cp -r /tmp/oo-src/samples/piglet "$S/piglet"
           fi
           for V in 1 2; do
-            N=wzGL$V; NOPAD=""; [ "$V" = "1" ] && NOPAD="-DWZ_NOPAD"
+            N=wzGL$V; TH=1; [ "$V" = "2" ] && TH=6
             rm -rf "$S/$N"; cp -r "$S/piglet" "$S/$N"
             rm -rf "$S/$N/piglet"; mkdir -p "$S/$N/$N" "$S/$N/gen"
             cp native/src/*.h "$S/$N/$N/"; cp native/src/main_ps4_gl.cpp "$S/$N/$N/main.cpp"
             cp native/gen/data.h "$S/$N/gen/"
             ( cd "$S/$N"
               sed -i "s/^LIBS .*/LIBS        := -lc -lkernel -lc++ -lSceShellCoreUtil -lSceSysmodule -lSceSystemService -lScePigletv2VSH -lScePrecompiledShaders -lSceRtc -lSceUserService -lScePad/" Makefile
-              sed -i "s/^EXTRAFLAGS .*/EXTRAFLAGS  := -fexceptions -fcxx-exceptions -O2 -fno-math-errno -DBUILD_ID=$BUILD -DWZ_VARIANT=$V $NOPAD/" Makefile
+              sed -i "s/^EXTRAFLAGS .*/EXTRAFLAGS  := -fexceptions -fcxx-exceptions -O2 -fno-math-errno -DBUILD_ID=$BUILD -DWZ_VARIANT=$V -DWZ_THREADS=$TH/" Makefile
               sed -i "s/^VERSION .*/VERSION     := $VER/; s/^TITLE .*/TITLE       := Warzone GPU exp v$V/; s/^TITLE_ID .*/TITLE_ID    := BREW0079$V/; s/^CONTENT_ID .*/CONTENT_ID  := IV0000-BREW0079${V}_00-WZNATIVEGL00000$V/" Makefile
-              if [ "$V" = "2" ]; then sed -i 's/--paid 0x3800000000000035 --authinfo \$(AUTHINFO)/--paid 0x3800000000000011/' Makefile; fi
               grep -n "create-fself" Makefile | cut -c1-220
               cp "$GITHUB_WORKSPACE/ps4/icon0.png" sce_sys/icon0.png || true
               make
