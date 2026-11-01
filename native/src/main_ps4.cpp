@@ -32,7 +32,7 @@ int main(int,char**){
     float ax,ay,bx,by; stick(stickN(pd.leftStick.x),-stickN(pd.leftStick.y),ax,ay); stick(stickN(pd.rightStick.x),-stickN(pd.rightStick.y),bx,by); // y موجب = أعلى
     float lx_,ly_,rx_,ry_; if(g.swapSticks){rx_=ax;ry_=ay;lx_=bx;ly_=by;} else {lx_=ax;ly_=ay;rx_=bx;ry_=by;} // l = حركة ، r = نظر
     Input in;
-    float a=std::min(1.f,dt*14.f); smx+=(lx_-smx)*a; smy+=(ly_-smy)*a; if(lx_==0&&fabsf(smx)<0.05f)smx=0; if(ly_==0&&fabsf(smy)<0.05f)smy=0;
+    float a=std::min<float>(1.f,dt*14.f); smx+=(lx_-smx)*a; smy+=(ly_-smy)*a; if(lx_==0&&fabsf(smx)<0.05f)smx=0; if(ly_==0&&fabsf(smy)<0.05f)smy=0;
     in.mx=smx; in.my=smy;
     float rm=sqrtf(rx_*rx_+ry_*ry_); float cv=rm*rm*1.9f+rm*0.45f; float rk=rm>0.001f?cv/rm:0; in.lx=rx_*rk; in.ly=ry_*rk*0.75f;
     in.fire=B(ORBIS_PAD_BUTTON_R2)||pd.analogButtons.r2>110; in.ads=B(ORBIS_PAD_BUTTON_L2)||pd.analogButtons.l2>110;

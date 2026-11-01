@@ -115,12 +115,12 @@ void Game::aclUpdate(float dt,const Input&in){
   // ---- أثناء المباراة ----
   if(!A.inMatch||meI>=(int)e.size()){ prev=in; return; }
   if(in.start&&!prev.start)paused=!paused; Input use=in;
-  if(paused){ if(in.mx>0.5f&&prev.mx<=0.5f)sens=std::min(2.5f,sens+0.2f); if(in.mx<-0.5f&&prev.mx>=-0.5f)sens=std::max(0.3f,sens-0.2f); if(in.back&&!prev.back){ aclStop(); prev=in; return; } use=Input(); }
+  if(paused){ if(in.mx>0.5f&&prev.mx<=0.5f)sens=std::min<float>(2.5f,sens+0.2f); if(in.mx<-0.5f&&prev.mx>=-0.5f)sens=std::max<float>(0.3f,sens-0.2f); if(in.back&&!prev.back){ aclStop(); prev=in; return; } use=Input(); }
   t+=dt; if(msgT>0)msgT-=dt; if(hitMark>0)hitMark-=dt; if(dmgFlash>0)dmgFlash-=dt;
   for(auto&q:tr)q.t-=dt; tr.erase(std::remove_if(tr.begin(),tr.end(),[](Tracer&q){return q.t<=0;}),tr.end()); for(int k=0;k<4;k++)if(feedT[k]>0)feedT[k]-=dt;
   Ent&me=e[meI]; if(me.prot>0)me.prot-=dt;
   for(int i=0;i<(int)e.size();i++){ Ent&p=e[i]; if(i==meI){ if(p.alive&&!over)updatePlayer(dt,use); continue; } if(p.gone)continue;
-    float k=std::min(1.f,dt*16.f); p.b.x+=(p.tx-p.b.x)*k;p.b.y+=(p.ty-p.b.y)*k;p.b.z+=(p.tz-p.b.z)*k; float dy=p.tyaw-p.yaw; while(dy>3.14159f)dy-=6.28318f; while(dy<-3.14159f)dy+=6.28318f; p.yaw+=dy*k; if(p.flash>0)p.flash-=dt; if(p.moving)p.phase+=dt*7; }
+    float k=std::min<float>(1.f,dt*16.f); p.b.x+=(p.tx-p.b.x)*k;p.b.y+=(p.ty-p.b.y)*k;p.b.z+=(p.tz-p.b.z)*k; float dy=p.tyaw-p.yaw; while(dy>3.14159f)dy-=6.28318f; while(dy<-3.14159f)dy+=6.28318f; p.yaw+=dy*k; if(p.flash>0)p.flash-=dt; if(p.moving)p.phase+=dt*7; }
   A.stT+=dt; if(A.stT>=0.05f){ A.stT=0; if(me.alive){ int f=(me.crouch?1:0)|(use.ads?2:0)|(me.moving?4:0)|(me.sprint?8:0); char b[260]; snprintf(b,260,"{\"t\":\"st\",\"e\":%d,\"x\":%.2f,\"y\":%.2f,\"z\":%.2f,\"yaw\":%.3f,\"pitch\":%.3f,\"f\":%d,\"w\":%d}",A.epoch,me.b.x,me.b.y,me.b.z,me.yaw,me.pitch,f,A.slot); A.ws.send(b); } }
   // عودة المباراة: المضيف يضغط X ... (الخادم يتولى الإعادة)
   prev=in;

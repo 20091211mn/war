@@ -40,23 +40,23 @@ static bool pushOut(const Veh&v,float&px,float&pz,float py){
 static float step(const World&w,Veh&v,std::vector<Veh>&all,float thr,float steer,bool hb,float dt){
   float fx=-sinf(v.h),fz=-cosf(v.h),rx=cosf(v.h),rz=-sinf(v.h);
   float vf=v.vx*fx+v.vz*fz,vl=v.vx*rx+v.vz*rz; int nb=tiresBlown(v.tires);
-  float maxFwd=std::max(5.f,MAXFWD*(1-0.17f*nb)),accel=ACCEL*(1-0.1f*nb);
-  if(thr>0){ if(vf<-0.5f)vf+=BRAKE*dt; else vf+=accel*thr*dt*std::max(0.f,1-vf/maxFwd); }
-  else if(thr<0){ if(vf>0.5f)vf-=BRAKE*dt; else vf-=accel*0.6f*-thr*dt*std::max(0.f,1-(-vf)/MAXREV); }
-  else { float roll=(1.5f+0.012f*vf*vf)*dt; vf-=(vf>0?1.f:-1.f)*std::min(fabsf(vf),roll); }
+  float maxFwd=std::max<float>(5.f,MAXFWD*(1-0.17f*nb)),accel=ACCEL*(1-0.1f*nb);
+  if(thr>0){ if(vf<-0.5f)vf+=BRAKE*dt; else vf+=accel*thr*dt*std::max<float>(0.f,1-vf/maxFwd); }
+  else if(thr<0){ if(vf>0.5f)vf-=BRAKE*dt; else vf-=accel*0.6f*-thr*dt*std::max<float>(0.f,1-(-vf)/MAXREV); }
+  else { float roll=(1.5f+0.012f*vf*vf)*dt; vf-=(vf>0?1.f:-1.f)*std::min<float>(fabsf(vf),roll); }
   if(vf>maxFwd)vf=std::max(maxFwd,vf-12*dt);
-  if(hb)vf-=(vf>0?1.f:-1.f)*std::min(fabsf(vf),9*dt);
+  if(hb)vf-=(vf>0?1.f:-1.f)*std::min<float>(fabsf(vf),9*dt);
   float grip=(hb?1.4f:7.f)*(1-0.12f*nb); vl*=expf(-grip*dt);
-  float maxS=MAXSTEER*(1-std::min(0.72f,fabsf(vf)/38)); v.steer+=(steer*maxS-v.steer)*std::min(1.f,dt*6);
+  float maxS=MAXSTEER*(1-std::min<float>(0.72f,fabsf(vf)/38)); v.steer+=(steer*maxS-v.steer)*std::min<float>(1.f,dt*6);
   float yaw=vf/L*tanf(v.steer)*(hb?1.35f:1.f);
-  float pull=(float)(((v.tires>>1&1)+(v.tires>>3&1))-((v.tires&1)+(v.tires>>2&1))); yaw+=pull*0.09f*std::min(1.f,fabsf(vf)/10)*(vf<0?-1.f:1.f);
+  float pull=(float)(((v.tires>>1&1)+(v.tires>>3&1))-((v.tires&1)+(v.tires>>2&1))); yaw+=pull*0.09f*std::min<float>(1.f,fabsf(vf)/10)*(vf<0?-1.f:1.f);
   float nh=v.h-yaw*dt; float crash=0;
-  if(!collides(w,v.x,v.z,nh,all,&v))v.h=nh; else if(fabsf(vf)>1)crash=std::max(crash,fabsf(vf)*0.4f);
+  if(!collides(w,v.x,v.z,nh,all,&v))v.h=nh; else if(fabsf(vf)>1)crash=std::max<float>(crash,fabsf(vf)*0.4f);
   float nfx=-sinf(v.h),nfz=-cosf(v.h),nrx=cosf(v.h),nrz=-sinf(v.h); float nvx=nfx*vf+nrx*vl,nvz=nfz*vf+nrz*vl;
   float nx=v.x+nvx*dt,nz=v.z+nvz*dt; bool hit=false;
   if(!collides(w,nx,v.z,v.h,all,&v))v.x=nx; else {hit=true;nvx*=-0.2f;}
   if(!collides(w,v.x,nz,v.h,all,&v))v.z=nz; else {hit=true;nvz*=-0.2f;}
-  if(hit){crash=std::max(crash,fabsf(vf));nvx*=0.6f;nvz*=0.6f;}
+  if(hit){crash=std::max<float>(crash,fabsf(vf));nvx*=0.6f;nvz*=0.6f;}
   v.vx=nvx;v.vz=nvz;v.speed=nvx*nfx+nvz*nfz;
   if(collides(w,v.x,v.z,v.h,all,&v)){ bool done=false; for(int k=1;k<=12&&!done;k++){ static const int D[4][2]={{1,0},{-1,0},{0,1},{0,-1}}; for(auto&d:D){ if(!collides(w,v.x+d[0]*k*0.25f,v.z+d[1]*k*0.25f,v.h,all,&v)){v.x+=d[0]*k*0.25f;v.z+=d[1]*k*0.25f;done=true;break;} } } }
   return crash;
@@ -88,7 +88,7 @@ static const Part PARTS[]={
  {-1.05f,0.5f,-0.15f,0.12f,0.05f,1.5f,.08f,.08f,.08f,0},{1.05f,0.5f,-0.15f,0.12f,0.05f,1.5f,.08f,.08f,.08f,0},
 };
 static void draw(Renderer&r,const Veh&v,float dist){
-  float tint=v.dead?0.16f:0.55f+0.45f*std::max(0.f,v.hp/HP);
+  float tint=v.dead?0.16f:0.55f+0.45f*std::max<float>(0.f,v.hp/HP);
   auto P=[&](float lx,float y,float lz,float sx,float sy,float sz,float cr,float cg,float cb,bool unlit){ float wx,wz; l2w(v,lx,lz,wx,wz); r.obb(wx,y,wz,sx*.5f,sy*.5f,sz*.5f,v.h,0,cr*(unlit?1:tint),cg*(unlit?1:tint),cb*(unlit?1:tint),true,!unlit); };
   if(dist>60){ P(0,0.6f,0,1.9f,0.5f,4.9f,BC[0],BC[1],BC[2],false); P(0,1.3f,-0.15f,1.9f,0.8f,1.5f,BC[0],BC[1],BC[2],false); }
   else for(auto&p:PARTS)P(p.x,p.y,p.z,p.sx,p.sy,p.sz,p.r,p.g,p.b,p.unlit&&!v.dead);

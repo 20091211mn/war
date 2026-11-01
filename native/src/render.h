@@ -23,7 +23,7 @@ struct Renderer {
   Cam cam{}; float fx=0,fy=0,fz=0,rx=0,rz=0,ux=0,uy=0,uz=0,focal=1;
   const MapDef* m=nullptr; float fog[3]={0,0,0}, fogN=30, fogF=100; float sunN[3]={0,1,0};
   float powLut[257]; float lineLut[32*32]; float hashTab[256];
-  void init(int w,int h){flush();W=w;H=h;fb.assign(w*h,0);zb.assign(w*h,0);for(int i=0;i<=256;i++)powLut[i]=powf(i/256.f,0.55f); for(int j=0;j<32;j++)for(int i=0;i<32;i++){float fu=(i+0.5f)/32-0.5f,fv=(j+0.5f)/32-0.5f;float gm=std::max(fabsf(fu),fabsf(fv));float ln=gm>0.43f?std::min(1.f,(gm-0.43f)/0.07f):0.f;lineLut[j*32+i]=1.f-0.2f*ln;} for(int i=0;i<256;i++)hashTab[i]=0.9f+0.2f*hash2(i&15,i>>4);}
+  void init(int w,int h){flush();W=w;H=h;fb.assign(w*h,0);zb.assign(w*h,0);for(int i=0;i<=256;i++)powLut[i]=powf(i/256.f,0.55f); for(int j=0;j<32;j++)for(int i=0;i<32;i++){float fu=(i+0.5f)/32-0.5f,fv=(j+0.5f)/32-0.5f;float gm=std::max<float>(fabsf(fu),fabsf(fv));float ln=gm>0.43f?std::min<float>(1.f,(gm-0.43f)/0.07f):0.f;lineLut[j*32+i]=1.f-0.2f*ln;} for(int i=0;i<256;i++)hashTab[i]=0.9f+0.2f*hash2(i&15,i>>4);}
   void setCam(const Cam&c){
     cam=c; float cy=cosf(c.yaw),sy=sinf(c.yaw),cp=cosf(c.pitch),sp=sinf(c.pitch);
     fx=-sy*cp; fy=sp; fz=-cy*cp; rx=cy; rz=-sy;
@@ -44,8 +44,8 @@ struct Renderer {
   void skyAt(float vx,float vy,float&R,float&G,float&B,float&sOut)const{
     const MapDef&d=*m; float dx=fx+vx*rx+vy*ux,dy=fy+vy*uy,dz=fz+vx*rz+vy*uz;
     float inv=1.f/sqrtf(dx*dx+dy*dy+dz*dz); dx*=inv;dy*=inv;dz*=inv;
-    if(dy>=0){ float t=powLut[(int)(std::min(1.f,dy)*256)]; R=d.hor[0]+(d.sky[0]-d.hor[0])*t;G=d.hor[1]+(d.sky[1]-d.hor[1])*t;B=d.hor[2]+(d.sky[2]-d.hor[2])*t; }
-    else { float k=std::min(1.f,-dy*4.f)*0.2f; R=d.hor[0]*(1-k);G=d.hor[1]*(1-k);B=d.hor[2]*(1-k); }
+    if(dy>=0){ float t=powLut[(int)(std::min<float>(1.f,dy)*256)]; R=d.hor[0]+(d.sky[0]-d.hor[0])*t;G=d.hor[1]+(d.sky[1]-d.hor[1])*t;B=d.hor[2]+(d.sky[2]-d.hor[2])*t; }
+    else { float k=std::min<float>(1.f,-dy*4.f)*0.2f; R=d.hor[0]*(1-k);G=d.hor[1]*(1-k);B=d.hor[2]*(1-k); }
     float s=dx*sunN[0]+dy*sunN[1]+dz*sunN[2]; sOut=s;
     if(s>0.55f){ float s2=s*s,s4=s2*s2,s8=s4*s4,s12=s8*s4; float g1=s12*0.12f; float g2=s>0.9985f?1.2f:0; R+=g1+g2;G+=0.92f*g1+g2*0.92f;B+=0.75f*g1+g2*0.75f; }
   }
@@ -105,10 +105,10 @@ struct Renderer {
     float inv02=1.f/(y2-y0);
     for(int y=ya;y<=yb;y++){
       float fy_=(float)y+0.5f; if(fy_<y0)fy_=y0;
-      float t02=std::min(1.f,std::max(0.f,(fy_-y0)*inv02));
+      float t02=std::min<float>(1.f,std::max<float>(0.f,(fy_-y0)*inv02));
       float xa=x0+(x2-x0)*t02,za=z0+(z2-z0)*t02,ua=u0+(u2-u0)*t02,va=v0+(v2-v0)*t02,xb,zb_,ub,vb;
-      float t; if(fy_<y1){float d=y1-y0; t=d>1e-6f?std::min(1.f,std::max(0.f,(fy_-y0)/d)):0; xb=x0+(x1-x0)*t;zb_=z0+(z1-z0)*t;ub=u0+(u1-u0)*t;vb=v0+(v1-v0)*t;}
-      else{float d=y2-y1; t=d>1e-6f?std::min(1.f,std::max(0.f,(fy_-y1)/d)):0; xb=x1+(x2-x1)*t;zb_=z1+(z2-z1)*t;ub=u1+(u2-u1)*t;vb=v1+(v2-v1)*t;}
+      float t; if(fy_<y1){float d=y1-y0; t=d>1e-6f?std::min<float>(1.f,std::max<float>(0.f,(fy_-y0)/d)):0; xb=x0+(x1-x0)*t;zb_=z0+(z1-z0)*t;ub=u0+(u1-u0)*t;vb=v0+(v1-v0)*t;}
+      else{float d=y2-y1; t=d>1e-6f?std::min<float>(1.f,std::max<float>(0.f,(fy_-y1)/d)):0; xb=x1+(x2-x1)*t;zb_=z1+(z2-z1)*t;ub=u1+(u2-u1)*t;vb=v1+(v2-v1)*t;}
       if(xa>xb){std::swap(xa,xb);std::swap(za,zb_);std::swap(ua,ub);std::swap(va,vb);}
       int xs=std::max(0,(int)ceilf(xa)),xe=std::min(W-1,(int)ceilf(xb)-1);
       if(xe<xs)continue;
@@ -136,7 +136,7 @@ struct Renderer {
     for(int f=0;f<6;f++){
       float n[3];rot(yaw,pitch,N[f][0],N[f][1],N[f][2],n);
       const float*q=P[F[f][0]]; if((cam.x-q[0])*n[0]+(cam.y-q[1])*n[1]+(cam.z-q[2])*n[2]<=0)continue;
-      float l=lit?std::min(1.25f,lightOf(n[0],n[1],n[2])):1.f; float pts[4][3]; for(int k=0;k<4;k++)memcpy(pts[k],P[F[f][k]],12);
+      float l=lit?std::min<float>(1.25f,lightOf(n[0],n[1],n[2])):1.f; float pts[4][3]; for(int k=0;k<4;k++)memcpy(pts[k],P[F[f][k]],12);
       poly(pts,4,r*l,g*l,b*l,false,nullptr,fogOn);
     }
   }
