@@ -28,13 +28,13 @@ int main(int,char**){
     uint32_t now=SDL_GetTicks(); float dt=(now-last)/1000.f; last=now; if(dt>0.1f)dt=0.1f; if(dt<=0)dt=0.001f; frame++;
     fpsT+=dt; fpsN++; hold+=dt; if(fpsT>=1.f){fps=fpsN/fpsT;g.fpsShow=fps;fpsT=0;fpsN=0; int nl=lvl; if(fps<40&&lvl<2){nl=lvl+1;hold=0;} else if(fps>58&&lvl>0&&hold>12.f){nl=lvl-1;hold=0;} if(nl!=lvl){lvl=nl;curW=RESW[lvl];g.r.init(curW,curW*9/16);} }
     uint32_t edge=pd.buttons&~prevB; prevB=pd.buttons;
-    auto stick=[&](float x,float y,float&ox,float&oy){float m=sqrtf(x*x+y*y);const float D=0.18f;if(m<D){ox=oy=0;return;}float k=(m-D)/(1-D);if(k>1)k=1;ox=x/m*k;oy=y/m*k;};
+    auto stick=[&](float x,float y,float&ox,float&oy){float m=std::sqrt(x*x+y*y);const float D=0.18f;if(m<D){ox=oy=0;return;}float k=(m-D)/(1-D);if(k>1)k=1;ox=x/m*k;oy=y/m*k;};
     float ax,ay,bx,by; stick(stickN(pd.leftStick.x),-stickN(pd.leftStick.y),ax,ay); stick(stickN(pd.rightStick.x),-stickN(pd.rightStick.y),bx,by); // y موجب = أعلى
     float lx_,ly_,rx_,ry_; if(g.swapSticks){rx_=ax;ry_=ay;lx_=bx;ly_=by;} else {lx_=ax;ly_=ay;rx_=bx;ry_=by;} // l = حركة ، r = نظر
     Input in;
-    float a=std::min(1.f,dt*14.f); smx+=(lx_-smx)*a; smy+=(ly_-smy)*a; if(lx_==0&&fabsf(smx)<0.05f)smx=0; if(ly_==0&&fabsf(smy)<0.05f)smy=0;
+    float a=std::min(1.f,dt*14.f); smx+=(lx_-smx)*a; smy+=(ly_-smy)*a; if(lx_==0&&std::fabs(smx)<0.05f)smx=0; if(ly_==0&&std::fabs(smy)<0.05f)smy=0;
     in.mx=smx; in.my=smy;
-    float rm=sqrtf(rx_*rx_+ry_*ry_); float cv=rm*rm*1.9f+rm*0.45f; float rk=rm>0.001f?cv/rm:0; in.lx=rx_*rk; in.ly=ry_*rk*0.75f;
+    float rm=std::sqrt(rx_*rx_+ry_*ry_); float cv=rm*rm*1.9f+rm*0.45f; float rk=rm>0.001f?cv/rm:0; in.lx=rx_*rk; in.ly=ry_*rk*0.75f;
     in.fire=B(ORBIS_PAD_BUTTON_R2)||pd.analogButtons.r2>110; in.ads=B(ORBIS_PAD_BUTTON_L2)||pd.analogButtons.l2>110;
     in.jump=B(ORBIS_PAD_BUTTON_CROSS); in.crouch=B(ORBIS_PAD_BUTTON_CIRCLE); in.reload=B(ORBIS_PAD_BUTTON_SQUARE);
     in.swapP=B(ORBIS_PAD_BUTTON_L1); in.swapN=B(ORBIS_PAD_BUTTON_R1);

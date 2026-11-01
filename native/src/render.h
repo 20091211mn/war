@@ -23,12 +23,12 @@ struct Renderer {
   Cam cam{}; float fx=0,fy=0,fz=0,rx=0,rz=0,ux=0,uy=0,uz=0,focal=1;
   const MapDef* m=nullptr; float fog[3]={0,0,0}, fogN=30, fogF=100; float sunN[3]={0,1,0};
   float powLut[257]; float lineLut[32*32]; float hashTab[256];
-  void init(int w,int h){flush();W=w;H=h;fb.assign(w*h,0);zb.assign(w*h,0);for(int i=0;i<=256;i++)powLut[i]=powf(i/256.f,0.55f); for(int j=0;j<32;j++)for(int i=0;i<32;i++){float fu=(i+0.5f)/32-0.5f,fv=(j+0.5f)/32-0.5f;float gm=std::max(fabsf(fu),fabsf(fv));float ln=gm>0.43f?std::min(1.f,(gm-0.43f)/0.07f):0.f;lineLut[j*32+i]=1.f-0.2f*ln;} for(int i=0;i<256;i++)hashTab[i]=0.9f+0.2f*hash2(i&15,i>>4);}
+  void init(int w,int h){flush();W=w;H=h;fb.assign(w*h,0);zb.assign(w*h,0);for(int i=0;i<=256;i++)powLut[i]=std::pow(i/256.f,0.55f); for(int j=0;j<32;j++)for(int i=0;i<32;i++){float fu=(i+0.5f)/32-0.5f,fv=(j+0.5f)/32-0.5f;float gm=std::max(std::fabs(fu),std::fabs(fv));float ln=gm>0.43f?std::min(1.f,(gm-0.43f)/0.07f):0.f;lineLut[j*32+i]=1.f-0.2f*ln;} for(int i=0;i<256;i++)hashTab[i]=0.9f+0.2f*hash2(i&15,i>>4);}
   void setCam(const Cam&c){
-    cam=c; float cy=cosf(c.yaw),sy=sinf(c.yaw),cp=cosf(c.pitch),sp=sinf(c.pitch);
+    cam=c; float cy=std::cos(c.yaw),sy=std::sin(c.yaw),cp=std::cos(c.pitch),sp=std::sin(c.pitch);
     fx=-sy*cp; fy=sp; fz=-cy*cp; rx=cy; rz=-sy;
     ux=-rz*fy; uy=rz*fx-rx*fz; uz=rx*fy;
-    focal=(H*0.5f)/tanf(c.fov*0.5f);
+    focal=(H*0.5f)/std::tan(c.fov*0.5f);
   }
   static uint32_t pack(float r,float g,float b){
     auto q=[](float v){int i=(int)(v*255.f+0.5f);return (uint32_t)(i<0?0:i>255?255:i);};
@@ -36,21 +36,21 @@ struct Renderer {
   }
   void clear_black(){std::fill(fb.begin(),fb.end(),0xFF000000u);}
   void clear(){
-    const MapDef&d=*m; float sl=sqrtf(d.sun[0]*d.sun[0]+d.sun[1]*d.sun[1]+d.sun[2]*d.sun[2]); for(int i=0;i<3;i++)sunN[i]=d.sun[i]/sl;
+    const MapDef&d=*m; float sl=std::sqrt(d.sun[0]*d.sun[0]+d.sun[1]*d.sun[1]+d.sun[2]*d.sun[2]); for(int i=0;i<3;i++)sunN[i]=d.sun[i]/sl;
     flush(); std::fill(zb.begin(),zb.end(),0.f);
     for(int i=0;i<3;i++)fog[i]=d.fog[i]; fogN=d.fogN; fogF=d.fogF;
   }
   // السماء تُرسم بعد الهندسة فقط في البكسلات الفارغة (أرخص بكثير)
   void skyAt(float vx,float vy,float&R,float&G,float&B,float&sOut)const{
     const MapDef&d=*m; float dx=fx+vx*rx+vy*ux,dy=fy+vy*uy,dz=fz+vx*rz+vy*uz;
-    float inv=1.f/sqrtf(dx*dx+dy*dy+dz*dz); dx*=inv;dy*=inv;dz*=inv;
+    float inv=1.f/std::sqrt(dx*dx+dy*dy+dz*dz); dx*=inv;dy*=inv;dz*=inv;
     if(dy>=0){ float t=powLut[(int)(std::min(1.f,dy)*256)]; R=d.hor[0]+(d.sky[0]-d.hor[0])*t;G=d.hor[1]+(d.sky[1]-d.hor[1])*t;B=d.hor[2]+(d.sky[2]-d.hor[2])*t; }
     else { float k=std::min(1.f,-dy*4.f)*0.2f; R=d.hor[0]*(1-k);G=d.hor[1]*(1-k);B=d.hor[2]*(1-k); }
     float s=dx*sunN[0]+dy*sunN[1]+dz*sunN[2]; sOut=s;
     if(s>0.55f){ float s2=s*s,s4=s2*s2,s8=s4*s4,s12=s8*s4; float g1=s12*0.12f; float g2=s>0.9985f?1.2f:0; R+=g1+g2;G+=0.92f*g1+g2*0.92f;B+=0.75f*g1+g2*0.75f; }
   }
   void fillSky(int by0,int by1){
-    float th=tanf(cam.fov*0.5f),asp=(float)W/H; const int BK=4; int nb=(W+BK-1)/BK; std::vector<uint32_t> bc(nb); std::vector<uint8_t> hot(nb);
+    float th=std::tan(cam.fov*0.5f),asp=(float)W/H; const int BK=4; int nb=(W+BK-1)/BK; std::vector<uint32_t> bc(nb); std::vector<uint8_t> hot(nb);
     for(int y=by0;y<by1;y++){
       uint32_t*row=&fb[y*W]; const float*zr=&zb[y*W];
       if(y%BK==0||y==by0){ int yy=y-y%BK; for(int bx=0;bx<nb;bx++){ float R,G,B,s; skyAt((2.f*(bx*BK+BK*0.5f)/W-1.f)*th*asp,(1.f-2.f*(yy+BK*0.5f)/H)*th,R,G,B,s); bc[bx]=pack(R,G,B); hot[bx]=s>0.94f; } }
@@ -100,7 +100,7 @@ struct Renderer {
     if(y1<y0)sw(x0,y0,z0,u0,v0,x1,y1,z1,u1,v1);
     if(y2<y0)sw(x0,y0,z0,u0,v0,x2,y2,z2,u2,v2);
     if(y2<y1)sw(x1,y1,z1,u1,v1,x2,y2,z2,u2,v2);
-    int ya=std::max(by0,(int)ceilf(y0)),yb=std::min(by1-1,(int)ceilf(y2)-1);
+    int ya=std::max(by0,(int)std::ceil(y0)),yb=std::min(by1-1,(int)std::ceil(y2)-1);
     if(yb<ya||y2-y0<1e-6f)return;
     float inv02=1.f/(y2-y0);
     for(int y=ya;y<=yb;y++){
@@ -110,13 +110,13 @@ struct Renderer {
       float t; if(fy_<y1){float d=y1-y0; t=d>1e-6f?std::min(1.f,std::max(0.f,(fy_-y0)/d)):0; xb=x0+(x1-x0)*t;zb_=z0+(z1-z0)*t;ub=u0+(u1-u0)*t;vb=v0+(v1-v0)*t;}
       else{float d=y2-y1; t=d>1e-6f?std::min(1.f,std::max(0.f,(fy_-y1)/d)):0; xb=x1+(x2-x1)*t;zb_=z1+(z2-z1)*t;ub=u1+(u2-u1)*t;vb=v1+(v2-v1)*t;}
       if(xa>xb){std::swap(xa,xb);std::swap(za,zb_);std::swap(ua,ub);std::swap(va,vb);}
-      int xs=std::max(0,(int)ceilf(xa)),xe=std::min(W-1,(int)ceilf(xb)-1);
+      int xs=std::max(0,(int)std::ceil(xa)),xe=std::min(W-1,(int)std::ceil(xb)-1);
       if(xe<xs)continue;
       float inv=1.f/(xb-xa+1e-6f); float dz=(zb_-za)*inv,du=(ub-ua)*inv,dv=(vb-va)*inv; float o=(float)xs+0.5f-xa; float zi=za+dz*o,ui=ua+du*o,vi=va+dv*o;
       uint32_t*row=&fb[y*W]; float*zr=&zb[y*W];
       for(int x=xs;x<=xe;x++,zi+=dz,ui+=du,vi+=dv){
         if(zi>zr[x]){ zr[x]=zi; float d=1.f/zi; float R=r,G=g,B=b;
-          if(det&&d<34.f){ float u=ui*d,v=vi*d; float fl=floorf(u),fm=floorf(v); int a=(int)((u-fl)*32.f),bq=(int)((v-fm)*32.f); int iu=(int)floorf(u*2),iv=(int)floorf(v*2);
+          if(det&&d<34.f){ float u=ui*d,v=vi*d; float fl=std::floor(u),fm=std::floor(v); int a=(int)((u-fl)*32.f),bq=(int)((v-fm)*32.f); int iu=(int)std::floor(u*2),iv=(int)std::floor(v*2);
             float k=lineLut[(bq&31)*32+(a&31)]*hashTab[((iu&15)<<4)|(iv&15)]; R*=k;G*=k;B*=k; }
           if(useFog){ float f=(d-fogN)/(fogF-fogN); f=f<0?0:f>1?1:f; R+=(fog[0]-R)*f;G+=(fog[1]-G)*f;B+=(fog[2]-B)*f; }
           row[x]=pack(R,G,B);
@@ -125,8 +125,8 @@ struct Renderer {
     }
   }
   static void rot(float yaw,float pitch,float x,float y,float z,float*o){
-    float cp=cosf(pitch),sp=sinf(pitch); float y1=y*cp-z*sp,z1=y*sp+z*cp;
-    float c=cosf(yaw),s=sinf(yaw); o[0]=x*c+z1*s; o[1]=y1; o[2]=-x*s+z1*c;
+    float cp=std::cos(pitch),sp=std::sin(pitch); float y1=y*cp-z*sp,z1=y*sp+z*cp;
+    float c=std::cos(yaw),s=std::sin(yaw); o[0]=x*c+z1*s; o[1]=y1; o[2]=-x*s+z1*c;
   }
   void obb(float cx,float cy,float cz,float hx,float hy,float hz,float yaw,float pitch,float r,float g,float b,bool fogOn=true,bool lit=true){
     float P[8][3];
@@ -155,12 +155,12 @@ struct Renderer {
   }
   bool cull(const Box&b){
     float cx=(b.x0+b.x1)*.5f,cy=(b.y0+b.y1)*.5f,cz=(b.z0+b.z1)*.5f;
-    float rr=0.5f*sqrtf((b.x1-b.x0)*(b.x1-b.x0)+(b.y1-b.y0)*(b.y1-b.y0)+(b.z1-b.z0)*(b.z1-b.z0));
-    float dx=cx-cam.x,dy=cy-cam.y,dz=cz-cam.z; float d=sqrtf(dx*dx+dy*dy+dz*dz);
+    float rr=0.5f*std::sqrt((b.x1-b.x0)*(b.x1-b.x0)+(b.y1-b.y0)*(b.y1-b.y0)+(b.z1-b.z0)*(b.z1-b.z0));
+    float dx=cx-cam.x,dy=cy-cam.y,dz=cz-cam.z; float d=std::sqrt(dx*dx+dy*dy+dz*dz);
     if(d-rr>fogF)return true;
     float zf=dx*fx+dy*fy+dz*fz; if(zf+rr<0)return true;
-    float half=tanf(cam.fov*0.5f)*(float)W/H*1.05f+0.2f; float xr=dx*rx+dz*rz;
-    if(zf>0&&fabsf(xr)-rr>zf*half+rr)return true;
+    float half=std::tan(cam.fov*0.5f)*(float)W/H*1.05f+0.2f; float xr=dx*rx+dz*rz;
+    if(zf>0&&std::fabs(xr)-rr>zf*half+rr)return true;
     return false;
   }
   void world(const World&w){

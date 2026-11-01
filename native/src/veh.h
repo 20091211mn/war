@@ -5,8 +5,8 @@
 namespace VH{
 static const float HP=450,L=3.0f,HW=1.0f,MAXFWD=26,MAXREV=7,ACCEL=7.5f,BRAKE=16,MAXSTEER=0.52f,TIREHP=30,CRASHMIN=4;
 struct Veh{ float x=0,z=0,h=0,vx=0,vz=0,steer=0,speed=0,hp=HP,tireHp[4]={30,30,30,30}; int tires=0,driver=-1,team=-1; bool dead=false,burn=false; float respawnT=0,sx=0,sz=0,sh=0,smoke=0,crashT=0; };
-static inline void l2w(const Veh&v,float lx,float lz,float&ox,float&oz){ float c=cosf(v.h),s=sinf(v.h); ox=v.x+c*lx+s*lz; oz=v.z-s*lx+c*lz; }
-static inline void w2l(const Veh&v,float wx,float wz,float&lx,float&lz){ float c=cosf(v.h),s=sinf(v.h),dx=wx-v.x,dz=wz-v.z; lx=c*dx-s*dz; lz=s*dx+c*dz; }
+static inline void l2w(const Veh&v,float lx,float lz,float&ox,float&oz){ float c=std::cos(v.h),s=std::sin(v.h); ox=v.x+c*lx+s*lz; oz=v.z-s*lx+c*lz; }
+static inline void w2l(const Veh&v,float wx,float wz,float&lx,float&lz){ float c=std::cos(v.h),s=std::sin(v.h),dx=wx-v.x,dz=wz-v.z; lx=c*dx-s*dz; lz=s*dx+c*dz; }
 static inline int tiresBlown(int m){ return (m&1)+((m>>1)&1)+((m>>2)&1)+((m>>3)&1); }
 struct BB{float x0,y0,z0,x1,y1,z1;int part;}; // part: 0 جسم ، 1 خزان ، 10+i عجلة
 static const BB BODY[]={{-1,0.3f,-2.5f,1,1.1f,-0.9f,0},{-1,0.3f,-0.9f,1,1.05f,0.6f,0},{-0.95f,1.8f,-0.7f,0.95f,1.9f,0.4f,0},{-1,0.3f,0.6f,1,0.85f,2.5f,1},
@@ -14,7 +14,7 @@ static const BB BODY[]={{-1,0.3f,-2.5f,1,1.1f,-0.9f,0},{-1,0.3f,-0.9f,1,1.05f,0.
 static const float WH[4][2]={{-0.95f,-1.55f},{0.95f,-1.55f},{-0.95f,1.5f},{0.95f,1.5f}};
 // تقاطع شعاع (عالمي) مع الشاص: يرجع t أو 1e30 ، ويملأ part
 static inline float rayVeh(const Veh&v,float ox,float oy,float oz,float dx,float dy,float dz,float maxT,int&part){
-  float c=cosf(v.h),s=sinf(v.h); float px=ox-v.x,pz=oz-v.z; float lox=c*px-s*pz,loz=s*px+c*pz,ldx=c*dx-s*dz,ldz=s*dx+c*dz; float best=maxT; part=-1;
+  float c=std::cos(v.h),s=std::sin(v.h); float px=ox-v.x,pz=oz-v.z; float lox=c*px-s*pz,loz=s*px+c*pz,ldx=c*dx-s*dz,ldz=s*dx+c*dz; float best=maxT; part=-1;
   for(auto&b:BODY){ float t=rayBox(lox,oy,loz,ldx,dy,ldz,b.x0,b.y0,b.z0,b.x1,b.y1,b.z1); if(t<best){best=t;part=b.part;} }
   for(int i=0;i<4;i++){ float t=rayBox(lox,oy,loz,ldx,dy,ldz,WH[i][0]-0.2f,0,WH[i][1]-0.4f,WH[i][0]+0.2f,0.76f,WH[i][1]+0.4f); if(t<best+0.02f&&t<maxT){best=std::min(best,t);part=10+i;} }
   return part>=0?best:1e30f;
@@ -26,37 +26,37 @@ static bool circleHit(const World&w,float cx,float cz,float r){
   return false;
 }
 static bool collides(const World&w,float x,float z,float h,const std::vector<Veh>&all,const Veh*self){
-  float bx=sinf(h),bz=cosf(h); static const float S[5]={-2.2f,-1.1f,0,1.1f,2.2f};
+  float bx=std::sin(h),bz=std::cos(h); static const float S[5]={-2.2f,-1.1f,0,1.1f,2.2f};
   for(float k:S){ float cx=x+bx*k,cz=z+bz*k; if(circleHit(w,cx,cz,HW))return true;
-    for(auto&o:all){ if(&o==self||o.dead)continue; float ob=sinf(o.h),oc=cosf(o.h); for(float j:{-1.6f,0.f,1.6f}){ float dx=cx-(o.x+ob*j),dz=cz-(o.z+oc*j); if(dx*dx+dz*dz<3.3f)return true; } } }
+    for(auto&o:all){ if(&o==self||o.dead)continue; float ob=std::sin(o.h),oc=std::cos(o.h); for(float j:{-1.6f,0.f,1.6f}){ float dx=cx-(o.x+ob*j),dz=cz-(o.z+oc*j); if(dx*dx+dz*dz<3.3f)return true; } } }
   return false;
 }
 // يدفع كيان خارج جسم الشاص
 static bool pushOut(const Veh&v,float&px,float&pz,float py){
-  if(py>1.85f||py<-1)return false; float lx,lz; w2l(v,px,pz,lx,lz); float hx=HW+0.38f,hz=2.5f+0.38f; if(fabsf(lx)>=hx||fabsf(lz)>=hz)return false;
-  float a=hx-fabsf(lx),b=hz-fabsf(lz); float nx=lx,nz=lz; if(a<b)nx=(lx<0?-1.f:1.f)*hx; else nz=(lz<0?-1.f:1.f)*hz; l2w(v,nx,nz,px,pz); return true;
+  if(py>1.85f||py<-1)return false; float lx,lz; w2l(v,px,pz,lx,lz); float hx=HW+0.38f,hz=2.5f+0.38f; if(std::fabs(lx)>=hx||std::fabs(lz)>=hz)return false;
+  float a=hx-std::fabs(lx),b=hz-std::fabs(lz); float nx=lx,nz=lz; if(a<b)nx=(lx<0?-1.f:1.f)*hx; else nz=(lz<0?-1.f:1.f)*hz; l2w(v,nx,nz,px,pz); return true;
 }
 // فيزياء القيادة: thr أمام/خلف ، steer يمين +، hb فرامل يد. يرجع سرعة الاصطدام
 static float step(const World&w,Veh&v,std::vector<Veh>&all,float thr,float steer,bool hb,float dt){
-  float fx=-sinf(v.h),fz=-cosf(v.h),rx=cosf(v.h),rz=-sinf(v.h);
+  float fx=-std::sin(v.h),fz=-std::cos(v.h),rx=std::cos(v.h),rz=-std::sin(v.h);
   float vf=v.vx*fx+v.vz*fz,vl=v.vx*rx+v.vz*rz; int nb=tiresBlown(v.tires);
   float maxFwd=std::max(5.f,MAXFWD*(1-0.17f*nb)),accel=ACCEL*(1-0.1f*nb);
   if(thr>0){ if(vf<-0.5f)vf+=BRAKE*dt; else vf+=accel*thr*dt*std::max(0.f,1-vf/maxFwd); }
   else if(thr<0){ if(vf>0.5f)vf-=BRAKE*dt; else vf-=accel*0.6f*-thr*dt*std::max(0.f,1-(-vf)/MAXREV); }
-  else { float roll=(1.5f+0.012f*vf*vf)*dt; vf-=(vf>0?1.f:-1.f)*std::min(fabsf(vf),roll); }
+  else { float roll=(1.5f+0.012f*vf*vf)*dt; vf-=(vf>0?1.f:-1.f)*std::min(std::fabs(vf),roll); }
   if(vf>maxFwd)vf=std::max(maxFwd,vf-12*dt);
-  if(hb)vf-=(vf>0?1.f:-1.f)*std::min(fabsf(vf),9*dt);
-  float grip=(hb?1.4f:7.f)*(1-0.12f*nb); vl*=expf(-grip*dt);
-  float maxS=MAXSTEER*(1-std::min(0.72f,fabsf(vf)/38)); v.steer+=(steer*maxS-v.steer)*std::min(1.f,dt*6);
-  float yaw=vf/L*tanf(v.steer)*(hb?1.35f:1.f);
-  float pull=(float)(((v.tires>>1&1)+(v.tires>>3&1))-((v.tires&1)+(v.tires>>2&1))); yaw+=pull*0.09f*std::min(1.f,fabsf(vf)/10)*(vf<0?-1.f:1.f);
+  if(hb)vf-=(vf>0?1.f:-1.f)*std::min(std::fabs(vf),9*dt);
+  float grip=(hb?1.4f:7.f)*(1-0.12f*nb); vl*=std::exp(-grip*dt);
+  float maxS=MAXSTEER*(1-std::min(0.72f,std::fabs(vf)/38)); v.steer+=(steer*maxS-v.steer)*std::min(1.f,dt*6);
+  float yaw=vf/L*std::tan(v.steer)*(hb?1.35f:1.f);
+  float pull=(float)(((v.tires>>1&1)+(v.tires>>3&1))-((v.tires&1)+(v.tires>>2&1))); yaw+=pull*0.09f*std::min(1.f,std::fabs(vf)/10)*(vf<0?-1.f:1.f);
   float nh=v.h-yaw*dt; float crash=0;
-  if(!collides(w,v.x,v.z,nh,all,&v))v.h=nh; else if(fabsf(vf)>1)crash=std::max(crash,fabsf(vf)*0.4f);
-  float nfx=-sinf(v.h),nfz=-cosf(v.h),nrx=cosf(v.h),nrz=-sinf(v.h); float nvx=nfx*vf+nrx*vl,nvz=nfz*vf+nrz*vl;
+  if(!collides(w,v.x,v.z,nh,all,&v))v.h=nh; else if(std::fabs(vf)>1)crash=std::max(crash,std::fabs(vf)*0.4f);
+  float nfx=-std::sin(v.h),nfz=-std::cos(v.h),nrx=std::cos(v.h),nrz=-std::sin(v.h); float nvx=nfx*vf+nrx*vl,nvz=nfz*vf+nrz*vl;
   float nx=v.x+nvx*dt,nz=v.z+nvz*dt; bool hit=false;
   if(!collides(w,nx,v.z,v.h,all,&v))v.x=nx; else {hit=true;nvx*=-0.2f;}
   if(!collides(w,v.x,nz,v.h,all,&v))v.z=nz; else {hit=true;nvz*=-0.2f;}
-  if(hit){crash=std::max(crash,fabsf(vf));nvx*=0.6f;nvz*=0.6f;}
+  if(hit){crash=std::max(crash,std::fabs(vf));nvx*=0.6f;nvz*=0.6f;}
   v.vx=nvx;v.vz=nvz;v.speed=nvx*nfx+nvz*nfz;
   if(collides(w,v.x,v.z,v.h,all,&v)){ bool done=false; for(int k=1;k<=12&&!done;k++){ static const int D[4][2]={{1,0},{-1,0},{0,1},{0,-1}}; for(auto&d:D){ if(!collides(w,v.x+d[0]*k*0.25f,v.z+d[1]*k*0.25f,v.h,all,&v)){v.x+=d[0]*k*0.25f;v.z+=d[1]*k*0.25f;done=true;break;} } } }
   return crash;
