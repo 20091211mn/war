@@ -1,4 +1,9 @@
 // منصة PS4 (OpenOrbis + SDL2 للعرض + libScePad لليد مباشرة: أزرار وعصي مضبوطة بدون تخمين)
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <string.h>
+#include <orbis/libkernel.h>
 #include <orbis/Pigletv2VSH.h>
 #include <orbis/SystemService.h>
 #include <orbis/Sysmodule.h>
