@@ -81,7 +81,7 @@ static bool glInit(){
   return true;
 }
 static void glPresent(const uint32_t*up){
-  glViewport(0,0,OUT_W,OUT_H); glClearColor(0,0,0,1); glClear(GL_COLOR_BUFFER_BIT);
+  glViewport(0,0,OUT_W,OUT_H); glClearColor(0.05f,0.2f,0.6f,1.f); glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT); glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
   glBindTexture(GL_TEXTURE_2D,gTex); glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,WZ_IW,WZ_IH,0,GL_RGBA,GL_UNSIGNED_BYTE,up);
   static const GLfloat v[]={0,1,0,1, 1,0,1,0, 0,0,0,0, 0,1,0,1, 1,1,1,1, 1,0,1,0};
   GLfloat id[16]={1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
@@ -130,7 +130,10 @@ int main(int,char**){
       snprintf(b,96,"LS %d %d RS %d %d L2 %d R2 %d",pd.leftStick.x,pd.leftStick.y,pd.rightStick.x,pd.rightStick.y,pd.analogButtons.l2,pd.analogButtons.r2); g.text(40,60,b,2,0xFFFFFF00);
       snprintf(b,96,"BTN %05X PAD %d",(unsigned)pd.buttons,padH); g.text(40,80,b,2,0xFFFFFF00); }
     g.r.flush(); { const uint32_t*fbp=g.r.fb.data(); uint32_t*ub=upb.data(); int n=WZ_IW*WZ_IH; std::atomic<int> nx(0); g.r.pool.exec([&]{ for(;;){ int i0=nx.fetch_add(65536); if(i0>=n)break; int i1=std::min(n,i0+65536); for(int i=i0;i<i1;i++){ uint32_t p=fbp[i]; ub[i]=(p&0x0000FF00u)|((p>>16)&0xFFu)|((p&0xFFu)<<16)|0xFF000000u; } } }); }
-    if(frame==1)wzlog("f1 converted"); glPresent(upb.data()); if(frame<=3||frame==60)wzlog("frame %d presented",frame);
+    if(frame==1)wzlog("f1 converted");
+    static std::vector<uint32_t> tst; if(tst.empty()){ static const uint32_t cb[8]={0xFF0000FFu,0xFF00FF00u,0xFFFF0000u,0xFFFFFFFFu,0xFF00FFFFu,0xFFFF00FFu,0xFFFFFF00u,0xFF808080u}; tst.resize(WZ_IW*WZ_IH); for(int y=0;y<WZ_IH;y++)for(int x=0;x<WZ_IW;x++)tst[y*WZ_IW+x]=(y<WZ_IH/8)?(0xFF000000u|(uint32_t)(x*255/WZ_IW)*0x010101u):cb[x*8/WZ_IW]; }
+    bool testMode=(frame<=180); if(frame==1)wzlog("test pattern ON"); if(frame==181)wzlog("test pattern OFF -> game");
+    glPresent(testMode?tst.data():upb.data()); if(frame<=3||frame==60)wzlog("frame %d presented",frame);
     { uint32_t el=ticks()-now; if(el<33)sceKernelUsleep((33-el)*1000); } // سقف 30fps
   }
 }
