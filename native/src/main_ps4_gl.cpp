@@ -97,15 +97,23 @@ static void glPresent(const uint32_t*up){
 int main(int,char**){
   wzlog("== main start build %d variant %d ==",(int)BUILD_ID,(int)WZ_VARIANT);
   setvbuf(stdout,NULL,_IONBF,0);
+#ifndef WZ_NOPAD
   OrbisUserServiceInitializeParams up; up.priority=ORBIS_KERNEL_PRIO_FIFO_LOWEST; wzlog("calling userservice init"); int ur=sceUserServiceInitialize(&up); wzlog("userservice init ret=0x%x",(unsigned)ur);
   wzlog("calling scePadInit"); int pr=scePadInit(); wzlog("scePadInit ret=0x%x",(unsigned)pr);
   int uid=0; sceUserServiceGetInitialUser(&uid);
   padH=scePadOpen(uid,0,0,NULL); wzlog("pad open %d",padH);
+#else
+  int uid=0; wzlog("NOPAD build: pad disabled (display test)");
+#endif
   static Game g; wzlog("game constructed"); g.r.startThreads(6); wzlog("threads started"); g.menu=1; g.init(WZ_IW,WZ_IH); wzlog("game init"); static std::vector<uint32_t> upb(WZ_IW*WZ_IH); wzlog("upload buf ok");
   if(!glInit()){wzlog("glInit FAILED");for(;;);} wzlog("entering loop");
   uint32_t last=ticks(); bool dbg=false; uint32_t prevB=0; float acc=0,fpsT=0,fps=30; int fpsN=0; float smx=0,smy=0; int frame=0;
   for(;;){
-    memset(&pd,0,sizeof(pd)); if(padH>=0)scePadReadState(padH,&pd); else padH=scePadOpen(uid,0,0,NULL);
+    memset(&pd,0,sizeof(pd)); 
+#ifndef WZ_NOPAD
+    if(padH>=0)scePadReadState(padH,&pd); else padH=scePadOpen(uid,0,0,NULL);
+#endif
+
     uint32_t now=ticks(); float dt=(now-last)/1000.f; last=now; if(dt>0.1f)dt=0.1f; if(dt<=0)dt=0.001f; frame++;
     fpsT+=dt; fpsN++; if(fpsT>=1.f){fps=fpsN/fpsT;g.fpsShow=fps;fpsT=0;fpsN=0;}
     if(frame==1)wzlog("f1 pad read"); uint32_t edge=pd.buttons&~prevB; prevB=pd.buttons;
