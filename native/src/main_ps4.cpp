@@ -3,6 +3,8 @@
 #include <orbis/libkernel.h>
 #include <orbis/Pad.h>
 #include <orbis/UserService.h>
+#include <orbis/AudioOut.h>
+#include <pthread.h>
 #include "game.h"
 
 static int padH=-1;
@@ -10,13 +12,19 @@ static OrbisPadData pd;
 static bool B(uint32_t m){return (pd.buttons&m)!=0;}
 static float stickN(uint8_t v){return ((int)v-128)/127.f;}
 
+static void* audioThread(void*){
+  sceAudioOutInit(); int h=sceAudioOutOpen(ORBIS_USER_SERVICE_USER_ID_SYSTEM,ORBIS_AUDIO_OUT_PORT_TYPE_MAIN,0,256,48000,ORBIS_AUDIO_OUT_PARAM_FORMAT_S16_STEREO);
+  if(h<=0)return NULL; static int16_t buf[256*2];
+  for(;;){ SFX::mix(buf,256); sceAudioOutOutput(h,buf); }
+  return NULL; }
+
 int main(int,char**){
   setvbuf(stdout,NULL,_IONBF,0);
   if(SDL_Init(SDL_INIT_VIDEO)!=0)for(;;);
   SDL_Window*win=SDL_CreateWindow("wz",SDL_WINDOWPOS_UNDEFINED,SDL_WINDOWPOS_UNDEFINED,1920,1080,0);
   if(!win)for(;;);
   SDL_Surface*surf=SDL_GetWindowSurface(win);
-  scePadInit();
+  scePadInit(); { pthread_t at; pthread_create(&at,NULL,audioThread,NULL); }
   OrbisUserServiceInitializeParams up; up.priority=ORBIS_KERNEL_PRIO_FIFO_LOWEST; sceUserServiceInitialize(&up);
   int uid=0; sceUserServiceGetInitialUser(&uid);
   padH=scePadOpen(uid,0,0,NULL);

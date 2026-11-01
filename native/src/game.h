@@ -5,6 +5,7 @@
 #include "font.h"
 #include "ar.h"
 #include "net.h"
+#include "sfx.h"
 #include "ws.h"
 #include <string>
 #include <cstdlib>
@@ -76,16 +77,17 @@ struct Game{
   }
   void hurt(int vi,int ai,float dmg,bool head){
     Ent&v=e[vi]; if(!v.alive||v.prot>0)return;
-    v.hp-=dmg; v.lastHitBy=ai; v.lastDmgT=t; if(vi==meI)dmgFlash=0.5f;
-    if(ai==meI)hitMark=0.25f;
+    v.hp-=dmg; v.lastHitBy=ai; v.lastDmgT=t; if(vi==meI){dmgFlash=0.5f;SFX::play(SFX::HURT,0.9f);}
+    if(ai==meI){hitMark=0.25f;SFX::play(SFX::HIT,0.7f);}
     if(v.hp<=0){ v.alive=false;v.deaths++;v.respawn=4;
+      if(ai==meI&&vi!=meI)SFX::play(SFX::KILL,0.8f);
       if(ai>=0&&ai!=vi){Ent&k=e[ai];k.kills++;score[k.team]++; char b[64];snprintf(b,64,"%s > %s%s",nm(ai).c_str(),nm(vi).c_str(),head?" HS":"");addFeed(b); evq.push_back({++evtId,(uint8_t)ai,(uint8_t)vi,(uint8_t)head}); if(evq.size()>6)evq.erase(evq.begin());} 
       if(score[0]>=scoreLim||score[1]>=scoreLim){over=true;winner=score[0]>=scoreLim?0:1;}
     }
   }
   // ---- الشاص ----
   void explodeVeh(VH::Veh&v,int by){
-    v.dead=true; v.respawnT=30; v.burn=false; if(v.driver>=0){ if(v.driver==meI)drive=-1; v.driver=-1; }
+    SFX::play(SFX::EXPLODE,std::max(0.2f,1.f-sqrtf((v.x-e[meI].b.x)*(v.x-e[meI].b.x)+(v.z-e[meI].b.z)*(v.z-e[meI].b.z))/80.f)); v.dead=true; v.respawnT=30; v.burn=false; if(v.driver>=0){ if(v.driver==meI)drive=-1; v.driver=-1; }
     for(int k=0;k<14;k++)puffs.push_back({v.x+(frand()-0.5f)*3,0.6f+frand()*1.5f,v.z+(frand()-0.5f)*3,1.5f+frand()*2.f,1.2f+frand()*1.2f,1.2f+frand()*1.5f,k<8});
     for(int i=0;i<(int)e.size();i++){ if(!e[i].alive)continue; float dx=e[i].b.x-v.x,dz=e[i].b.z-v.z,dd=sqrtf(dx*dx+dz*dz); if(dd<7.f)hurt(i,by,260*powf(1-dd/7.f,1.1f),false); }
     if(by==meI)hitMark=0.4f; say("DESTROYED");
@@ -121,6 +123,7 @@ struct Game{
   }
   void fire(int i){
     Ent&p=e[i]; const WeaponDef&d=WEAPONS[p.wpn];
+    { float ddx=p.b.x-e[meI].b.x,ddz=p.b.z-e[meI].b.z; float vv=1.f-sqrtf(ddx*ddx+ddz*ddz)/70.f; SFX::play(d.pellets>1?SFX::SHOTGUN:SFX::SHOT,i==meI?1.f:vv*0.8f,0); }
     p.ammo--; p.cd=60.f/d.rpm; p.flash=0.06f; p.prot=0;
     float moveF=p.moving?1.6f:1.f; bool ads=(i==meI)&&adsHeld;
     float sp=(ads?d.ads:d.hip)*moveF; if(p.crouch)sp*=0.7f;
