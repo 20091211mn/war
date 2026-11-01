@@ -59,7 +59,7 @@ jobs:
           cp native/src/*.h native/src/main_ps4.cpp "$S/$N/$N/"
           cp native/gen/data.h "$S/$N/gen/"
           ( cd "$S/$N"
-            sed -i "s/^LIBS .*/LIBS        := -lc -lkernel -lc++ -lSceUserService -lSceVideoOut -lSceAudioOut -lScePad -lSceSysmodule -lSDL2\nEXTRAFLAGS := -O2 -fno-math-errno -DBUILD_ID=$BUILD/" Makefile
+            sed -i "s/^LIBS .*/LIBS        := -lc -lkernel -lc++ -lSceUserService -lSceVideoOut -lSceAudioOut -lScePad -lSceSysmodule -lSDL2\nEXTRAFLAGS := -O2 -march=btver2 -fno-math-errno -DBUILD_ID=$BUILD/" Makefile
             sed -i "s/^VERSION .*/VERSION     := $VER/" Makefile
             sed -i "s/BREW00[0-9]*/BREW00790/g; s/IV0000-BREW00790_00-[A-Z0-9]*/IV0000-BREW00790_00-WZNATIVE00000000/; s/^TITLE .*/TITLE       := Warzone Native/" Makefile
             make

@@ -50,8 +50,9 @@ int main(int,char**){
       snprintf(b,96,"BTN %05X PAD %d",(unsigned)pd.buttons,padH); g.text(40,80,b,2,0xFFFFFF00); }
     g.r.flush(); SDL_LockSurface(surf); uint32_t*dst=(uint32_t*)surf->pixels; int pitch=surf->pitch/4,sw=surf->w,sh=surf->h; int RWc=g.r.W,RHc=g.r.H;
     static std::vector<int> xm; if((int)xm.size()!=sw||xm.back()!=(sw-1)*RWc/sw){xm.assign(sw,0);for(int x=0;x<sw;x++)xm[x]=x*RWc/sw;}
+    if(RWc==sw&&RHc==sh){ std::atomic<int> nx(0); const uint32_t*fbp=g.r.fb.data(); g.r.pool.exec([&]{ for(;;){ int y0=nx.fetch_add(16); if(y0>=sh)break; int y1=std::min(sh,y0+16); for(int y=y0;y<y1;y++)memcpy(dst+y*pitch,fbp+y*RWc,sw*4); } }); } else
     { std::atomic<int> nx(0); const uint32_t*fbp=g.r.fb.data(); g.r.pool.exec([&]{ for(;;){ int y0=nx.fetch_add(32); if(y0>=sh)break; for(int y=y0;y<std::min(sh,y0+32);y++){ const uint32_t*sr=fbp+(y*RHc/sh)*RWc; uint32_t*d=dst+y*pitch; for(int x=0;x<sw;x++)d[x]=sr[xm[x]]; } } }); }
     SDL_UnlockSurface(surf); SDL_UpdateWindowSurface(win);
-    { uint32_t el=SDL_GetTicks()-now; if(el<33)sceKernelUsleep((33-el)*1000); } // سقف 30fps
+    { uint32_t el=SDL_GetTicks()-now; if(el<16)sceKernelUsleep((16-el)*1000); } // سقف 60fps (الحدّ الأعلى فقط، بلا إبطاء)
   }
 }

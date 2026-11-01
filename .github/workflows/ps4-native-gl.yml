@@ -1,10 +1,7 @@
 name: Build PS4 Native GPU PKG (experimental)
 
 on:
-  workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ['native/**', 'shared/**', 'tools/export-native.js', '.github/workflows/ps4-native-gl.yml']
+  workflow_dispatch:   # تجريبي: يُشغَّل يدوياً فقط (لا يبني مع كل تعديل)
 
 permissions:
   contents: write

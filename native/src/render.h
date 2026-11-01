@@ -6,6 +6,11 @@
 #include <condition_variable>
 #include <functional>
 #include <atomic>
+#if defined(__SSE__)
+#include <xmmintrin.h>
+#include <emmintrin.h>
+#endif
+#include <algorithm>
 
 struct Cam { float x,y,z,yaw,pitch,fov; };
 
@@ -34,6 +39,14 @@ struct Renderer {
     auto q=[](float v){int i=(int)(v*255.f+0.5f);return (uint32_t)(i<0?0:i>255?255:i);};
     return 0xFF000000u|(q(r)<<16)|(q(g)<<8)|q(b);
   }
+#if defined(__SSE2__)
+  static inline uint32_t packv(__m128 v){ v=_mm_add_ps(_mm_mul_ps(v,_mm_set1_ps(255.f)),_mm_set1_ps(0.5f)); __m128i i=_mm_cvttps_epi32(v); i=_mm_packs_epi32(i,i); i=_mm_packus_epi16(i,i); return 0xFF000000u|(uint32_t)_mm_cvtsi128_si32(i); }
+#endif
+#if defined(__SSE__)
+  static inline float frcp(float x){ __m128 v=_mm_set_ss(x); __m128 r=_mm_rcp_ss(v); r=_mm_sub_ss(_mm_add_ss(r,r),_mm_mul_ss(_mm_mul_ss(r,r),v)); return _mm_cvtss_f32(r); }
+#else
+  static inline float frcp(float x){ return 1.f/x; }
+#endif
   void clear_black(){std::fill(fb.begin(),fb.end(),0xFF000000u);}
   void clear(){
     const MapDef&d=*m; float sl=sqrtf(d.sun[0]*d.sun[0]+d.sun[1]*d.sun[1]+d.sun[2]*d.sun[2]); for(int i=0;i<3;i++)sunN[i]=d.sun[i]/sl;
@@ -43,19 +56,29 @@ struct Renderer {
   // السماء تُرسم بعد الهندسة فقط في البكسلات الفارغة (أرخص بكثير)
   void skyAt(float vx,float vy,float&R,float&G,float&B,float&sOut)const{
     const MapDef&d=*m; float dx=fx+vx*rx+vy*ux,dy=fy+vy*uy,dz=fz+vx*rz+vy*uz;
-    float inv=1.f/sqrtf(dx*dx+dy*dy+dz*dz); dx*=inv;dy*=inv;dz*=inv;
+    float q=dx*dx+dy*dy+dz*dz;
+#if defined(__SSE__)
+    float inv=_mm_cvtss_f32(_mm_rsqrt_ss(_mm_set_ss(q))); inv=inv*(1.5f-0.5f*q*inv*inv);
+#else
+    float inv=1.f/sqrtf(q);
+#endif
+    dx*=inv;dy*=inv;dz*=inv;
     if(dy>=0){ float t=powLut[(int)(std::min<float>(1.f,dy)*256)]; R=d.hor[0]+(d.sky[0]-d.hor[0])*t;G=d.hor[1]+(d.sky[1]-d.hor[1])*t;B=d.hor[2]+(d.sky[2]-d.hor[2])*t; }
     else { float k=std::min<float>(1.f,-dy*4.f)*0.2f; R=d.hor[0]*(1-k);G=d.hor[1]*(1-k);B=d.hor[2]*(1-k); }
     float s=dx*sunN[0]+dy*sunN[1]+dz*sunN[2]; sOut=s;
     if(s>0.55f){ float s2=s*s,s4=s2*s2,s8=s4*s4,s12=s8*s4; float g1=s12*0.12f; float g2=s>0.9985f?1.2f:0; R+=g1+g2;G+=0.92f*g1+g2*0.92f;B+=0.75f*g1+g2*0.75f; }
   }
+  // السماء تُرسم أولاً (تعبئة خطية سريعة) ثم تُغطّيها الهندسة
   void fillSky(int by0,int by1){
     float th=tanf(cam.fov*0.5f),asp=(float)W/H; const int BK=4; int nb=(W+BK-1)/BK; std::vector<uint32_t> bc(nb); std::vector<uint8_t> hot(nb);
     for(int y=by0;y<by1;y++){
-      uint32_t*row=&fb[y*W]; const float*zr=&zb[y*W];
-      if(y%BK==0||y==by0){ int yy=y-y%BK; for(int bx=0;bx<nb;bx++){ float R,G,B,s; skyAt((2.f*(bx*BK+BK*0.5f)/W-1.f)*th*asp,(1.f-2.f*(yy+BK*0.5f)/H)*th,R,G,B,s); bc[bx]=pack(R,G,B); hot[bx]=s>0.94f; } }
-      for(int x=0;x<W;x++){ if(zr[x]>0)continue; int bx=x/BK;
-        if(hot[bx]){ float R,G,B,s; skyAt((2.f*(x+0.5f)/W-1.f)*th*asp,(1.f-2.f*(y+0.5f)/H)*th,R,G,B,s); row[x]=pack(R,G,B); } else row[x]=bc[bx]; }
+      uint32_t*row=&fb[y*W];
+      if(y%BK==0||y==by0){ int yy=y-y%BK; for(int bx=0;bx<nb;bx++){ float R,G,B,s; skyAt((2.f*(bx*BK+BK*0.5f)/W-1.f)*th*asp,(1.f-2.f*(yy+BK*0.5f)/H)*th,R,G,B,s); bc[bx]=pack(R,G,B); hot[bx]=s>0.996f; } }
+      const float vyy=(1.f-2.f*(y+0.5f)/H)*th, vxs=(2.f/W)*th*asp, vx0=(0.5f*2.f/W-1.f)*th*asp;
+      for(int bx=0;bx<nb;bx++){ int xa=bx*BK,xb=std::min(W,xa+BK);
+        if(!hot[bx]){ uint32_t c=bc[bx]; for(int x=xa;x<xb;x++) row[x]=c; }
+        else for(int x=xa;x<xb;x++){ float R,G,B,s; skyAt(vx0+vxs*x,vyy,R,G,B,s); row[x]=pack(R,G,B); }
+      }
     }
   }
   // تنفيذ كل المضلعات المسجّلة على شرائح أفقية بالتوازي
@@ -63,8 +86,9 @@ struct Renderer {
     if(jobs.empty()&&!skyPend)return; bool sky=skyPend; skyPend=false;
     int bh=std::max(4,((H/(nthreads>1?20:1))+3)/4*4); int nb=(H+bh-1)/bh; std::atomic<int> nxt(0);
     auto work=[&]{ for(;;){ int bi=nxt++; if(bi>=nb)break; int y0=bi*bh,y1=std::min(H,y0+bh);
-      for(const TJ&j:jobs){ float lo=std::min(j.y0,std::min(j.y1,j.y2)),hi=std::max(j.y0,std::max(j.y1,j.y2)); if(hi<y0||lo>=y1)continue; rast(j,y0,y1); }
-      if(sky)fillSky(y0,y1); } };
+      if(sky)fillSky(y0,y1);
+      for(const TJ&j:jobs){ float lo=std::min(j.y0,std::min(j.y1,j.y2)),hi=std::max(j.y0,std::max(j.y1,j.y2)); if(hi<y0||lo>=y1)continue; rast(j,y0,y1); } } };
+    std::stable_sort(jobs.begin(),jobs.end(),[](const TJ&a,const TJ&b){ return std::max(a.z0,std::max(a.z1,a.z2))>std::max(b.z0,std::max(b.z1,b.z2)); }); // الأقرب أولاً: يقلل إعادة الرسم
     pool.exec(work); jobs.clear();
   }
   struct PV{float x,y,z,u,v;};
@@ -103,6 +127,11 @@ struct Renderer {
     int ya=std::max(by0,(int)ceilf(y0)),yb=std::min(by1-1,(int)ceilf(y2)-1);
     if(yb<ya||y2-y0<1e-6f)return;
     float inv02=1.f/(y2-y0);
+    const float zDet=det?(1.f/34.f):1e30f, zFog=useFog?(1.f/fogN):0.f; const uint32_t basePk=pack(r,g,b);
+    const float invFR=1.f/(fogF-fogN+1e-9f), zFar=useFog?(1.f/fogF):-1.f; const uint32_t fogPk=pack(fog[0],fog[1],fog[2]);
+#if defined(__SSE2__)
+    const __m128 C4=_mm_set_ps(0.f,r,g,b), F4=_mm_set_ps(0.f,fog[0],fog[1],fog[2]);
+#endif
     for(int y=ya;y<=yb;y++){
       float fy_=(float)y+0.5f; if(fy_<y0)fy_=y0;
       float t02=std::min<float>(1.f,std::max<float>(0.f,(fy_-y0)*inv02));
@@ -114,12 +143,28 @@ struct Renderer {
       if(xe<xs)continue;
       float inv=1.f/(xb-xa+1e-6f); float dz=(zb_-za)*inv,du=(ub-ua)*inv,dv=(vb-va)*inv; float o=(float)xs+0.5f-xa; float zi=za+dz*o,ui=ua+du*o,vi=va+dv*o;
       uint32_t*row=&fb[y*W]; float*zr=&zb[y*W];
-      for(int x=xs;x<=xe;x++,zi+=dz,ui+=du,vi+=dv){
-        if(zi>zr[x]){ zr[x]=zi; float d=1.f/zi; float R=r,G=g,B=b;
-          if(det&&d<34.f){ float u=ui*d,v=vi*d; float fl=floorf(u),fm=floorf(v); int a=(int)((u-fl)*32.f),bq=(int)((v-fm)*32.f); int iu=(int)floorf(u*2),iv=(int)floorf(v*2);
-            float k=lineLut[(bq&31)*32+(a&31)]*hashTab[((iu&15)<<4)|(iv&15)]; R*=k;G*=k;B*=k; }
-          if(useFog){ float f=(d-fogN)/(fogF-fogN); f=f<0?0:f>1?1:f; R+=(fog[0]-R)*f;G+=(fog[1]-G)*f;B+=(fog[2]-B)*f; }
-          row[x]=pack(R,G,B);
+      // بكسلات بلا ضباب ولا نقش (الأغلب): لون ثابت بلا أي قسمة. الباقي: قسمة دقيقة كل 8 بكسلات ثم استيفاء خطي
+      for(int xc=xs;xc<=xe;xc+=8){
+        int xn=std::min(xe,xc+7); int n=xn-xc+1; float zc=zi,uc=ui,vc=vi;
+        bool have=false; float d0=0,dd=0,u0_=0,du_=0,v0_=0,dv_=0;
+        for(int x=xc;x<=xn;x++,zi+=dz,ui+=du,vi+=dv){
+          if(zi>zr[x]){ zr[x]=zi;
+            if(zi<=zFar) row[x]=fogPk;                      // بعيد جداً: لون الضباب كاملاً
+            else if(zi>zDet||zi<zFog){
+              if(!have){ have=true; static const float INVN[9]={0.f,1.f,1.f/2,1.f/3,1.f/4,1.f/5,1.f/6,1.f/7,1.f/8}; float in_=INVN[n]; float rc0=frcp(zc); float zE=zc+dz*n; if(zE<1e-7f)zE=zc; float rc1=frcp(zE); float uE=uc+du*n,vE=vc+dv*n;
+                d0=rc0; dd=(rc1-rc0)*in_; u0_=uc*rc0; du_=(uE*rc1-u0_)*in_; v0_=vc*rc0; dv_=(vE*rc1-v0_)*in_; }
+              int k=x-xc; float d=d0+dd*k; float kk=1.f;
+              if(det&&d<34.f){ float u=u0_+du_*k,v=v0_+dv_*k; int iu_=(int)u; if(u<(float)iu_)iu_--; int iv_=(int)v; if(v<(float)iv_)iv_--;
+                int a=(int)((u-(float)iu_)*32.f),bq=(int)((v-(float)iv_)*32.f); int iu2=iu_*2+(a>>4),iv2=iv_*2+(bq>>4);
+                kk=lineLut[((bq&31)<<5)|(a&31)]*hashTab[((iu2&15)<<4)|(iv2&15)]; }
+              float f=0.f; if(useFog){ f=(d-fogN)*invFR; f=f<0?0:f>1?1:f; }
+#if defined(__SSE2__)
+              row[x]=packv(_mm_add_ps(_mm_mul_ps(C4,_mm_set1_ps(kk*(1.f-f))),_mm_mul_ps(F4,_mm_set1_ps(f))));
+#else
+              row[x]=pack(r*kk+(fog[0]-r*kk)*f,g*kk+(fog[1]-g*kk)*f,b*kk+(fog[2]-b*kk)*f);
+#endif
+            } else row[x]=basePk;
+          }
         }
       }
     }
