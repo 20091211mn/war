@@ -20,13 +20,13 @@ int main(int,char**){
   OrbisUserServiceInitializeParams up; up.priority=ORBIS_KERNEL_PRIO_FIFO_LOWEST; sceUserServiceInitialize(&up);
   int uid=0; sceUserServiceGetInitialUser(&uid);
   padH=scePadOpen(uid,0,0,NULL);
-  const int RW=960,RH=540; static Game g; g.menu=1; g.init(RW,RH);
-  uint32_t last=SDL_GetTicks(); bool dbg=false; uint32_t prevB=0; float acc=0,fpsT=0,fps=60; int fpsN=0,curW=RW; float smx=0,smy=0; int frame=0;
+  static const int RESW[3]={1280,960,640}; int lvl=0; static Game g; g.r.startThreads(6); g.menu=1; g.init(RESW[0],RESW[0]*9/16);
+  uint32_t last=SDL_GetTicks(); bool dbg=false; uint32_t prevB=0; float acc=0,fpsT=0,fps=60,hold=0; int fpsN=0,curW=RESW[0]; float smx=0,smy=0; int frame=0;
   for(;;){
     SDL_Event ev; while(SDL_PollEvent(&ev)){}
     memset(&pd,0,sizeof(pd)); if(padH>=0)scePadReadState(padH,&pd); else padH=scePadOpen(uid,0,0,NULL);
     uint32_t now=SDL_GetTicks(); float dt=(now-last)/1000.f; last=now; if(dt>0.1f)dt=0.1f; if(dt<=0)dt=0.001f; frame++;
-    fpsT+=dt; fpsN++; if(fpsT>=1.f){fps=fpsN/fpsT;fpsT=0;fpsN=0; int want=fps<38?640:(fps>58&&curW==640?960:curW); if(want!=curW){curW=want;g.r.init(curW,curW*9/16);} }
+    fpsT+=dt; fpsN++; hold+=dt; if(fpsT>=1.f){fps=fpsN/fpsT;g.fpsShow=fps;fpsT=0;fpsN=0; int nl=lvl; if(fps<40&&lvl<2){nl=lvl+1;hold=0;} else if(fps>58&&lvl>0&&hold>12.f){nl=lvl-1;hold=0;} if(nl!=lvl){lvl=nl;curW=RESW[lvl];g.r.init(curW,curW*9/16);} }
     uint32_t edge=pd.buttons&~prevB; prevB=pd.buttons;
     auto stick=[&](float x,float y,float&ox,float&oy){float m=std::sqrt(x*x+y*y);const float D=0.18f;if(m<D){ox=oy=0;return;}float k=(m-D)/(1-D);if(k>1)k=1;ox=x/m*k;oy=y/m*k;};
     float ax,ay,bx,by; stick(stickN(pd.leftStick.x),-stickN(pd.leftStick.y),ax,ay); stick(stickN(pd.rightStick.x),-stickN(pd.rightStick.y),bx,by); // y موجب = أعلى
@@ -48,9 +48,9 @@ int main(int,char**){
     if(dbg){ char b[96]; snprintf(b,96,"FPS %d RES %d",(int)fps,g.r.W); g.text(40,40,b,2,0xFFFFFF00);
       snprintf(b,96,"LS %d %d RS %d %d L2 %d R2 %d",pd.leftStick.x,pd.leftStick.y,pd.rightStick.x,pd.rightStick.y,pd.analogButtons.l2,pd.analogButtons.r2); g.text(40,60,b,2,0xFFFFFF00);
       snprintf(b,96,"BTN %05X PAD %d",(unsigned)pd.buttons,padH); g.text(40,80,b,2,0xFFFFFF00); }
-    SDL_LockSurface(surf); uint32_t*dst=(uint32_t*)surf->pixels; int pitch=surf->pitch/4,sw=surf->w,sh=surf->h; int RWc=g.r.W,RHc=g.r.H;
+    g.r.flush(); SDL_LockSurface(surf); uint32_t*dst=(uint32_t*)surf->pixels; int pitch=surf->pitch/4,sw=surf->w,sh=surf->h; int RWc=g.r.W,RHc=g.r.H;
     static std::vector<int> xm; if((int)xm.size()!=sw||xm.back()!=(sw-1)*RWc/sw){xm.assign(sw,0);for(int x=0;x<sw;x++)xm[x]=x*RWc/sw;}
-    for(int y=0;y<sh;y++){ const uint32_t*sr=&g.r.fb[(y*RHc/sh)*RWc]; uint32_t*d=dst+y*pitch; for(int x=0;x<sw;x++)d[x]=sr[xm[x]]; }
+    { std::atomic<int> nx(0); const uint32_t*fbp=g.r.fb.data(); g.r.pool.exec([&]{ for(;;){ int y0=nx.fetch_add(32); if(y0>=sh)break; for(int y=y0;y<std::min(sh,y0+32);y++){ const uint32_t*sr=fbp+(y*RHc/sh)*RWc; uint32_t*d=dst+y*pitch; for(int x=0;x<sw;x++)d[x]=sr[xm[x]]; } } }); }
     SDL_UnlockSurface(surf); SDL_UpdateWindowSurface(win);
   }
 }
