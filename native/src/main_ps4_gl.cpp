@@ -29,7 +29,15 @@ static float stickN(uint8_t v){return ((int)v-128)/127.f;}
 #endif
 #define OUT_W 1920
 #define OUT_H 1080
-static void wzlog(const char*f,...){ FILE*fp=fopen("/data/wz_gl_log.txt","a"); if(!fp)return; va_list a; va_start(a,f); vfprintf(fp,f,a); va_end(a); fputc('\n',fp); fclose(fp); }
+#ifndef WZ_VARIANT
+#define WZ_VARIANT 1
+#endif
+#if WZ_VARIANT==2
+#define WZ_LOGFILE "/data/wz_gl_log2.txt"
+#else
+#define WZ_LOGFILE "/data/wz_gl_log.txt"
+#endif
+static void wzlog(const char*f,...){ FILE*fp=fopen(WZ_LOGFILE,"a"); if(!fp)return; va_list a; va_start(a,f); vfprintf(fp,f,a); va_end(a); fputc('\n',fp); fclose(fp); }
 static uint32_t ticks(){ return (uint32_t)(sceKernelGetProcessTime()/1000); }
 struct NikShader{ char*ident; unsigned char hash[16]; uint64_t len; unsigned char*code; };
 extern "C" NikShader scePrecompiledShaderEntries[];
@@ -87,10 +95,10 @@ static void glPresent(const uint32_t*up){
 }
 
 int main(int,char**){
-  wzlog("== main start build %d ==",(int)BUILD_ID);
+  wzlog("== main start build %d variant %d ==",(int)BUILD_ID,(int)WZ_VARIANT);
   setvbuf(stdout,NULL,_IONBF,0);
-  scePadInit(); wzlog("pad init");
-  OrbisUserServiceInitializeParams up; up.priority=ORBIS_KERNEL_PRIO_FIFO_LOWEST; sceUserServiceInitialize(&up); wzlog("userservice init");
+  OrbisUserServiceInitializeParams up; up.priority=ORBIS_KERNEL_PRIO_FIFO_LOWEST; wzlog("calling userservice init"); int ur=sceUserServiceInitialize(&up); wzlog("userservice init ret=0x%x",(unsigned)ur);
+  wzlog("calling scePadInit"); int pr=scePadInit(); wzlog("scePadInit ret=0x%x",(unsigned)pr);
   int uid=0; sceUserServiceGetInitialUser(&uid);
   padH=scePadOpen(uid,0,0,NULL); wzlog("pad open %d",padH);
   static Game g; wzlog("game constructed"); g.r.startThreads(6); wzlog("threads started"); g.menu=1; g.init(WZ_IW,WZ_IH); wzlog("game init"); static std::vector<uint32_t> upb(WZ_IW*WZ_IH); wzlog("upload buf ok");
