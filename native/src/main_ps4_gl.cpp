@@ -58,7 +58,7 @@ static bool glInit(){
   EGLConfig cfg; EGLint nc=0,maj=0,mi=0;
   gD=eglGetDisplay(EGL_DEFAULT_DISPLAY); if(gD==EGL_NO_DISPLAY){wzlog("no display");return false;}
   if(!eglInitialize(gD,&maj,&mi)){wzlog("egl init fail 0x%x",eglGetError());return false;}
-  wzlog("egl init %d.%d",maj,mi); eglBindAPI(EGL_OPENGL_ES_API); eglSwapInterval(gD,1);
+  wzlog("egl init %d.%d",maj,mi); eglBindAPI(EGL_OPENGL_ES_API); eglSwapInterval(gD,0);
   if(!eglChooseConfig(gD,at,&cfg,1,&nc)||nc<1){wzlog("choose cfg fail");return false;}
   wzlog("config chosen"); gS=eglCreateWindowSurface(gD,cfg,&w,wa); if(gS==EGL_NO_SURFACE){wzlog("surface fail 0x%x",eglGetError());return false;}
   wzlog("surface created"); gC=eglCreateContext(gD,cfg,EGL_NO_CONTEXT,ca); if(gC==EGL_NO_CONTEXT){wzlog("ctx fail 0x%x",eglGetError());return false;}
@@ -91,7 +91,7 @@ static void glPresent(const uint32_t*up){
   glVertexAttribPointer(aV,4,GL_FLOAT,GL_FALSE,4*sizeof(GLfloat),v); glEnableVertexAttribArray(aV);
   glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D,gTex); glUniform1i(uSam,0); glDrawArrays(GL_TRIANGLES,0,6);
   static int pf=0; if(++pf<=2)wzlog("draw issued err=0x%x",(unsigned)glGetError());
-  eglSwapBuffers(gD,gS);
+  if(pf<=2)wzlog("calling swap"); EGLBoolean sr=eglSwapBuffers(gD,gS); if(pf<=2)wzlog("swap ret=%d err=0x%x",(int)sr,(unsigned)eglGetError());
 }
 
 int main(int,char**){
