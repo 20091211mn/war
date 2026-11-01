@@ -1,0 +1,82 @@
+name: Build PS4 Native GPU PKG (experimental)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['native/**', 'shared/**', 'tools/export-native.js', '.github/workflows/ps4-native-gl.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  pkg:
+    runs-on: ubuntu-22.04
+    env:
+      CLR_OPENSSL_VERSION_OVERRIDE: '1.1'
+      DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install deps
+        run: sudo apt-get update -y && sudo apt-get install -y clang lld jq
+      - name: Install libssl1.1
+        run: |
+          cd /tmp
+          for U in http://security.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2_amd64.deb; do
+            curl -fsSL "$U" -o libssl1.1.deb && break
+          done
+          sudo dpkg -i libssl1.1.deb
+      - name: Export maps and weapons to C++
+        run: node tools/export-native.js
+      - name: Download OpenOrbis toolchain
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          URL=""
+          for i in 1 2 3 4 5; do
+            URL=$(curl -sL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" https://api.github.com/repos/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/latest | jq -r '[(.assets // [])[] | select(.name|test("linux|toolchain";"i"))][0].browser_download_url // empty')
+            [ -n "$URL" ] && break
+            sleep 8
+          done
+          [ -n "$URL" ] || { echo "no toolchain"; exit 1; }
+          mkdir -p /tmp/oo && curl -sL "$URL" -o /tmp/oo/tc.pkg
+          cd /tmp/oo && (tar -xf tc.pkg 2>/dev/null || unzip -q tc.pkg)
+          LX=$(find /tmp/oo -name link.x | head -1)
+          echo "OO_PS4_TOOLCHAIN=$(dirname "$LX")" >> "$GITHUB_ENV"
+          chmod -R +x "$(dirname "$LX")/bin" || true
+      - name: Build experimental GPU PKG (from the piglet sample)
+        run: |
+          S="$OO_PS4_TOOLCHAIN/samples"; N=wzGL; BUILD=${{ github.run_number }}; VER=$(printf "01.%02d" $((BUILD % 100)))
+          if [ ! -d "$S/piglet" ]; then
+            git clone -q --depth 1 https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain /tmp/oo-src
+            cp -r /tmp/oo-src/samples/piglet "$S/piglet"
+          fi
+          ls "$OO_PS4_TOOLCHAIN/lib" | grep -i "piglet\|PrecompiledShaders\|SystemService\|Sysmodule" || echo "WARNING: piglet stubs not found in toolchain lib"
+          rm -rf "$S/$N"; cp -r "$S/piglet" "$S/$N"
+          rm -rf "$S/$N/piglet"; mkdir -p "$S/$N/$N" "$S/$N/gen"
+          cp native/src/*.h "$S/$N/$N/"; cp native/src/main_ps4_gl.cpp "$S/$N/$N/main.cpp"
+          cp native/gen/data.h "$S/$N/gen/"
+          ( cd "$S/$N"
+            sed -i "s/^LIBS .*/LIBS        := -lc -lkernel -lc++ -lSceShellCoreUtil -lSceSysmodule -lSceSystemService -lScePigletv2VSH -lScePrecompiledShaders -lSceRtc -lSceUserService -lScePad/" Makefile
+            sed -i "s/^EXTRAFLAGS .*/EXTRAFLAGS  := -fexceptions -fcxx-exceptions -O2 -fno-math-errno -DBUILD_ID=$BUILD/" Makefile
+            sed -i "s/^VERSION .*/VERSION     := $VER/; s/^TITLE .*/TITLE       := Warzone Native GPU (exp)/; s/^TITLE_ID .*/TITLE_ID    := BREW00791/; s/^CONTENT_ID .*/CONTENT_ID  := IV0000-BREW00791_00-WZNATIVEGL000000/" Makefile
+            cp "$GITHUB_WORKSPACE/ps4/icon0.png" sce_sys/icon0.png || true
+            make
+            cp ./*.pkg "$GITHUB_WORKSPACE/WarzoneNativeGPU.pkg"; cp ./*.pkg "$GITHUB_WORKSPACE/WarzoneNativeGPU-b$BUILD.pkg" )
+          ls -la "$GITHUB_WORKSPACE"/*.pkg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WarzoneNativeGPU-pkg
+          path: |
+            WarzoneNativeGPU.pkg
+            WarzoneNativeGPU-b*.pkg
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ps4-native-gpu-latest
+          name: Warzone Native GPU experimental (PS4 PKG)
+          files: |
+            WarzoneNativeGPU.pkg
+            WarzoneNativeGPU-b*.pkg
