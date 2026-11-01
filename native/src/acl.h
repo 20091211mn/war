@@ -21,7 +21,7 @@ void Game::aclStart(uint32_t ip,int port){
 void Game::aclStop(){ if(ac){ ac->ws.close(); if(ac->scan)ac->scan->stop=true; delete ac; ac=nullptr; } role=0; meI=0; e.assign(1,Ent()); menu=1; paused=false; mapIdx=std::min(mapIdx,MAP_COUNT-1); startMatch(menuSel); }
 void Game::aclShoot(const std::string&dj){ if(!ac)return; std::string m="{\"t\":\"shoot\",\"w\":"+std::to_string(ac->slot)+",\"d\":["+dj+"]}"; ac->ws.send(m); }
 void Game::aclReload(){ if(ac)ac->ws.send("{\"t\":\"rl\"}"); }
-void Game::aclGrenade(){ if(!ac||meI>=(int)e.size())return; Ent&p=e[meI]; float cp=std::cos(p.pitch); char b[120]; snprintf(b,120,"{\"t\":\"gren\",\"d\":[%.4f,%.4f,%.4f]}",-std::sin(p.yaw)*cp,std::sin(p.pitch),-std::cos(p.yaw)*cp); ac->ws.send(b); }
+void Game::aclGrenade(){ if(!ac||meI>=(int)e.size())return; Ent&p=e[meI]; float cp=cosf(p.pitch); char b[120]; snprintf(b,120,"{\"t\":\"gren\",\"d\":[%.4f,%.4f,%.4f]}",-sinf(p.yaw)*cp,sinf(p.pitch),-cosf(p.yaw)*cp); ac->ws.send(b); }
 void Game::aclSwapSlot(){
   if(!ac||meI>=(int)e.size())return; Ent&p=e[meI]; ac->slotAm[ac->slot][0]=p.ammo; ac->slotAm[ac->slot][1]=p.mags; ac->slot^=1;
   int wi=weaponIdx(ac->slot?ac->loS:ac->loP); giveWeapon(p,wi); if(ac->slotAm[ac->slot][0]>=0){p.ammo=ac->slotAm[ac->slot][0];p.mags=ac->slotAm[ac->slot][1];}
@@ -95,7 +95,7 @@ void Game::aclUpdate(float dt,const Input&in){
       A.vs.clear(); for(size_t i=0;i<m["vs"].size();i++){ const J&v=m["vs"][i]; A.vs.push_back({(float)v[1].num(),(float)v[2].num(),(float)v[3].num(),v[7].i(),v[8].i()}); } }
     else if(t=="hit"){ int v=m["v"].i(),a=m["a"].i(); if(v==A.myId)dmgFlash=0.5f; if(a==A.myId&&v!=A.myId)hitMark=0.25f; }
     else if(t=="kill"&&A.inMatch){ int k=m["k"].i(),v=m["v"].i(); auto ik=A.idx.find(k),iv=A.idx.find(v); if(ik!=A.idx.end()&&iv!=A.idx.end()){ char b[64]; snprintf(b,64,"%s > %s%s",e[ik->second].name,e[iv->second].name,m["h"].i()?" HS":""); addFeed(b); if(k==A.myId)e[ik->second].kills++; } if(iv!=A.idx.end()){ e[iv->second].alive=false; if(v==A.myId){ e[iv->second].respawn=3; } } }
-    else if(t=="shot"&&A.inMatch){ int id=m["id"].i(); auto it=A.idx.find(id); if(it!=A.idx.end()){ e[it->second].flash=0.06f; } float ox=m["o"][0].num(),oy=m["o"][1].num(),oz=m["o"][2].num(); for(size_t i=0;i<m["e"].size()&&i<6;i++){ const J&q=m["e"][i]; if(tr.size()<64)tr.push_back({ox,oy-0.1f,oz,(float)q[0].num(),(float)q[1].num(),(float)q[2].num(),0.07f}); } }
+    else if(t=="shot"&&A.inMatch){ int id=m["id"].i(); auto it=A.idx.find(id); if(it!=A.idx.end()){ e[it->second].flash=0.06f; } float ox=m["o"][0].num(),oy=m["o"][1].num(),oz=m["o"][2].num(); for(size_t i=0;i<m["e"].size()&&i<6;i++){ const J&q=m["e"][i]; if(tr.size()<64)tr.push_back({ox,oy-0.1f,oz,(float)q[0].num(),(float)q[1].num(),(float)q[2].num(),0.09f}); } }
     else if(t=="end"){ over=true; winner=m["win"].i(); if(winner<0)winner=0; score[0]=m["sc"][0].i(); score[1]=m["sc"][1].i(); }
     else if(t=="left"){ auto it=A.idx.find(m["id"].i()); if(it!=A.idx.end()){ e[it->second].gone=true; e[it->second].alive=false; } }
   }
