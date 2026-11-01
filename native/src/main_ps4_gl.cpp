@@ -74,7 +74,7 @@ static bool glInit(){
 }
 static void glPresent(const uint32_t*up){
   glViewport(0,0,OUT_W,OUT_H); glClearColor(0,0,0,1); glClear(GL_COLOR_BUFFER_BIT);
-  glBindTexture(GL_TEXTURE_2D,gTex); glTexSubImage2D(GL_TEXTURE_2D,0,0,0,WZ_IW,WZ_IH,GL_RGBA,GL_UNSIGNED_BYTE,up);
+  glBindTexture(GL_TEXTURE_2D,gTex); glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,WZ_IW,WZ_IH,0,GL_RGBA,GL_UNSIGNED_BYTE,up);
   static const GLfloat v[]={0,1,0,1, 1,0,1,0, 0,0,0,0, 0,1,0,1, 1,1,1,1, 1,0,1,0};
   GLfloat id[16]={1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
   GLfloat mv[16]={(GLfloat)OUT_W,0,0,0, 0,(GLfloat)OUT_H,0,0, 0,0,1,0, 0,0,0,1};
@@ -82,24 +82,25 @@ static void glPresent(const uint32_t*up){
   glUseProgram(gProg); glUniform1f(uOp,1.f); glUniformMatrix4fv(uMV,1,GL_FALSE,mv); glUniformMatrix4fv(uPR,1,GL_FALSE,pr); glUniformMatrix4fv(uTS,1,GL_FALSE,id);
   glVertexAttribPointer(aV,4,GL_FLOAT,GL_FALSE,4*sizeof(GLfloat),v); glEnableVertexAttribArray(aV);
   glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D,gTex); glUniform1i(uSam,0); glDrawArrays(GL_TRIANGLES,0,6);
+  static int pf=0; if(++pf<=2)wzlog("draw issued err=0x%x",(unsigned)glGetError());
   eglSwapBuffers(gD,gS);
 }
 
 int main(int,char**){
   wzlog("== main start build %d ==",(int)BUILD_ID);
   setvbuf(stdout,NULL,_IONBF,0);
-  if(!glInit()){wzlog("glInit FAILED");for(;;);} wzlog("entering loop");
-  scePadInit();
-  OrbisUserServiceInitializeParams up; up.priority=ORBIS_KERNEL_PRIO_FIFO_LOWEST; sceUserServiceInitialize(&up);
+  scePadInit(); wzlog("pad init");
+  OrbisUserServiceInitializeParams up; up.priority=ORBIS_KERNEL_PRIO_FIFO_LOWEST; sceUserServiceInitialize(&up); wzlog("userservice init");
   int uid=0; sceUserServiceGetInitialUser(&uid);
-  padH=scePadOpen(uid,0,0,NULL);
-  static Game g; g.r.startThreads(6); g.menu=1; g.init(WZ_IW,WZ_IH); static std::vector<uint32_t> upb(WZ_IW*WZ_IH); // GPU يكبّر إلى 1080p
+  padH=scePadOpen(uid,0,0,NULL); wzlog("pad open %d",padH);
+  static Game g; wzlog("game constructed"); g.r.startThreads(6); wzlog("threads started"); g.menu=1; g.init(WZ_IW,WZ_IH); wzlog("game init"); static std::vector<uint32_t> upb(WZ_IW*WZ_IH); wzlog("upload buf ok");
+  if(!glInit()){wzlog("glInit FAILED");for(;;);} wzlog("entering loop");
   uint32_t last=ticks(); bool dbg=false; uint32_t prevB=0; float acc=0,fpsT=0,fps=30; int fpsN=0; float smx=0,smy=0; int frame=0;
   for(;;){
     memset(&pd,0,sizeof(pd)); if(padH>=0)scePadReadState(padH,&pd); else padH=scePadOpen(uid,0,0,NULL);
     uint32_t now=ticks(); float dt=(now-last)/1000.f; last=now; if(dt>0.1f)dt=0.1f; if(dt<=0)dt=0.001f; frame++;
     fpsT+=dt; fpsN++; if(fpsT>=1.f){fps=fpsN/fpsT;g.fpsShow=fps;fpsT=0;fpsN=0;}
-    uint32_t edge=pd.buttons&~prevB; prevB=pd.buttons;
+    if(frame==1)wzlog("f1 pad read"); uint32_t edge=pd.buttons&~prevB; prevB=pd.buttons;
     auto stick=[&](float x,float y,float&ox,float&oy){float m=sqrtf(x*x+y*y);const float D=0.18f;if(m<D){ox=oy=0;return;}float k=(m-D)/(1-D);if(k>1)k=1;ox=x/m*k;oy=y/m*k;};
     float ax,ay,bx,by; stick(stickN(pd.leftStick.x),-stickN(pd.leftStick.y),ax,ay); stick(stickN(pd.rightStick.x),-stickN(pd.rightStick.y),bx,by); // y موجب = أعلى
     float lx_,ly_,rx_,ry_; if(g.swapSticks){rx_=ax;ry_=ay;lx_=bx;ly_=by;} else {lx_=ax;ly_=ay;rx_=bx;ry_=by;} // l = حركة ، r = نظر
@@ -116,12 +117,12 @@ int main(int,char**){
       if((edge&ORBIS_PAD_BUTTON_R1)&&(g.menu==1||g.paused))g.swapSticks=!g.swapSticks; }
     if(edge&ORBIS_PAD_BUTTON_TOUCH_PAD)dbg=!dbg;
     acc+=dt; int steps=0; while(acc>=1.f/60.f&&steps<4){ g.update(1.f/60.f,in); acc-=1.f/60.f; steps++; } if(steps==4)acc=0;
-    if(g.menu)g.renderMenu(); else g.render();
+    if(frame==1)wzlog("f1 updated"); if(g.menu)g.renderMenu(); else g.render(); if(frame==1)wzlog("f1 rendered");
     if(dbg){ char b[96]; snprintf(b,96,"FPS %d RES %d",(int)fps,g.r.W); g.text(40,40,b,2,0xFFFFFF00);
       snprintf(b,96,"LS %d %d RS %d %d L2 %d R2 %d",pd.leftStick.x,pd.leftStick.y,pd.rightStick.x,pd.rightStick.y,pd.analogButtons.l2,pd.analogButtons.r2); g.text(40,60,b,2,0xFFFFFF00);
       snprintf(b,96,"BTN %05X PAD %d",(unsigned)pd.buttons,padH); g.text(40,80,b,2,0xFFFFFF00); }
     g.r.flush(); { const uint32_t*fbp=g.r.fb.data(); uint32_t*ub=upb.data(); int n=WZ_IW*WZ_IH; std::atomic<int> nx(0); g.r.pool.exec([&]{ for(;;){ int i0=nx.fetch_add(65536); if(i0>=n)break; int i1=std::min(n,i0+65536); for(int i=i0;i<i1;i++){ uint32_t p=fbp[i]; ub[i]=(p&0x0000FF00u)|((p>>16)&0xFFu)|((p&0xFFu)<<16)|0xFF000000u; } } }); }
-    glPresent(upb.data()); if(frame<=3||frame==60)wzlog("frame %d presented",frame);
+    if(frame==1)wzlog("f1 converted"); glPresent(upb.data()); if(frame<=3||frame==60)wzlog("frame %d presented",frame);
     { uint32_t el=ticks()-now; if(el<33)sceKernelUsleep((33-el)*1000); } // سقف 30fps
   }
 }
