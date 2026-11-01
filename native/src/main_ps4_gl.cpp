@@ -103,7 +103,11 @@ int main(int,char**){
   int uid=0; sceUserServiceGetInitialUser(&uid);
   padH=scePadOpen(uid,0,0,NULL); wzlog("pad open %d",padH);
 #else
-  int uid=0; wzlog("NOPAD build: pad disabled (display test)");
+  int uid=0; wzlog("NOPAD build: pure display test (no game, no threads, no pad)");
+  if(!glInit()){wzlog("glInit FAILED");for(;;);}
+  { std::vector<uint32_t> tp(WZ_IW*WZ_IH); static const uint32_t cb[8]={0xFF0000FFu,0xFF00FF00u,0xFFFF0000u,0xFFFFFFFFu,0xFF00FFFFu,0xFFFF00FFu,0xFFFFFF00u,0xFF808080u};
+    for(int y=0;y<WZ_IH;y++)for(int x=0;x<WZ_IW;x++)tp[y*WZ_IW+x]=(y<WZ_IH/8)?(0xFF000000u|(uint32_t)(x*255/WZ_IW)*0x010101u):cb[x*8/WZ_IW];
+    for(int f=1;;f++){ glPresent(tp.data()); if(f<=3||f%120==0)wzlog("display-test frame %d",f); sceKernelUsleep(33000); } }
 #endif
   static Game g; wzlog("game constructed"); g.r.startThreads(6); wzlog("threads started"); g.menu=1; g.init(WZ_IW,WZ_IH); wzlog("game init"); static std::vector<uint32_t> upb(WZ_IW*WZ_IH); wzlog("upload buf ok");
   if(!glInit()){wzlog("glInit FAILED");for(;;);} wzlog("entering loop");
