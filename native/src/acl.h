@@ -8,11 +8,19 @@ struct Game::ACl{
   struct LP{int id=0;std::string n;int tm=0,b=0;std::string p,s;}; std::vector<LP> lobby;
   std::map<int,int> idx; std::string loP="carbine",loS="pistol"; int slot=0; int slotAm[2][2]={{-1,0},{-1,0}};
   struct Gr{float x,y,z;}; std::vector<Gr> gr; struct Vh{float x,z,h;int hp,fl;}; std::vector<Vh> vs;
-  bool inMatch=false; int lastEvtCnt=0; int seat=-1; float vT=0,crMax=0; bool pu=false;
+  int att[2][4]={{0,0,0,0},{0,0,0,0}}; bool inMatch=false; int lastEvtCnt=0; int seat=-1; float vT=0,crMax=0; bool pu=false;
 };
 static int weaponIdx(const std::string&id){ for(int i=0;i<WEAPON_COUNT;i++)if(id==WEAPONS[i].id)return i; return 0; }
 static std::string cleanName(const std::string&n,int id,bool bot){ bool ok=!n.empty(); for(unsigned char c:n)if(c<32||c>126)ok=false; if(ok)return n.substr(0,12); char b[16]; snprintf(b,16,"%s%d",bot?"BOT":"P",id); return b; }
 
+static const char*OPT_ID[8][5]={{"iron","red","x2","x4",0},{"iron","red","x2",0,0},{"iron","red",0,0,0},{"x4","x8",0,0,0},{"iron","red","x2","x4",0},{"red","x2","x4","x8",0},{"iron","red",0,0,0},{"iron","red",0,0,0}};
+static const char*OPT_AR[5]={"حديدي","نقطة حمراء","2x","4x","8x"}; static const char*MUZ_ID[3]={"none","supp","comp"},*MUZ_AR[3]={"بدون","كاتم","مخمّد"}; static const char*UND_ID[3]={"none","grip","laser"},*UND_AR[3]={"بدون","مقبض","ليزر"}; static const char*MAG_ID[3]={"std","ext","fast"},*MAG_AR[3]={"عادي","ممتد","سريع"};
+static int wIdx(const std::string&id){ static const char*N[8]={"carbine","smg","shotgun","sniper","lmg","dmr","pistol","magnum"}; for(int i=0;i<8;i++)if(id==N[i])return i; return 0; }
+static int nOpt(int w){ int n=0; while(n<5&&OPT_ID[w][n])n++; return n; }
+static std::string optName(int w,int k){ const char*id=OPT_ID[w][k]; return id; }
+static const char*optAr(int w,int k){ const char*id=OPT_ID[w][k]; if(!strcmp(id,"iron"))return OPT_AR[0]; if(!strcmp(id,"red"))return OPT_AR[1]; if(!strcmp(id,"x2"))return OPT_AR[2]; if(!strcmp(id,"x4"))return OPT_AR[3]; return OPT_AR[4]; }
+static std::string loJson(Game::ACl&A){ std::string o="{\"t\":\"lo\",\"lo\":{\"p\":\""+A.loP+"\",\"s\":\""+A.loS+"\",\"a\":["; for(int q=0;q<2;q++){ int w=wIdx(q?A.loS:A.loP); o+=std::string(q?",":"")+"{\"optic\":\""+optName(w,A.att[q][0])+"\",\"muzzle\":\""+MUZ_ID[A.att[q][1]]+"\",\"under\":\""+UND_ID[A.att[q][2]]+"\",\"mag\":\""+MAG_ID[A.att[q][3]]+"\"}"; } return o+"]}}"; }
+static void applyAtt(Game&g,Ent&p,int slot){ { int w=wIdx(slot?g.ac->loS:g.ac->loP); const char*o=OPT_ID[w][g.ac->att[slot][0]]; g.optZ=!strcmp(o,"red")?1.5f:!strcmp(o,"x2")?2.2f:!strcmp(o,"x4")?3.6f:!strcmp(o,"x8")?6.f:0.f; } int m=g.ac->att[slot][3]; p.magM=m==1?1.5f:1.f; p.relM=m==1?1.12f:m==2?0.72f:1.f; p.ammo=g.cap(p); }
 void Game::aclStart(uint32_t ip,int port){
   if(ac){ac->ws.close();delete ac;} ac=new ACl(); role=3; meI=0; e.clear(); over=false;
   if(ip){ ac->hostIp=ip; ac->hostPort=port; ac->ws.connectTo(ip,port); menu=7; }
@@ -24,7 +32,7 @@ void Game::aclReload(){ if(ac)ac->ws.send("{\"t\":\"rl\"}"); }
 void Game::aclGrenade(){ if(!ac||meI>=(int)e.size())return; Ent&p=e[meI]; float cp=cosf(p.pitch); char b[120]; snprintf(b,120,"{\"t\":\"gren\",\"d\":[%.4f,%.4f,%.4f]}",-sinf(p.yaw)*cp,sinf(p.pitch),-cosf(p.yaw)*cp); ac->ws.send(b); }
 void Game::aclSwapSlot(){
   if(!ac||meI>=(int)e.size())return; Ent&p=e[meI]; ac->slotAm[ac->slot][0]=p.ammo; ac->slotAm[ac->slot][1]=p.mags; ac->slot^=1;
-  int wi=weaponIdx(ac->slot?ac->loS:ac->loP); giveWeapon(p,wi); if(ac->slotAm[ac->slot][0]>=0){p.ammo=ac->slotAm[ac->slot][0];p.mags=ac->slotAm[ac->slot][1];}
+  int wi=weaponIdx(ac->slot?ac->loS:ac->loP); giveWeapon(p,wi); applyAtt(*this,p,ac->slot); if(ac->slotAm[ac->slot][0]>=0){p.ammo=ac->slotAm[ac->slot][0];p.mags=ac->slotAm[ac->slot][1];}
 }
 void Game::aclRender3D(){
   if(!ac)return;
@@ -72,14 +80,14 @@ void Game::aclUpdate(float dt,const Input&in){
   // ---- رسائل الخادم ----
   std::string raw; int guard=0;
   while(ac&&A.ws.poll(raw)&&guard++<64){ bool ok=false; J m=jparse(raw,&ok); if(!ok)continue; std::string t=m["t"].str();
-    if(t=="welcome"){ A.myId=m["id"].i(); A.welcomed=true; std::string lo="{\"t\":\"hello\",\"n\":\"PS4\",\"lo\":{\"p\":\""+A.loP+"\",\"s\":\""+A.loS+"\",\"a\":[{\"optic\":\"iron\",\"muzzle\":\"none\",\"under\":\"none\",\"mag\":\"std\"},{\"optic\":\"iron\",\"muzzle\":\"none\",\"under\":\"none\",\"mag\":\"std\"}]}}"; A.ws.send(lo); }
+    if(t=="welcome"){ A.myId=m["id"].i(); A.welcomed=true; std::string lo=loJson(A); lo="{\"t\":\"hello\",\"n\":\"PS4\","+lo.substr(lo.find("\"lo\":")); A.ws.send(lo); }
     else if(t=="full"){ say("HOST IS FULL"); msgT=5; aclStop(); return; }
     else if(t=="lobby"){ lobbyApply(*this,m); if(A.phase=="lobby"&&menu==0&&A.inMatch){ /* انتهت المباراة والغرفة عادت */ } }
     else if(t=="start"){ A.inMatch=true; mapIdx=m["map"].i()%MAP_COUNT; w.load(mapIdx); e.clear(); A.idx.clear(); A.vs.clear(); vh.clear(); drive=-1; A.seat=-1; A.gr.clear(); over=false; score[0]=score[1]=0; tr.clear(); evq.clear(); menu=0; A.phase="playing"; g_aclTime=m["tl"].i();
       for(auto&l:A.lobby){ int k=entFor(*this,l.id); e[k].team=l.tm?1:0; snprintf(e[k].name,16,"%s",l.id==A.myId?"YOU":cleanName(l.n,l.id,l.b).c_str()); } meI=entFor(*this,A.myId); }
     else if(t=="tolobby"){ A.inMatch=false; A.phase="lobby"; menu=8; over=false; e.clear(); A.idx.clear(); }
     else if(t=="spawn"&&A.inMatch){ int id=m["id"].i(); int k=entFor(*this,id); Ent&p=e[k]; p.b.x=m["x"].num();p.b.y=m["y"].num();p.b.z=m["z"].num();p.b.vy=0;p.b.onGround=true; p.yaw=m["yaw"].num(); p.tx=p.b.x;p.ty=p.b.y;p.tz=p.b.z;p.tyaw=p.yaw; p.team=m["tm"].i()?1:0; p.alive=true;p.hp=100;p.prot=2;p.gone=false;p.crouch=false;
-      if(id==A.myId){ meI=k; A.epoch=m["e"].i(); A.loP=m["p"].str(A.loP.c_str()); A.loS=m["s"].str(A.loS.c_str()); A.slot=0; A.slotAm[0][0]=A.slotAm[1][0]=-1; p.pitch=0; giveWeapon(p,weaponIdx(A.loP)); p.rkP=p.rkY=0; }
+      if(id==A.myId){ meI=k; A.epoch=m["e"].i(); A.loP=m["p"].str(A.loP.c_str()); A.loS=m["s"].str(A.loS.c_str()); A.slot=0; A.slotAm[0][0]=A.slotAm[1][0]=-1; p.pitch=0; giveWeapon(p,weaponIdx(A.loP)); applyAtt(*this,p,0); p.rkP=p.rkY=0; }
       else { p.wpn=weaponIdx(m["p"].str("carbine")); } }
     else if(t=="snap"&&A.inMatch){
       g_aclTime=m["tl"].i(); score[0]=m["sc"][0].i(); score[1]=m["sc"][1].i();
@@ -108,8 +116,12 @@ void Game::aclUpdate(float dt,const Input&in){
   // ---- غرفة الانتظار ----
   if(menu==8){
     bool up=in.my>0.5f&&prev.my<=0.5f,dn=in.my<-0.5f&&prev.my>=-0.5f,rt=in.mx>0.5f&&prev.mx<=0.5f,lf=in.mx<-0.5f&&prev.mx>=-0.5f;
-    auto pickWeapon=[&](bool primary,int d){ int cur=weaponIdx(primary?A.loP:A.loS); int n=WEAPON_COUNT; int k=cur; for(int i=0;i<n;i++){ k=(k+d+n)%n; if(WEAPONS[k].type==(primary?0:1))break; } (primary?A.loP:A.loS)=WEAPONS[k].id;
-      std::string lo="{\"t\":\"lo\",\"lo\":{\"p\":\""+A.loP+"\",\"s\":\""+A.loS+"\",\"a\":[{\"optic\":\"iron\",\"muzzle\":\"none\",\"under\":\"none\",\"mag\":\"std\"},{\"optic\":\"iron\",\"muzzle\":\"none\",\"under\":\"none\",\"mag\":\"std\"}]}}"; A.ws.send(lo); };
+    auto pickWeapon=[&](bool primary,int d){ int cur=weaponIdx(primary?A.loP:A.loS); int n=WEAPON_COUNT; int k=cur; for(int i=0;i<n;i++){ k=(k+d+n)%n; if(WEAPONS[k].type==(primary?0:1))break; } (primary?A.loP:A.loS)=WEAPONS[k].id; for(int q=0;q<4;q++)A.att[primary?0:1][q]=0;
+      std::string lo=loJson(A); A.ws.send(lo); };
+    { int sl=in.ads?1:0; int w=wIdx(sl?A.loS:A.loP); bool ch=false;
+      if(in.tri&&!prev.tri){ A.att[sl][0]=(A.att[sl][0]+1)%nOpt(w); ch=true; } if(in.swapP&&!prev.swapP){ A.att[sl][1]=(A.att[sl][1]+1)%3; ch=true; }
+      if(in.swapN&&!prev.swapN){ A.att[sl][2]=(A.att[sl][2]+1)%3; ch=true; } if(in.fire&&!prev.fire){ A.att[sl][3]=(A.att[sl][3]+1)%3; ch=true; }
+      if(ch)A.ws.send(loJson(A)); }
     if(rt)pickWeapon(true,1); if(lf)pickWeapon(true,-1); if(up)pickWeapon(false,1); if(dn)pickWeapon(false,-1);
     if(in.reload&&!prev.reload)A.ws.send("{\"t\":\"team\",\"v\":-1}");
     if(in.confirm&&!prev.confirm&&A.myId==A.hostId)A.ws.send("{\"t\":\"start\"}");
@@ -163,10 +175,10 @@ void Game::aclRenderMenu(){
   } else if(menu==8){
     static const char*MN[5]={"المستودع","أطلال الصحراء","شارع المدينة","القاعدة القطبية","صحراء الشاص"}; snprintf(b,96,"%s",MN[A.cfgMap%5]); textC(W/2,cy+38*sc,b,sc,C_ACC);
     int y=cy+54*sc; for(auto&l:A.lobby){ bool me2=l.id==A.myId; snprintf(b,96,"%s%s%s",l.id==A.hostId?"★ ":"",cleanName(l.n,l.id,l.b).c_str(),me2?"   (أنت)":"");
-      rrect(cx+16*sc,y,cw-32*sc,15*sc,5*sc,l.tm?0xFF3B82F6:0xFFE23B3B,me2?0.55f:0.28f); text(cx+24*sc,y+4*sc,b,sc,C_TXT); y+=17*sc; if(y>cy+ch-56*sc)break; }
-    snprintf(b,96,"%s  /  %s",A.loP.c_str(),A.loS.c_str()); textC(W/2,cy+ch-44*sc,b,sm,C_TXT);
+      rrect(cx+16*sc,y,cw-32*sc,15*sc,5*sc,l.tm?0xFF3B82F6:0xFFE23B3B,me2?0.55f:0.28f); text(cx+24*sc,y+4*sc,b,sc,C_TXT); y+=17*sc; if(y>cy+ch-72*sc)break; }
+    for(int q=0;q<2;q++){ int w=wIdx(q?A.loS:A.loP); int wi=weaponIdx(q?A.loS:A.loP); snprintf(b,96,"%s: %s  |  %s  |  %s  |  %s  |  %s",q?"ثانوي":"رئيسي",WEAPONS[wi].name,optAr(w,A.att[q][0]),MUZ_AR[A.att[q][1]],UND_AR[A.att[q][2]],MAG_AR[A.att[q][3]]); textC(W/2,cy+ch-58*sc+q*10*sc,b,sm,C_TXT); }
     bool hostMe=A.myId==A.hostId; btn(cx+cw/4,cy+ch-36*sc,cw/2,18*sc,sc,hostMe?"ابدأ المباراة":"بانتظار المضيف…",hostMe,hostMe);
-    textC(W/2,cy+ch-12*sc,"D-pad: الأسلحة    Square: تبديل الفريق    O: مغادرة",sm,C_MUT);
+    textC(W/2,cy+ch-12*sc,"D-pad: سلاح  △ منظار  L1 فوهة  R1 مقبض  R2 مخزن (L2=الثانوي)  □ فريق  O: خروج",sm,C_MUT);
   }
   if(msgT>0&&menu!=6)textC(W/2,cy+ch-48*sc,msg,sc,0xFFFF6060);
 }

@@ -25,7 +25,7 @@ static float frand(){return (float)rand()/(float)RAND_MAX;}
 
 struct Ent{
   Body b; float yaw=0,pitch=0; int team=0; bool bot=true,alive=false,crouch=false,sprint=false,moving=false;
-  float reveal=0,hp=100,prot=0,respawn=0,phase=0,flash=0,cd=0,reloadT=-1,rkP=0,rkY=0;
+  float magM=1,relM=1,reveal=0,hp=100,prot=0,respawn=0,phase=0,flash=0,cd=0,reloadT=-1,rkP=0,rkY=0;
   int wpn=0,ammo=0,mags=0,kills=0,deaths=0;
   float think=0,tYaw=0,sx=0,sz=0,stuck=0,turnT=0,turnDir=1,burst=0,react=0,strafe=1,strafeT=0; int target=-1; float lastX=0,lastZ=0,lastDmgT=0; int lastHitBy=-1;
   char name[16]={0}; bool remote=false,gone=false; uint8_t spawnSeq=0; float tx=0,ty=0,tz=0,tyaw=0; int lastAmmo=0; int lastHp=100; NetInput rin{}; float lastPkt=0; int lastKills=0;
@@ -60,7 +60,9 @@ struct Game{
     matchId++; evq.clear(); score[0]=score[1]=0;over=false;t=0;tr.clear();
     for(auto&p:e)spawn(p);
   }
-  void giveWeapon(Ent&p,int wi){p.wpn=wi;p.ammo=WEAPONS[wi].mag;p.mags=WEAPONS[wi].mags;p.reloadT=-1;p.cd=0;}
+  float optZ=0; float zoomOf(const Ent&p)const{ return (optZ>0&&&p==&e[meI])?optZ:WEAPONS[p.wpn].zoom; }
+  int cap(const Ent&p)const{ return (int)(WEAPONS[p.wpn].mag*p.magM+0.5f); }
+  void giveWeapon(Ent&p,int wi){p.wpn=wi;p.magM=p.relM=1;p.ammo=WEAPONS[wi].mag;p.mags=WEAPONS[wi].mags;p.reloadT=-1;p.cd=0;}
   void spawn(Ent&p){
     const P2*sp=p.team?w.m->blue:w.m->red; int n=p.team?w.m->nbl:w.m->nr; P2 s=sp[rand()%n];
     // اختر نقطة بعيدة عن الأعداء
@@ -157,10 +159,10 @@ struct Game{
     if(i==meI&&role!=2){ p.rkP+=d.recoilV*(ads?0.6f:1.f)*1.6f; p.rkY+=(frand()-0.5f)*d.recoilH*3.f; }
   }
   bool adsHeld=false;
-  void reloadStart(Ent&p){const WeaponDef&d=WEAPONS[p.wpn]; if(p.reloadT>=0||p.ammo>=d.mag||p.mags<=0)return; p.reloadT=0; if(role==3&&&p==&e[meI])aclReload(); }
+  void reloadStart(Ent&p){const WeaponDef&d=WEAPONS[p.wpn]; if(p.reloadT>=0||p.ammo>=cap(p)||p.mags<=0)return; p.reloadT=0; if(role==3&&&p==&e[meI])aclReload(); }
   void updateWeapon(int i,float dt,bool trig){
     Ent&p=e[i]; const WeaponDef&d=WEAPONS[p.wpn]; if(p.cd>0)p.cd-=dt; if(p.flash>0)p.flash-=dt;
-    if(p.reloadT>=0){p.reloadT+=dt; if(p.reloadT>=d.reload){p.reloadT=-1;p.mags--;p.ammo=d.mag;} return;}
+    if(p.reloadT>=0){p.reloadT+=dt; if(p.reloadT>=d.reload*p.relM){p.reloadT=-1;p.mags--;p.ammo=cap(p);} return;}
     if(trig&&p.cd<=0){ if(p.ammo>0)fire(i); else reloadStart(p); }
     if(p.ammo==0&&p.mags<=0&&i!=0){p.mags=d.mags;}
   }
@@ -197,12 +199,12 @@ struct Game{
     float ox=p.b.x,oz=p.b.z; moveBody(w,p.b,vx,vz,dt,jump,false);
     float mv=hypotf(p.b.x-ox,p.b.z-oz); p.moving=mv>0.001f; p.phase+=mv*3.4f;
     if(vl>0.01f&&mv<sp*dt*0.3f){p.stuck+=dt; if(p.stuck>0.6f){p.turnT=0.8f+frand();p.turnDir=frand()<0.5f?-1.f:1.f;p.stuck=0;}} else p.stuck=0;
-    updateWeapon(i,dt,trig); if(p.ammo<=WEAPONS[p.wpn].mag/6&&!trig)reloadStart(p);
+    updateWeapon(i,dt,trig); if(p.ammo<=cap(p)/6&&!trig)reloadStart(p);
   }
   // ---- اللاعب ----
   void updatePlayer(float dt,const Input&in){
     Ent&p=e[meI]; adsHeld=in.ads;
-    float zoom=in.ads?WEAPONS[p.wpn].zoom:1.f; float sens=1.f/ (in.ads?std::max<float>(1.f,zoom*0.8f):1.f);
+    float zoom=in.ads?zoomOf(p):1.f; float sens=1.f/ (in.ads?std::max<float>(1.f,zoom*0.8f):1.f);
     p.yaw-=in.lx*dt*sens*this->sens; p.pitch+=in.ly*dt*sens*this->sens; p.yaw+=p.rkY*std::min<float>(1.f,dt*30); p.pitch+=p.rkP*std::min<float>(1.f,dt*30); p.rkP*=0.8f; p.rkY*=0.8f;
     p.pitch=std::max<float>(-1.45f,std::min<float>(1.45f,p.pitch));
     if(drive>=0){ // أثناء القيادة: العصا اليمنى للكاميرا فقط ، وتعود خلف الشاص تلقائياً
@@ -472,7 +474,7 @@ struct Game{
   }
   void render(){
     Ent&me=e[meI]; float eyeH=me.alive?(me.b.y+(me.crouch?PK.eyec:PK.eye)):me.b.y+0.6f;
-    float fov=1.3f; if(adsHeld&&me.alive){fov=1.3f/WEAPONS[me.wpn].zoom;}
+    float fov=1.3f; if(adsHeld&&me.alive){fov=1.3f/zoomOf(me);}
     Cam c{me.b.x,eyeH,me.b.z,me.yaw,me.pitch,fov};
     if(drive>=0&&me.alive){ const VH::Veh&v=vh[drive]; float cp=cosf(me.pitch),fxw=-sinf(me.yaw)*cp,fyw=sinf(me.pitch),fzw=-cosf(me.yaw)*cp; float cx0=v.x,cy0=2.2f,cz0=v.z; float D=8.f; float tw2=raycastMap(w,cx0,cy0,cz0,-fxw,-fyw,-fzw,D); D=std::min<float>(D,tw2-0.3f); D=std::max<float>(1.5f,D); c.x=cx0-fxw*D; c.y=std::max<float>(0.5f,cy0-fyw*D); c.z=cz0-fzw*D; }
     if(dn.on&&me.alive)c=Cam{dn.x,dn.y,dn.z,dn.yaw,dn.pitch,1.3f};
@@ -563,7 +565,7 @@ struct Game{
     else if(!dn.on){ int pw=124*sc,ph=19*sc,px=W/2-pw/2,py=H-ph-6*sc; rrect(px,py,pw,ph,8*sc,0xFF0B0F14,0.8f);
       text(px+pw-8*sc-tw(d.name,sm),py+ph/2-3*sc,d.name,sm,me.reloadT>=0?0xFFFFC040:0xFFFFB020);
       snprintf(b,64,"%d",me.ammo); int ax=px+12*sc; text(ax,py+ph/2-7*sc,b,sc*2,me.reloadT>=0?0xFFFFC040:0xFFFFFFFF);
-      snprintf(b,64,"/ %d",me.mags*d.mag); text(ax+tw("00",sc*2)+6*sc,py+ph/2-4*sc,b,sc,0xFF8FA0B4);
+      snprintf(b,64,"/ %d",me.mags*cap(me)); text(ax+tw("00",sc*2)+6*sc,py+ph/2-4*sc,b,sc,0xFF8FA0B4);
       { char gb[24]; snprintf(gb,24,"قنبلة x%d",gren); text(ax,py-12*sc,gb,sc,gren>0?0xFFB8E0A0:0xFF707070); }
       { char gb[48]; if(dnCd>0)snprintf(gb,48,"مسيّرة: %d ث",(int)ceilf(dnCd)); else snprintf(gb,48,"مسيّرة: D-pad ↓"); text(ax,py-24*sc,gb,sc,dnCd>0?0xFF707070:0xFF9CC8FF); }
       if(me.reloadT>=0)textC(W/2,H/2+20*sc,"جارٍ التعبئة…",sc,0xFFFFC040);
