@@ -34,13 +34,13 @@ struct Tracer{float x0,y0,z0,x1,y1,z1,t;};
 
 struct Game{
   World w; Renderer r; std::vector<Ent> e; std::vector<Tracer> tr;
-  int mapIdx=0,scoreLim=30,score[2]={0,0},nBots=6,diff=0; float sens=1.0f; bool swapTrig=false,swapL=false,swapSticks=false; float t=0,hitMark=0,dmgFlash=0; bool over=false; int winner=0; int streak=0; float hitAng=0,hitAngT=0;
+  int mapIdx=0,scoreLim=30,score[2]={0,0},nBots=6,diff=0; float sens=1.0f; bool swapTrig=false,swapL=false,swapSticks=false; float t=0,hitMark=0,dmgFlash=0; bool over=false; int winner=0; int streak=0,glCnt=2; float hitAng=0,hitAngT=0;
   float fpsShow=0; std::vector<VH::Veh> vh; int drive=-1; float lookIdle=0; bool nearVeh=false; struct Puff{float x,y,z,vy,t,sz;bool fire;}; std::vector<Puff> puffs; struct Drn{bool on=false;float x=0,y=0,z=0,yaw=0,pitch=0,vx=0,vy=0,vz=0,t=0;} dn; float dnCd=0,dnSpot=0; bool pdn=false,pfireD=false;
   struct Shell{float x,y,z,vx,vy,vz,t;}; std::vector<Shell> shells; struct Gr{float x,y,z,vx,vy,vz,t;}; std::vector<Gr> grs; int gren=2; bool pg=false; struct Spark{float x,y,z,vx,vy,vz,t;}; std::vector<Spark> sparks;
   void sparkAt(float x,float y,float z,float nx,float ny,float nz,int n){ for(int k=0;k<n&&sparks.size()<120;k++)sparks.push_back({x,y,z,-nx*1.5f+(frand()-0.5f)*3.f,-ny*1.5f+frand()*2.5f,-nz*1.5f+(frand()-0.5f)*3.f,0.22f+frand()*0.15f}); }
   int prim=0; Input prev; bool paused=false; float msgT=0; char msg[64]={0}; int shotsFeed[4]={-1,-1,-1,-1}; std::string feed[4]; float feedT[4]={};
   int netGoal=0,netSt=0,netPhase=0; const char*netWhat=""; sockaddr_in pendJoin;
-  struct ACl; ACl* ac=nullptr; void aclStart(uint32_t ip,int port); void aclStop(); void aclUpdate(float dt,const Input&in); void aclShoot(const std::string&dj); void aclReload(); void aclSwapSlot(); void aclGrenade(); void aclRender3D(); void aclRenderMenu(); void aclMenuNav(const Input&in);
+  struct ACl; ACl* ac=nullptr; void aclStart(uint32_t ip,int port); void aclStop(); void aclUpdate(float dt,const Input&in); void aclShoot(const std::string&dj); void aclReload(); void updateDrone3(float dt,const Input&in,Input&use); void aclSwapSlot(); void aclGrenade(); void aclRender3D(); void aclRenderMenu(); void aclMenuNav(const Input&in);
   int menu=1,menuSel=0,menuRow=0,mode=0; // menu: 1 رئيسية ، 2 ردهة الانضمام
   // ---- شبكة ----
   int role=0,meI=0; uint8_t matchId=0,spawnCtr=0,evtId=0,lastEvt=0; std::vector<NetEvt> evq; uint16_t netSeq=0;
@@ -218,7 +218,7 @@ struct Game{
     float vx=(mz*fxw+mx*rxw)*sp,vz=(mz*fzw+mx*rzw)*sp; float ox=p.b.x,oz=p.b.z;
     moveBody(w,p.b,vx,vz,dt,in.jump,p.crouch); float mv=hypotf(p.b.x-ox,p.b.z-oz); p.moving=mv>0.001f&&p.b.onGround; p.phase+=mv*3.4f;
     if(in.reload&&role!=2)reloadStart(p);
-    if(role==3){ if(in.tri&&!prev.tri)aclSwapSlot(); if(in.swapN&&!prev.swapN)aclGrenade(); }
+    if(role==3){ if(in.tri&&!prev.tri&&!nearVeh&&drive<0)aclSwapSlot(); if(in.swapN&&!prev.swapN&&glCnt>0){ glCnt--; aclGrenade(); } }
     else if((in.swapP&&!prev.swapP)||(in.swapN&&!prev.swapN)){ prim=(prim+(in.swapN&&!prev.swapN?1:WEAPON_COUNT-1))%WEAPON_COUNT; giveWeapon(p,prim); }
     bool trig=in.fire&&!p.sprint; if(!WEAPONS[p.wpn].autof&&prev.fire)trig=false;
     if(role!=2)updateWeapon(meI,dt,trig);
@@ -328,6 +328,11 @@ struct Game{
     if(n.flags&4)reloadStart(p); updateWeapon(i,dt,(n.flags&1)&&!p.sprint);
   }
   // ======== التحديث ========
+  void drawDroneModel(float x,float y,float z,float yaw,bool mine){
+    float hv=sinf(t*3.5f+x)*0.04f; y+=hv; r.obb(x,y,z,0.15f,0.05f,0.17f,yaw,0,0.12f,0.12f,0.14f,true,true); r.obb(x,y+0.06f,z,0.07f,0.025f,0.08f,yaw,0,0.25f,0.27f,0.3f,true,true);
+    float bl=0.6f+0.4f*sinf(t*8); r.obb(x,y-0.06f,z,0.03f,0.025f,0.03f,yaw,0,mine?0.2f*bl:1.f*bl,mine?1.f*bl:0.2f*bl,0.2f*bl,false,false);
+    for(int sx=-1;sx<=1;sx+=2)for(int sz=-1;sz<=1;sz+=2){ float o[3]; Renderer::rot(yaw,0,sx*0.19f,0,sz*0.19f,o); r.obb(x+o[0],y,z+o[2],0.02f,0.015f,0.19f,yaw+sx*sz*0.785f,0,0.2f,0.2f,0.22f,true,true);
+      Renderer::rot(yaw,0,sx*0.3f,0.05f,sz*0.3f,o); r.obb(x+o[0],y+o[1],z+o[2],0.15f,0.006f,0.15f,t*40*sx,0,0.7f,0.75f,0.8f,false,false); } }
   void landDrone(float cd){ dn.on=false; dnCd=cd; }
   void updateDrone(float dt,const Input&in,Input&use){
     Ent&me=e[meI]; if(dnCd>0)dnCd-=dt; for(auto&o:e)if(o.reveal>0)o.reveal-=dt;
