@@ -39,8 +39,11 @@ export function drawGun(eng, G, st, flash) {
   else if (a.under === 'laser') { part(0, -0.03, g.mz * 0.5, 0.02, 0.02, 0.06, C.b); part(0, -0.03, g.mz * 0.5 - 0.035, 0.008, 0.008, 0.01, [1, 0.1, 0.1], true); }
   if (flash > 0) {
     const mzz = g.mz - (a.muzzle === 'supp' ? 0.16 : 0) - 0.03, s = (st.comp ? 1.4 : 1) * (a.muzzle === 'supp' ? 0.35 : 1) * (0.07 + 0.05 * flash);
-    const m = mul(tmp(), G, trs(tmp(), 0, 0.005, mzz, 0, 0, s, s, s * 1.8));
-    eng.cubeAt(m, 1, 0.8, 0.35, true, 0.85 * flash, true);
+    const fl = (sx, sy, sz, dz, r, g2, b2, al) => eng.cubeAt(mul(tmp(), G, trs(tmp(), 0, 0.005, mzz + dz, 0, 0, sx, sy, sz)), r, g2, b2, true, al * flash, true);
+    fl(s, s, s * 2.2, 0, 1, 0.95, 0.7, 0.95);          // قلب الوميض
+    fl(s * 3.2, s * 0.35, s * 0.5, -0.01, 1, 0.75, 0.3, 0.8); // صليب أفقي
+    fl(s * 0.35, s * 3.2, s * 0.5, -0.01, 1, 0.75, 0.3, 0.8); // صليب عمودي
+    fl(s * 0.5, s * 0.5, s * 3.2, -0.12, 1, 0.6, 0.2, 0.6);   // لسان أمامي
   }
 }
 
@@ -189,6 +192,9 @@ export class Effects {
       const mx = t.o[0] + dx / L * (tl + len / 2), my = t.o[1] + dy / L * (tl + len / 2), mz = t.o[2] + dz / L * (tl + len / 2);
       const m = basis(tmp(), mx, my, mz, dx / L, dy / L, dz / L, 0.02, 0.02, len);
       eng.cubeAt(m, 1, 0.85, 0.5, true, t.muted ? 0.25 : 0.8, true);
+      eng.cubeAt(basis(tmp(), mx, my, mz, dx / L, dy / L, dz / L, 0.06, 0.06, len * 0.9), 1, 0.6, 0.2, true, t.muted ? 0.06 : 0.22, true); // هالة
+      const hx = t.o[0] + dx / L * s, hy = t.o[1] + dy / L * s, hz = t.o[2] + dz / L * s; // رأس الرصاصة
+      eng.cubeAt(basis(tmp(), hx, hy, hz, dx / L, dy / L, dz / L, 0.045, 0.045, 0.09), 1, 1, 0.85, true, t.muted ? 0.4 : 1, true);
     }
     for (const p of this.parts) {
       const f = 1 - p.age / p.life;
