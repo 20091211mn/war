@@ -430,12 +430,23 @@ struct Game{
   // ---- الرسم ----
   static void gcol(char c,float*o){ static const float T[7][3]={{.14f,.14f,.16f},{.34f,.35f,.38f},{.05f,.05f,.06f},{.42f,.27f,.13f},{.5f,.45f,.32f},{.9f,.5f,.1f},{.86f,.68f,.55f}}; int k=c=='d'?0:c=='g'?1:c=='b'?2:c=='w'?3:c=='t'?4:c=='o'?5:6; o[0]=T[k][0];o[1]=T[k][1];o[2]=T[k][2]; }
   // يرسم سلاحاً (من بيانات أندرويد) عند أصل عالمي مع دوران yaw/pitch
-  void drawGunAt(float ox,float oy,float oz,float yaw,float pitch,int wi,float flash,bool lit,float k){
-    const GunDef&g=GUNDEFS[wi];
+  struct GAtt{int optic=0,muz=0,under=0,mag=0;}; GAtt myAtt; // optic: 0 حديدي 1 نقطة 2 x2 3 x4 4 x8
+  void drawGunAt(float ox,float oy,float oz,float yaw,float pitch,int wi,float flash,bool lit,float k,const GAtt*at=nullptr){
+    const GunDef&g=GUNDEFS[wi]; GAtt a=at?*at:GAtt();
     auto part=[&](float x,float y,float z,float sx,float sy,float sz,const float*c){float o[3];Renderer::rot(yaw,pitch,x,y,z,o);r.obb(ox+o[0],oy+o[1],oz+o[2],sx*.5f,sy*.5f,sz*.5f,yaw,pitch,c[0]*k,c[1]*k,c[2]*k,true,lit);};
     for(int i=0;i<g.np;i++){float c[3];gcol(g.p[i].c,c);part(g.p[i].x,g.p[i].y,g.p[i].z,g.p[i].sx,g.p[i].sy,g.p[i].sz,c);}
-    if(g.hasMag){float c[3];gcol('b',c);part(g.mag[0],g.mag[1],g.mag[2],g.mag[3],g.mag[4],g.mag[5],c);}
-    if(flash>0){float c[3]={1,0.85f,0.4f},w2[3]={1,1,0.85f};float sz=0.06f+0.05f*flash; float zz=g.mz-0.03f;
+    float cb[3],cd[3]; gcol('b',cb); gcol('d',cd);
+    if(g.hasMag){ float kk=a.mag==1?1.4f:1.f; float c[3]; if(a.mag==2){c[0]=0.9f;c[1]=0.5f;c[2]=0.1f;} else gcol('b',c); part(g.mag[0],g.mag[1]-(kk-1)*g.mag[4]*0.5f,g.mag[2],g.mag[3],g.mag[4]*kk,g.mag[5],c); }
+    if(a.optic>0){ static const float OP[5][4]={{0,0,0,0},{0.03f,0.035f,0.05f,0.075f},{0.034f,0.034f,0.12f,0.08f},{0.04f,0.04f,0.18f,0.085f},{0.045f,0.045f,0.24f,0.09f}}; const float*o=OP[a.optic]; float zc=-0.04f,top=o[3];
+      part(0,0.044f,zc,0.024f,0.014f,o[2]*0.6f+0.04f,cb);
+      if(a.optic==1){ float gl[3]={0.5f,0.8f,1}, rd[3]={1,0.1f,0.1f}; part(0,top-0.02f,zc,0.034f,0.04f,0.05f,cb); part(0,top-0.02f,zc-0.026f,0.026f,0.028f,0.004f,gl); part(0,top-0.018f,zc-0.028f,0.006f,0.006f,0.003f,rd); }
+      else { float R=o[0],L=o[2],cy=top-R/2-0.004f; float gl[3]={0.3f,0.55f,0.9f}; part(0,cy,zc,R,R,L,cb); part(0,cy,zc-L/2-0.012f,R*1.35f,R*1.35f,0.03f,cd); part(0,cy,zc+L/2+0.01f,R*1.2f,R*1.2f,0.025f,cd); part(0,cy,zc-L/2-0.028f,R*1.05f,R*1.05f,0.004f,gl); } }
+    float mzOff=0;
+    if(a.muz==1){ part(0,0.005f,g.mz-0.07f,0.036f,0.036f,0.2f,cb); for(int q=0;q<4;q++)part(0,0.005f,g.mz-0.01f-q*0.045f,0.04f,0.04f,0.006f,cd); mzOff=-0.16f; }
+    else if(a.muz==2){ part(0,0.005f,g.mz-0.01f,0.036f,0.036f,0.06f,cd); part(0.019f,0.005f,g.mz-0.01f,0.004f,0.02f,0.03f,cb); part(-0.019f,0.005f,g.mz-0.01f,0.004f,0.02f,0.03f,cb); part(0,0.021f,g.mz-0.01f,0.02f,0.004f,0.03f,cb); }
+    if(a.under==1){ part(0,-0.075f,g.mz*0.5f-0.02f,0.028f,0.09f,0.03f,cd); part(0,-0.032f,g.mz*0.5f-0.02f,0.04f,0.012f,0.05f,cb); part(0,-0.118f,g.mz*0.5f-0.02f,0.032f,0.01f,0.034f,cb); }
+    else if(a.under==2){ float rd[3]={1,0.1f,0.1f}; part(0.03f,-0.015f,g.mz*0.5f,0.022f,0.026f,0.07f,cb); part(0.03f,-0.015f,g.mz*0.5f-0.04f,0.012f,0.012f,0.012f,rd); }
+    if(flash>0){float c[3]={1,0.85f,0.4f},w2[3]={1,1,0.85f};float sz=(a.muz==1?0.35f:1.f)*(0.06f+0.05f*flash); float zz=g.mz+mzOff-0.03f;
       part(0,0.005f,zz,sz,sz,sz*2.2f,w2); part(0,0.005f,zz-0.01f,sz*3.2f,sz*0.35f,sz*0.5f,c); part(0,0.005f,zz-0.01f,sz*0.35f,sz*3.2f,sz*0.5f,c); part(0,0.005f,zz-0.12f,sz*0.5f,sz*0.5f,sz*3.f,c);}
   }
   void drawAvatar(const Ent&a,float camDist){
@@ -498,11 +509,11 @@ struct Game{
     // مجسّم السلاح (نفس قطع نسخة أندرويد)
     if(me.alive&&drive<0&&!dn.on){ r.flush(); r.zBias=1000.f; const GunDef&g=GUNDEFS[me.wpn]; float k=adsHeld?1.f:0.f; float top=g.sy;
       static float bob=0; bob+=me.moving?(me.sprint?0.17f:0.11f):0; float bx=sinf(bob)*0.008f*(me.moving?1:0),by=fabsf(cosf(bob))*0.008f*(me.moving?1:0);
-      float x=0.17f*(1-k)+0*k+bx,y=-0.17f*(1-k)+(-top-0.002f)*k+by,z=-0.33f*(1-k)-0.36f*k; float kick=me.flash>0?0.045f:0.f; z+=kick; float rx=kick*1.2f,ry=0.f;
+      float x=0.17f*(1-k)+0*k+bx,y=-0.17f*(1-k)+(-top-0.002f)*k+by,z=-0.33f*(1-k)-0.36f*k; float kick=me.flash>0?0.045f:0.f; z+=kick; float rx=kick*1.2f,ry=0.07f*(1-k); y+=sinf(t*1.7f)*0.0025f*(1-k*0.7f); x+=sinf(t*0.9f)*0.0015f;
       if(me.reloadT>=0){float sn=sinf(me.reloadT/WEAPONS[me.wpn].reload*3.14159f);y-=sn*0.13f;rx-=sn*0.5f;x+=sn*0.03f;}
       if(me.sprint){y-=0.06f;rx-=0.35f;ry=0.4f;x-=0.04f;}
       float O[3];Renderer::rot(me.yaw,me.pitch,x,y,z,O); float gy=me.yaw+ry,gp=me.pitch+rx; float ox=c.x+O[0],oy=c.y+O[1],oz=c.z+O[2];
-      drawGunAt(ox,oy,oz,gy,gp,me.wpn,me.flash>0?std::min<float>(1.f,me.flash*16.f):0.f,false,0.95f);
+      drawGunAt(ox,oy,oz,gy,gp,me.wpn,me.flash>0?std::min<float>(1.f,me.flash*16.f):0.f,false,0.95f,role==3?&myAtt:nullptr);
       float sl[3]={me.team?0.08f:0.5f,me.team?0.2f:0.08f,me.team?0.55f:0.08f},sk[3]={.86f,.68f,.55f};
       auto hp=[&](float px,float py,float pz,float sx,float sy,float sz,const float*cc){float o[3];Renderer::rot(gy,gp,px,py,pz,o);r.obb(ox+o[0],oy+o[1],oz+o[2],sx*.5f,sy*.5f,sz*.5f,gy,gp,cc[0]*0.95f,cc[1]*0.95f,cc[2]*0.95f,false,false);};
       float gz=(me.wpn>=6)?0.04f:0.06f; hp(0,-0.075f,gz,.05f,.05f,.06f,sk); hp(0.015f,-0.12f,gz+0.12f,.065f,.06f,.28f,sl);
