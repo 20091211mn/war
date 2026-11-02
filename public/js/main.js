@@ -28,7 +28,7 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('wz_' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem('wz_' + k, JSON.stringify(v)); } catch { /* */ } },
 };
-const settings = { name: store.get('name', ''), quality: store.get('quality', (navigator.hardwareConcurrency || 4) <= 4 || /Android|iPhone|iPad/i.test(navigator.userAgent) ? 0.6 : 0.8), sens: store.get('sens', 5), vol: store.get('vol', 0.7), fov: store.get('fov', 76), xcol: store.get('xcol', '#ffffff'), showfps: store.get('showfps', 1), vib: store.get('vib', 1), lo: sanitizeLoadout(store.get('lo', null)) };
+const settings = { name: store.get('name', ''), quality: store.get('quality', (navigator.hardwareConcurrency || 4) <= 4 || /Android|iPhone|iPad/i.test(navigator.userAgent) ? 0.6 : 0.8), sens: store.get('sens', 5), vol: store.get('vol', 0.7), fov: store.get('fov', 76), xcol: store.get('xcol', '#ffffff'), showfps: store.get('showfps', 1), fpscap: store.get('fpscap', 0), vib: store.get('vib', 1), lo: sanitizeLoadout(store.get('lo', null)) };
 
 // ---------- الحالة ----------
 const prof = Object.assign({ xp: 0, kills: 0, deaths: 0, heads: 0, matches: 0, wins: 0 }, store.get('prof', {}));
@@ -57,7 +57,7 @@ const me = {
 };
 // حالة المركبة التي أقودها (المحاكاة محلية، والخادم يتحقق)
 const LV = { x: 0, z: 0, h: 0, vx: 0, vz: 0, steer: 0, tires: 0, speed: 0, dyn: null, cr: 0, lastSend: 0, skidAt: 0 };
-let eng = null, fx = new Effects(), lastT = 0, lastSend = 0, lastPing = 0, lastRadar = 0, emaDt = 0.016, slowCount = 0;
+let eng = null, fx = new Effects(), lastT = 0, lastSend = 0, lastPing = 0, lastRadar = 0, emaDt = 0.016, lastRender = 0;
 
 // ---------- الشاشات ----------
 const SCREENS = ['join', 'menu', 'lobby', 'loadout', 'pause', 'settings', 'end', 'err'];
@@ -333,7 +333,7 @@ function pickDeadWeapon(i) {
 
 // ---------- القائمة ----------
 let setReturn = 'menu';
-function openSettings(from) { setReturn = from; $('fov').value = settings.fov; $('fovv').textContent = settings.fov; $('xcol').value = settings.xcol; $('showfps').value = String(settings.showfps); $('vib').value = String(settings.vib); show('settings'); }
+function openSettings(from) { setReturn = from; $('fov').value = settings.fov; $('fovv').textContent = settings.fov; $('xcol').value = settings.xcol; $('showfps').value = String(settings.showfps); $('fpscap').value = String(settings.fpscap); $('vib').value = String(settings.vib); show('settings'); }
 function applySettings() {
   document.documentElement.style.setProperty('--xc', settings.xcol);
   input.sensMouse = 0.0007 * (settings.sens + 1) * 0.8 + 0.0008;
@@ -366,6 +366,7 @@ function bindUI() {
   $('fov').oninput = (e) => { settings.fov = Number(e.target.value); $('fovv').textContent = settings.fov; store.set('fov', settings.fov); };
   $('xcol').onchange = (e) => { settings.xcol = e.target.value; store.set('xcol', settings.xcol); applySettings(); };
   $('showfps').onchange = (e) => { settings.showfps = Number(e.target.value); store.set('showfps', settings.showfps); };
+  $('fpscap').onchange = (e) => { settings.fpscap = Number(e.target.value); store.set('fpscap', settings.fpscap); };
   $('vib').onchange = (e) => { settings.vib = Number(e.target.value); store.set('vib', settings.vib); };
   $('btnRestart').onclick = () => { send({ t: 'restart', map: Number($('pauseMap').value) }); S.paused = false; hideScreens(); };
   $('btnBack').onclick = () => { if (S.hostId === S.id) { send({ t: 'back' }); S.paused = false; } else leaveSession(); };
@@ -1119,10 +1120,11 @@ function radar() {
 function frame(ts) {
   requestAnimationFrame(frame);
   if (!eng || eng.lost) return;
+  if (settings.fpscap > 0 && ts - lastRender < 1000 / settings.fpscap - 2) return;
+  lastRender = ts;
   const dt = Math.min(0.05, (ts - lastT) / 1000 || 0.016); lastT = ts;
   emaDt = emaDt * 0.95 + dt * 0.05;
   if (!S.inGame) return;
-  if (emaDt > 0.036) { if (++slowCount > 60 && settings.quality > 0.4) { settings.quality = Math.round((settings.quality - 0.1) * 10) / 10; eng.resize(settings.quality); slowCount = 0; toast('تم خفض الجودة لتحسين الأداء'); } } else slowCount = Math.max(0, slowCount - 2);
   const now = nowMs();
   if (now - lastPing > 2000) { lastPing = now; send({ t: 'ping', c: now }); }
   try { update(dt, now); updateRemotes(dt, now); render(dt, now); } catch (e) { console.error(e); try { window.__dbg && window.__dbg('frame: ' + (e && e.stack ? String(e.stack).slice(0, 300) : e)); } catch { /* */ } if (!frame.err) { frame.err = true; toast('خطأ: ' + (e.message || e), 6000); } }

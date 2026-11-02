@@ -36,6 +36,24 @@ public class MainActivity extends BridgeActivity {
             wv.setHapticFeedbackEnabled(false);
         } catch (Exception ignored) { }
         hideSystemUi();
+        maxRefreshRate();
+    }
+
+    // يطلب أعلى معدل تحديث تدعمه الشاشة (90/120Hz) لإطارات أسلس
+    private void maxRefreshRate() {
+        try {
+            if (Build.VERSION.SDK_INT >= 23) {
+                android.view.Display d = getWindowManager().getDefaultDisplay();
+                android.view.Display.Mode best = d.getMode();
+                for (android.view.Display.Mode m : d.getSupportedModes()) {
+                    if (m.getPhysicalWidth() == best.getPhysicalWidth() && m.getPhysicalHeight() == best.getPhysicalHeight() && m.getRefreshRate() > best.getRefreshRate()) best = m;
+                }
+                WindowManager.LayoutParams lp = getWindow().getAttributes();
+                lp.preferredDisplayModeId = best.getModeId();
+                if (Build.VERSION.SDK_INT >= 30) lp.preferredRefreshRate = best.getRefreshRate();
+                getWindow().setAttributes(lp);
+            }
+        } catch (Exception ignored) { }
     }
 
     @Override
