@@ -8,7 +8,7 @@ struct Game::ACl{
   struct LP{int id=0;std::string n;int tm=0,b=0;std::string p,s;}; std::vector<LP> lobby;
   std::map<int,int> idx; std::string loP="carbine",loS="pistol"; int slot=0; int slotAm[2][2]={{-1,0},{-1,0}};
   struct Gr{float x,y,z;}; std::vector<Gr> gr; struct Vh{float x,z,h;int hp,fl;}; std::vector<Vh> vs;
-  bool inMatch=false; int lastEvtCnt=0;
+  bool inMatch=false; int lastEvtCnt=0; int seat=-1; float vT=0,crMax=0; bool pu=false;
 };
 static int weaponIdx(const std::string&id){ for(int i=0;i<WEAPON_COUNT;i++)if(id==WEAPONS[i].id)return i; return 0; }
 static std::string cleanName(const std::string&n,int id,bool bot){ bool ok=!n.empty(); for(unsigned char c:n)if(c<32||c>126)ok=false; if(ok)return n.substr(0,12); char b[16]; snprintf(b,16,"%s%d",bot?"BOT":"P",id); return b; }
@@ -28,9 +28,6 @@ void Game::aclSwapSlot(){
 }
 void Game::aclRender3D(){
   if(!ac)return;
-  for(auto&v:ac->vs){ if(v.fl&2){ r.obb(v.x,0.4f,v.z,1.0f,0.4f,2.5f,v.h,0,0.1f,0.1f,0.1f); continue; }
-    r.obb(v.x,0.7f,v.z,1.0f,0.4f,2.5f,v.h,0,0.35f,0.4f,0.25f); float o[3]; Renderer::rot(v.h,0,0,1.5f,-0.1f,o); r.obb(v.x+o[0],o[1],v.z+o[2],0.95f,0.45f,0.55f,v.h,0,0.3f,0.35f,0.22f);
-    for(int sx=-1;sx<=1;sx+=2)for(int sz=-1;sz<=1;sz+=2){ Renderer::rot(v.h,0,sx*1.0f,0.35f,sz*1.55f,o); r.obb(v.x+o[0],o[1],v.z+o[2],0.12f,0.35f,0.35f,v.h,0,0.05f,0.05f,0.05f); } }
   for(auto&g:ac->gr)r.obb(g.x,g.y,g.z,0.09f,0.09f,0.09f,0,0,0.2f,0.25f,0.15f);
 }
 // ---------- معالجة الرسائل ----------
@@ -78,7 +75,7 @@ void Game::aclUpdate(float dt,const Input&in){
     if(t=="welcome"){ A.myId=m["id"].i(); A.welcomed=true; std::string lo="{\"t\":\"hello\",\"n\":\"PS4\",\"lo\":{\"p\":\""+A.loP+"\",\"s\":\""+A.loS+"\",\"a\":[{\"optic\":\"iron\",\"muzzle\":\"none\",\"under\":\"none\",\"mag\":\"std\"},{\"optic\":\"iron\",\"muzzle\":\"none\",\"under\":\"none\",\"mag\":\"std\"}]}}"; A.ws.send(lo); }
     else if(t=="full"){ say("HOST IS FULL"); msgT=5; aclStop(); return; }
     else if(t=="lobby"){ lobbyApply(*this,m); if(A.phase=="lobby"&&menu==0&&A.inMatch){ /* انتهت المباراة والغرفة عادت */ } }
-    else if(t=="start"){ A.inMatch=true; mapIdx=m["map"].i()%MAP_COUNT; w.load(mapIdx); e.clear(); A.idx.clear(); A.vs.clear(); A.gr.clear(); over=false; score[0]=score[1]=0; tr.clear(); evq.clear(); menu=0; A.phase="playing"; g_aclTime=m["tl"].i();
+    else if(t=="start"){ A.inMatch=true; mapIdx=m["map"].i()%MAP_COUNT; w.load(mapIdx); e.clear(); A.idx.clear(); A.vs.clear(); vh.clear(); drive=-1; A.seat=-1; A.gr.clear(); over=false; score[0]=score[1]=0; tr.clear(); evq.clear(); menu=0; A.phase="playing"; g_aclTime=m["tl"].i();
       for(auto&l:A.lobby){ int k=entFor(*this,l.id); e[k].team=l.tm?1:0; snprintf(e[k].name,16,"%s",l.id==A.myId?"YOU":cleanName(l.n,l.id,l.b).c_str()); } meI=entFor(*this,A.myId); }
     else if(t=="tolobby"){ A.inMatch=false; A.phase="lobby"; menu=8; over=false; e.clear(); A.idx.clear(); }
     else if(t=="spawn"&&A.inMatch){ int id=m["id"].i(); int k=entFor(*this,id); Ent&p=e[k]; p.b.x=m["x"].num();p.b.y=m["y"].num();p.b.z=m["z"].num();p.b.vy=0;p.b.onGround=true; p.yaw=m["yaw"].num(); p.tx=p.b.x;p.ty=p.b.y;p.tz=p.b.z;p.tyaw=p.yaw; p.team=m["tm"].i()?1:0; p.alive=true;p.hp=100;p.prot=2;p.gone=false;p.crouch=false;
@@ -92,7 +89,14 @@ void Game::aclUpdate(float dt,const Input&in){
         else { bool first=!p.alive&&al; p.alive=al; p.hp=(float)q[7].i(); p.tx=q[1].num();p.ty=q[2].num();p.tz=q[3].num();p.tyaw=q[4].num(); p.pitch=q[5].num(); p.crouch=f&1; p.moving=f&8; p.sprint=f&32; p.phase+=p.moving?dt*8:0; if(first){p.b.x=p.tx;p.b.y=p.ty;p.b.z=p.tz;p.yaw=p.tyaw;} }
       }
       A.gr.clear(); for(size_t i=0;i<m["gr"].size();i++){ const J&g=m["gr"][i]; A.gr.push_back({(float)g[1].num(),(float)g[2].num(),(float)g[3].num()}); }
-      A.vs.clear(); for(size_t i=0;i<m["vs"].size();i++){ const J&v=m["vs"][i]; A.vs.push_back({(float)v[1].num(),(float)v[2].num(),(float)v[3].num(),v[7].i(),v[8].i()}); } }
+      { size_t nv=m["vs"].size(); if(vh.size()!=nv){ vh.clear(); drive=-1; A.seat=-1; for(size_t i=0;i<nv;i++){ const J&v=m["vs"][i]; VH::Veh o; o.x=o.tx=o.sx=(float)v[1].num(); o.z=o.tz=o.sz=(float)v[2].num(); o.h=o.th=o.sh=(float)v[3].num(); vh.push_back(o); } }
+        for(size_t i=0;i<nv&&i<vh.size();i++){ const J&v=m["vs"][i]; VH::Veh&o=vh[i]; bool dd=v[8].i()&2; if(dd&&!o.dead)puffsBoom(o.x,o.z); if(!dd&&o.dead){ o.x=o.tx=(float)v[1].num(); o.z=o.tz=(float)v[2].num(); o.h=o.th=(float)v[3].num(); }
+          o.dead=dd; o.burn=v[8].i()&1; o.hp=(float)v[7].i(); o.driver=-1; o.tires=v[6].i(); for(int q=0;q<4;q++)o.tireHp[q]=(o.tires>>q&1)?0.f:30.f;
+          if((int)i!=drive){ o.tx=(float)v[1].num(); o.tz=(float)v[2].num(); o.th=(float)v[3].num(); o.speed=(float)v[4].num(); o.steer=(float)v[5].num(); if(v[9].i()>0)o.driver=0; } else o.driver=meI; } } }
+    else if(t=="seat"){ int vi=m["v"].i(),sn=m["s"].i(); A.epoch=m["e"].i(); if(vi>=0&&vi<(int)vh.size()){ drive=vi; A.seat=sn; vh[vi].driver=meI; if(meI<(int)e.size()){ e[meI].crouch=false; e[meI].reloadT=-1; e[meI].pitch=-0.18f; } lookIdle=0; } }
+    else if(t=="exit"){ A.epoch=m["e"].i(); if(drive>=0&&drive<(int)vh.size())vh[drive].driver=-1; drive=-1; A.seat=-1; if(meI<(int)e.size()){ Ent&p=e[meI]; p.b=Body(); p.b.x=(float)m["x"].num(); p.b.y=(float)m["y"].num(); p.b.z=(float)m["z"].num(); p.pitch=0; } }
+    else if(t=="vfix"){ if(drive>=0&&drive<(int)vh.size()){ VH::Veh&o=vh[drive]; o.x=(float)m["x"].num(); o.z=(float)m["z"].num(); o.h=(float)m["h"].num(); o.vx=(float)m["vx"].num(); o.vz=(float)m["vz"].num(); } }
+    else if(t=="vboom"){ int vi=m["v"].i(); if(vi>=0&&vi<(int)vh.size()){ vh[vi].dead=true; } puffsBoom((float)m["x"].num(),(float)m["z"].num()); if(vi==drive){ drive=-1; A.seat=-1; } }
     else if(t=="hit"){ int v=m["v"].i(),a=m["a"].i(); if(v==A.myId)dmgFlash=0.5f; if(a==A.myId&&v!=A.myId)hitMark=0.25f; }
     else if(t=="kill"&&A.inMatch){ int k=m["k"].i(),v=m["v"].i(); auto ik=A.idx.find(k),iv=A.idx.find(v); if(ik!=A.idx.end()&&iv!=A.idx.end()){ char b[64]; snprintf(b,64,"%s > %s%s",e[ik->second].name,e[iv->second].name,m["h"].i()?" HS":""); addFeed(b); if(k==A.myId)e[ik->second].kills++; } if(iv!=A.idx.end()){ e[iv->second].alive=false; if(v==A.myId){ e[iv->second].respawn=3; } } }
     else if(t=="shot"&&A.inMatch){ int id=m["id"].i(); auto it=A.idx.find(id); if(it!=A.idx.end()){ e[it->second].flash=0.06f; } float ox=m["o"][0].num(),oy=m["o"][1].num(),oz=m["o"][2].num(); for(size_t i=0;i<m["e"].size()&&i<6;i++){ const J&q=m["e"][i]; if(tr.size()<64)tr.push_back({ox,oy-0.1f,oz,(float)q[0].num(),(float)q[1].num(),(float)q[2].num(),0.09f}); } }
@@ -121,6 +125,16 @@ void Game::aclUpdate(float dt,const Input&in){
   Ent&me=e[meI]; if(me.prot>0)me.prot-=dt;
   for(int i=0;i<(int)e.size();i++){ Ent&p=e[i]; if(i==meI){ if(p.alive&&!over)updatePlayer(dt,use); continue; } if(p.gone)continue;
     float k=std::min<float>(1.f,dt*16.f); p.b.x+=(p.tx-p.b.x)*k;p.b.y+=(p.ty-p.b.y)*k;p.b.z+=(p.tz-p.b.z)*k; float dy=p.tyaw-p.yaw; while(dy>3.14159f)dy-=6.28318f; while(dy<-3.14159f)dy+=6.28318f; p.yaw+=dy*k; if(p.flash>0)p.flash-=dt; if(p.moving)p.phase+=dt*7; }
+  // ---- الشاص (ملتزم ببروتوكول الخادم: use / v / seat / exit) ----
+  { bool u=in.use&&!paused; if(u&&!A.pu&&me.alive&&!over)A.ws.send("{\"t\":\"use\"}"); A.pu=u;
+    for(int k=0;k<(int)vh.size();k++){ VH::Veh&v=vh[k]; if(k==drive)continue; float a=std::min<float>(1.f,dt*14.f); v.x+=(v.tx-v.x)*a; v.z+=(v.tz-v.z)*a; float dh=v.th-v.h; while(dh>3.14159f)dh-=6.28318f; while(dh<-3.14159f)dh+=6.28318f; v.h+=dh*a;
+      if(v.burn&&!v.dead){ v.smoke-=dt; if(v.smoke<=0){ v.smoke=0.12f; puffs.push_back({v.x+(frand()-0.5f),1.3f,v.z+(frand()-0.5f),1.6f,0.9f,0.5f,frand()<0.3f}); } } }
+    for(auto&q:puffs){ q.t-=dt; q.y+=q.vy*dt; q.sz+=dt*0.8f; } puffs.erase(std::remove_if(puffs.begin(),puffs.end(),[](Puff&q){return q.t<=0;}),puffs.end());
+    if(drive>=0&&(!me.alive||drive>=(int)vh.size()||vh[drive].dead)){ if(drive<(int)vh.size())vh[drive].driver=-1; drive=-1; A.seat=-1; }
+    if(drive>=0){ VH::Veh&v=vh[drive];
+      if(A.seat==0){ float thr=std::max<float>(-1.f,std::min<float>(1.f,use.my+(use.fire?1.f:0.f)-(use.ads?1.f:0.f))); float crash=VH::step(w,v,vh,thr,use.mx,use.jump,dt); if(crash>A.crMax)A.crMax=crash; if(crash>VH::CRASHMIN)dmgFlash=std::max<float>(dmgFlash,0.15f); }
+      static const float ST[5][3]={{-0.45f,0.35f,-0.25f},{0.45f,0.35f,-0.25f},{-0.55f,0.85f,1.2f},{0.55f,0.85f,1.2f},{0,0.85f,1.9f}}; int sn=std::max(0,std::min(4,A.seat)); float sx,sz; VH::l2w(v,ST[sn][0],ST[sn][2],sx,sz); me.b.x=sx;me.b.z=sz;me.b.y=ST[sn][1];me.b.vy=0;me.moving=false;
+      A.vT+=dt; if(A.seat==0&&A.vT>=0.05f){ A.vT=0; char b[200]; snprintf(b,200,"{\"t\":\"v\",\"e\":%d,\"x\":%.2f,\"z\":%.2f,\"h\":%.3f,\"vx\":%.2f,\"vz\":%.2f,\"s\":%.3f,\"sp\":%.2f,\"cr\":%.2f}",A.epoch,v.x,v.z,v.h,v.vx,v.vz,v.steer,v.speed,A.crMax); A.ws.send(b); A.crMax=0; } } }
   A.stT+=dt; if(A.stT>=0.05f){ A.stT=0; if(me.alive){ int f=(me.crouch?1:0)|(use.ads?2:0)|(me.moving?4:0)|(me.sprint?8:0); char b[260]; snprintf(b,260,"{\"t\":\"st\",\"e\":%d,\"x\":%.2f,\"y\":%.2f,\"z\":%.2f,\"yaw\":%.3f,\"pitch\":%.3f,\"f\":%d,\"w\":%d}",A.epoch,me.b.x,me.b.y,me.b.z,me.yaw,me.pitch,f,A.slot); A.ws.send(b); } }
   // عودة المباراة: المضيف يضغط X ... (الخادم يتولى الإعادة)
   prev=in;

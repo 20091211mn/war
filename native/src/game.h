@@ -18,7 +18,7 @@ struct Input{
   bool tri=false;
   float mx=0,my=0;      // حركة: x يمين، y أمام
   float lx=0,ly=0;      // نظر: x يمين، y أعلى (معدّل)
-  bool fire=false,ads=false,jump=false,crouch=false,reload=false,sprint=false,swapP=false,swapN=false,grenade=false,drone=false,start=false,confirm=false,back=false;
+  bool fire=false,ads=false,jump=false,crouch=false,reload=false,sprint=false,swapP=false,swapN=false,grenade=false,drone=false,use=false,start=false,confirm=false,back=false;
 };
 
 static float frand(){return (float)rand()/(float)RAND_MAX;}
