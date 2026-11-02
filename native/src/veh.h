@@ -4,7 +4,7 @@
 #include "render.h"
 namespace VH{
 static const float HP=450,L=3.0f,HW=1.0f,MAXFWD=26,MAXREV=7,ACCEL=7.5f,BRAKE=16,MAXSTEER=0.52f,TIREHP=30,CRASHMIN=4;
-struct Veh{ float x=0,z=0,h=0,vx=0,vz=0,steer=0,speed=0,hp=HP,tireHp[4]={30,30,30,30}; int tires=0,driver=-1,team=-1; bool dead=false,burn=false; float respawnT=0,sx=0,sz=0,sh=0,smoke=0,crashT=0; };
+struct Veh{ float x=0,z=0,h=0,vx=0,vz=0,steer=0,speed=0,hp=HP,tireHp[4]={30,30,30,30}; int tires=0,driver=-1,team=-1; bool dead=false,burn=false; float respawnT=0,sx=0,sz=0,sh=0,smoke=0,crashT=0,tx=0,tz=0,th=0; };
 static inline void l2w(const Veh&v,float lx,float lz,float&ox,float&oz){ float c=cosf(v.h),s=sinf(v.h); ox=v.x+c*lx+s*lz; oz=v.z-s*lx+c*lz; }
 static inline void w2l(const Veh&v,float wx,float wz,float&lx,float&lz){ float c=cosf(v.h),s=sinf(v.h),dx=wx-v.x,dz=wz-v.z; lx=c*dx-s*dz; lz=s*dx+c*dz; }
 static inline int tiresBlown(int m){ return (m&1)+((m>>1)&1)+((m>>2)&1)+((m>>3)&1); }
