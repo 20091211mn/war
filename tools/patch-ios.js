@@ -21,5 +21,5 @@ pb('Delete :NSAppTransportSecurity'); pb('Add :NSAppTransportSecurity dict'); pb
 pb('Delete :NSLocalNetworkUsageDescription'); pb('Add :NSLocalNetworkUsageDescription string للاتصال بلاعبين على نفس الشبكة');
 // أيقونة (1024 مربعة بلا شفافية)
 const icon = path.join(app, 'Assets.xcassets', 'AppIcon.appiconset', 'AppIcon-512@2x.png');
-try { execSync(`convert "${path.join(root, 'public', 'icon-512.png')}" -resize 1024x1024 -background black -alpha remove -alpha off "${icon}"`); } catch { try { fs.copyFileSync(path.join(root, 'public', 'icon-512.png'), icon); } catch { /* */ } }
+try { const tmp = path.join(root, 'icon-tmp.jpg'); const src = path.join(root, 'public', 'icon-512.png'); execSync(`sips -z 1024 1024 -s format jpeg "${src}" --out "${tmp}" && sips -s format png "${tmp}" --out "${icon}"`, { stdio: 'pipe' }); fs.rmSync(tmp, { force: true }); } catch { try { execSync(`convert "${path.join(root, 'public', 'icon-512.png')}" -resize 1024x1024 -background black -alpha remove -alpha off "${icon}"`); } catch { try { fs.copyFileSync(path.join(root, 'public', 'icon-512.png'), icon); } catch { /* */ } } }
 console.log('تم تعديل مشروع iOS');
