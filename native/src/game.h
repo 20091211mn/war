@@ -547,6 +547,10 @@ struct Game{
       float gz=(me.wpn>=6)?0.04f:0.06f; hp(0,-0.075f,gz,.05f,.05f,.06f,sk); hp(0.015f,-0.12f,gz+0.12f,.065f,.06f,.28f,sl);
       if(me.wpn<6){hp(-0.005f,-0.05f,g.mz*0.42f,.055f,.05f,.07f,sk);hp(-0.03f,-0.09f,g.mz*0.42f+0.2f,.06f,.055f,.3f,sl);} else hp(-0.03f,-0.075f,gz+0.01f,.05f,.05f,.06f,sk);
     }
+    if(adsHeld&&me.alive&&drive<0&&!dn.on&&zoomOf(me)>=3.4f){ // عدسة المنظار (مثل نسخة الأندرويد): أسود خارج دائرة + شعرة تصويب
+      r.flush(); int Hh=r.H,Ww=r.W,rad=(int)(Hh*0.33f),cx=Ww/2,cy=Hh/2;
+      for(int y=0;y<Hh;y+=1){ int dy=y-cy; int half=std::abs(dy)>=rad?0:(int)sqrtf((float)(rad*rad-dy*dy)); blendSpan(y,0,cx-half,0xFF000000,1.f); blendSpan(y,cx+half,Ww,0xFF000000,1.f); }
+      rect(cx-rad,cy,rad*2,1,0xFF000000,0.9f); rect(cx,cy-rad,1,rad*2,0xFF000000,0.9f); }
     hud();
   }
   // ---- واجهة ----
