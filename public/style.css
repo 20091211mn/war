@@ -316,3 +316,53 @@ body.touch #stat{position:absolute;left:var(--el);bottom:max(4px,var(--sb));top:
 #supp{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 35%,rgba(0,0,0,.55) 75%,rgba(0,0,0,.9) 100%);backdrop-filter:blur(1.5px);-webkit-backdrop-filter:blur(1.5px)}
 
 #vhud .cbar{margin-top:6px;height:6px}#vcan{display:block;height:100%;width:100%;background:linear-gradient(90deg,#c0392b,#f1c40f)}
+
+/* ===== UI v2: القائمة الرئيسية، الغرفة، العتاد ===== */
+#menu{background:
+  radial-gradient(ellipse at 15% 20%,rgba(226,59,59,.28) 0,transparent 55%),
+  radial-gradient(ellipse at 85% 80%,rgba(59,130,246,.28) 0,transparent 55%),
+  linear-gradient(160deg,#0a0e14,#101826 60%,#0a0e14)}
+#menu:before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(115deg,transparent 0 46px,rgba(255,255,255,.025) 46px 47px);pointer-events:none}
+#menu .card{position:relative;border:1px solid rgba(255,255,255,.1);border-radius:20px;backdrop-filter:blur(6px)}
+#menu h1{font-size:46px;font-weight:900;letter-spacing:.3em;margin:0;text-align:center;text-shadow:0 0 30px rgba(255,176,32,.25);
+  background:linear-gradient(90deg,#ff6a5a 0,#fff 45%,#6aa8ff 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+#menu .sub{text-align:center;color:var(--mut);margin:0;letter-spacing:.04em}
+#menu #prof{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+#menu .prog{height:8px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
+#menu .prog i{display:block;height:100%;background:linear-gradient(90deg,#ffb020,#ff6a3c);border-radius:99px}
+#menu button.big{display:flex;align-items:center;gap:12px;justify-content:flex-start;text-align:start;border-radius:14px;padding:14px 16px;
+  background:linear-gradient(135deg,rgba(255,255,255,.06),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.1);position:relative;overflow:hidden}
+#menu button.big:before{content:"";position:absolute;inset-block:0;inset-inline-start:0;width:4px;background:var(--mut)}
+#menu #btnHost:before{background:var(--blue)}#menu #btnJoin:before{background:#3ddc97}#menu #btnMenuSet:before{background:var(--mut)}
+#menu #btnSolo{background:linear-gradient(135deg,#ffb020,#ff7a1a);color:#1a1100;border:0;font-weight:800;box-shadow:0 8px 24px rgba(255,140,20,.35)}
+#menu #btnSolo:before{background:#fff}
+#menu button.big:hover{filter:brightness(1.12);transform:translateY(-1px)}
+#menu button.big:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+#lobby{background:radial-gradient(ellipse at 50% 0,#17222f 0,#090d12 70%)}
+#lobby .top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:rgba(20,27,36,.85);border:1px solid var(--line);border-radius:14px;padding:10px 14px}
+#lobby .top b{font-size:18px}
+#lobby #btnStart{padding:10px 22px;font-size:16px;box-shadow:0 6px 20px rgba(255,140,20,.3)}
+#lobby .col{border-radius:14px;border:1px solid var(--line);background:linear-gradient(180deg,rgba(26,36,48,.95),rgba(16,22,30,.95))}
+#lobby .col.t0{border-top:0;background:linear-gradient(180deg,rgba(226,59,59,.22),rgba(16,22,30,.95) 90px)}
+#lobby .col.t1{border-top:0;background:linear-gradient(180deg,rgba(59,130,246,.22),rgba(16,22,30,.95) 90px)}
+#lobby .col h3{font-size:17px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.08)}
+#lobby .col h3 small{margin-inline-start:auto;background:rgba(0,0,0,.35);border-radius:99px;padding:2px 10px;color:var(--txt)}
+#lobby .col li{background:rgba(255,255,255,.05);border-radius:10px;padding:8px 12px}
+#lobby .col li.me{background:rgba(255,176,32,.14);outline:1px solid var(--acc)}
+#lobby .col.set label{color:var(--mut);font-size:12px}
+#lobby #mapPrev{width:100%;height:auto;border-radius:10px;border:1px solid var(--line);background:#0a0f15}
+#lobby .col.chat #chatLog{background:rgba(0,0,0,.25);border-radius:10px;padding:8px}
+#lobby .col>button[data-team="0"]{background:linear-gradient(#e23b3b,#b22525);border:0}
+#lobby .col>button[data-team="1"]{background:linear-gradient(#3b82f6,#2a5fc0);border:0}
+
+#loadout{background:radial-gradient(ellipse at 50% 0,#1b2735 0,#080b10 75%)}
+.lo-top{background:rgba(20,27,36,.85);border:1px solid var(--line);border-radius:14px;padding:8px 14px}
+.lo-top b{font-size:20px;letter-spacing:.08em}
+.lo-item{background:linear-gradient(135deg,rgba(255,255,255,.05),rgba(255,255,255,.015));border:1px solid rgba(255,255,255,.07);transition:transform .1s,background .15s}
+.lo-item:hover{transform:translateX(-2px);background:rgba(255,255,255,.09)}
+.lo-mid{background:radial-gradient(ellipse at 50% 35%,rgba(255,176,32,.10),rgba(20,27,36,.9) 70%);text-align:center}
+.lo-name{font-size:24px;font-weight:800;letter-spacing:.06em}
+.lo-kind{color:var(--acc);font-size:12px;letter-spacing:.2em;text-transform:uppercase}
+.lo-bars .bar,.lo-bars .b{border-radius:99px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}

@@ -631,9 +631,11 @@ struct Game{
   void btn(int x,int y,int w2,int h2,int sc,const char*label,bool sel,bool prim){
     if(prim){ rrect(x,y,w2,h2,6*sc,sel?0xFFFFC85A:C_ACC); for(int j=0;j<h2;j++){ float t=(float)j/h2; rect(x+3*sc,y+j,w2-6*sc,1,0xFFE08A00,t*0.35f); } textC(x+w2/2,y+h2/2-4*sc,label,sc,0xFF1A1200); }
     else { rrect(x,y,w2,h2,6*sc,sel?C_ACC:C_LINE); rrect(x+1,y+1,w2-2,h2-2,6*sc-1,sel?C_BTNH:C_BTN); textC(x+w2/2,y+h2/2-4*sc,label,sc,C_TXT); } }
-  void menuBg(){ rect(0,0,r.W,r.H,0xFF0B0F14,0.80f); for(int j=0;j<r.H;j+=2){ float t=fabsf((j-r.H*0.3f)/r.H); rect(0,j,r.W,2,0xFF0B0F14,std::min<float>(0.45f,t*0.6f)); } }
-  void titlePanel(int sc,int x,int w2,int y){ int cx=x+w2/2; textC(cx,y,"WARZONE",sc*4,C_TXT); rect(cx-30*sc,y+42*sc,30*sc,2*sc,0xFFE23B3B); rect(cx,y+42*sc,30*sc,2*sc,0xFF3B82F6);
-    textC(cx,y+56*sc,"حرب فرق ثلاثية الأبعاد — الأحمر ضد الأزرق",sc,C_MUT); char bb[48]; snprintf(bb,48,"BUILD %d",BUILD_ID); textC(cx,y+72*sc,bb,std::max(1,sc-1),0xFF607080); }
+  void menuBg(){ rect(0,0,r.W,r.H,0xFF0B0F14,0.80f); { int W=r.W,H=r.H; for(int j=0;j<H;j+=2){ float ty=(float)j/H; rect(0,j,W/2,2,0xFFE23B3B,0.16f*(1-ty)*(1-ty)); rect(W/2,j,W-W/2,2,0xFF3B82F6,0.16f*ty*ty); } } for(int j=0;j<r.H;j+=2){ float t=fabsf((j-r.H*0.3f)/r.H); rect(0,j,r.W,2,0xFF0B0F14,std::min<float>(0.45f,t*0.6f)); } }
+  void titlePanel(int sc,int x,int w2,int y){ int cx=x+w2/2; textC(cx-2*sc,y,"WARZONE",sc*3,0xFFE23B3B); textC(cx+2*sc,y,"WARZONE",sc*3,0xFF3B82F6); textC(cx,y,"WARZONE",sc*3,C_TXT);
+    rect(cx-60*sc,y+34*sc,60*sc,3*sc,0xFFE23B3B); rect(cx,y+34*sc,60*sc,3*sc,0xFF3B82F6);
+    textC(cx,y+48*sc,"حرب فرق ثلاثية الأبعاد — الأحمر ضد الأزرق",sc,C_MUT); char bb[48]; snprintf(bb,48,"BUILD %d",BUILD_ID); textC(cx,y+64*sc,bb,std::max(1,sc-1),0xFF607080);
+    const char*feat[4]={"دبابة ومركبات","ملحقات الأسلحة","مسيّرة استطلاع","لعب شبكي مشترك"}; for(int i=0;i<4;i++){ int pw=tw(feat[i],std::max(1,sc-1))+12*sc,px=cx-pw/2,py=y+80*sc+i*15*sc; rrect(px,py,pw,12*sc,6*sc,0xFF1B2430,0.9f); textC(cx,py+3*sc,feat[i],std::max(1,sc-1),i%2?0xFF8FB8FF:0xFFFF9A8A); } }
   void renderMenu(){ SFX::engSpeed.store(-1.f); SFX::droneVol.store(0.f);
     static float mt=0; mt+=0.016f; int showMap=menu==1?menuSel:mapIdx;
     Cam c{0,6,0,mt*0.2f,-0.15f,1.2f}; if(w.id!=showMap)w.load(showMap); r.setCam(c); r.world(w); int W=r.W,H=r.H,sc=std::max(1,H/270); menuBg();
@@ -651,14 +653,13 @@ struct Game{
     const char*dn[3]={"سهل","عادي","صعب"},*md[4]={"ضد البوتات","استضافة PS4","انضمام PS4","انضمام أندرويد"};
     const char*go[4]={"العب منفردًا ضد البوتات","استضف لعبة شبكة محلية","انضم إلى لعبة PS4","انضم إلى لعبة أندرويد"};
     int rh=20*sc,gap=6*sc,pad=12*sc,cw=W*45/100,ch=pad*2+3*(rh+gap)+rh+8*sc+6*sc+10*sc,cx=W/16,cy=(H-ch)/2+4*sc;
-    card(cx,cy,cw,ch,sc);
+    card(cx,cy,cw,ch,sc); rect(cx+8*sc,cy,cw/2-8*sc,2*sc,0xFFE23B3B); rect(cx+cw/2,cy,cw/2-8*sc,2*sc,0xFF3B82F6);
     auto sel_=[&](int i,const char*label,const char*val,uint32_t col){ int y=cy+pad+i*(rh+gap),x=cx+pad,w2=cw-pad*2; bool sel=menuRow==i; rrect(x,y,w2,rh,6*sc,sel?col:C_LINE); rrect(x+1,y+1,w2-2,rh-2,6*sc-1,sel?C_BTNH:C_BTN);
       int ty=y+rh/2-4*sc; text(x+w2-8*sc-tw(label,sc),ty,label,sc,C_MUT); textC(x+w2*3/10,ty,val,sc,sel?C_TXT:0xFFB8C4D4); if(sel){ text(x+8*sc,ty,"◀",sc,col); text(x+w2*11/20,ty,"▶",sc,col); } };
     sel_(0,"الخريطة",MN[menuSel%5],0xFFE23B3B); sel_(1,"الصعوبة",dn[diff],C_ACC); sel_(2,"الوضع",md[mode],0xFF3B82F6);
     btn(cx+pad,cy+pad+3*(rh+gap)+4*sc,cw-pad*2,rh+4*sc,sc,go[mode],menuRow==3,true);
     if(msgT>0)textC(cx+cw/2,cy+ch-14*sc,msg,sm,0xFFFF6060);
-    titlePanel(sc,W*55/100,W*38/100,H/2-60*sc);
-    textC(W*55/100+W*19/100,H/2+30*sc,"اللعب المنفرد بدون إنترنت",sc,C_MUT); textC(W*55/100+W*19/100,H/2+44*sc,"والشبكة المحلية بين PS4 وأندرويد",sc,C_MUT);
+    titlePanel(sc,W*55/100,W*38/100,H/2-72*sc);
     textC(W/2,H-14*sc,"D-pad: اختيار    X: تأكيد    Options: إيقاف مؤقت",std::max(1,sc-1),0xFF607080);
   }
 };

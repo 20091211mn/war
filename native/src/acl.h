@@ -204,12 +204,21 @@ void Game::aclRenderMenu(){
     textC(W/2,cy+ch-14*sc,"D-pad: تحريك    X: إدخال    Square: حذف    O: رجوع",sm,C_MUT);
   } else if(menu==7){ textC(W/2,H/2-14*sc,"جارٍ الاتصال…",sc*2,C_ACC); snprintf(b,96,"STEP: %s",A.ws.what()); textC(W/2,H/2+10*sc,b,sc,C_MUT); textC(W/2,cy+ch-14*sc,"O: إلغاء",sm,C_MUT);
   } else if(menu==8){
-    static const char*MN[5]={"المستودع","أطلال الصحراء","شارع المدينة","القاعدة القطبية","صحراء الشاص"}; snprintf(b,96,"%s",MN[A.cfgMap%5]); textC(W/2,cy+38*sc,b,sc,C_ACC);
-    int y=cy+54*sc; for(auto&l:A.lobby){ bool me2=l.id==A.myId; snprintf(b,96,"%s%s%s",l.id==A.hostId?"★ ":"",cleanName(l.n,l.id,l.b).c_str(),me2?"   (أنت)":"");
-      rrect(cx+16*sc,y,cw-32*sc,15*sc,5*sc,l.tm?0xFF3B82F6:0xFFE23B3B,me2?0.55f:0.28f); text(cx+24*sc,y+4*sc,b,sc,C_TXT); y+=17*sc; if(y>cy+ch-72*sc)break; }
-    for(int q=0;q<2;q++){ int w=wIdx(q?A.loS:A.loP); int wi=weaponIdx(q?A.loS:A.loP); snprintf(b,96,"%s: %s  |  %s  |  %s  |  %s  |  %s",q?"ثانوي":"رئيسي",WEAPONS[wi].name,optAr(w,A.att[q][0]),MUZ_AR[A.att[q][1]],UND_AR[A.att[q][2]],MAG_AR[A.att[q][3]]); textC(W/2,cy+ch-58*sc+q*10*sc,b,sm,C_TXT); }
-    bool hostMe=A.myId==A.hostId; btn(cx+cw/4,cy+ch-36*sc,cw/2,18*sc,sc,hostMe?"ابدأ المباراة":"بانتظار المضيف…",hostMe,hostMe);
-    textC(W/2,cy+ch-12*sc,"D-pad: سلاح  △ منظار  L1 فوهة  R1 مقبض  R2 مخزن (L2=الثانوي)  □ فريق  O: خروج",sm,C_MUT);
+    static const char*MN[5]={"المستودع","أطلال الصحراء","شارع المدينة","القاعدة القطبية","صحراء الشاص"};
+    rect(cx+8*sc,cy,cw/2-8*sc,2*sc,0xFFE23B3B); rect(cx+cw/2,cy,cw/2-8*sc,2*sc,0xFF3B82F6);
+    snprintf(b,96,"%s",MN[A.cfgMap%5]); rrect(W/2-50*sc,cy+30*sc,100*sc,14*sc,7*sc,0xFF0B0F14,0.8f); textC(W/2,cy+33*sc,b,sc,C_ACC);
+    int colW=(cw-48*sc)/2,top=cy+50*sc,rowH=15*sc,maxRows=std::max(1,(ch-50*sc-92*sc)/(rowH+2*sc));
+    for(int t=0;t<2;t++){ int x=cx+16*sc+t*(colW+16*sc); uint32_t col=t?0xFF3B82F6:0xFFE23B3B; int cnt=0; for(auto&l:A.lobby)if((l.tm?1:0)==t)cnt++;
+      rrect(x,top,colW,12*sc,5*sc,col,0.85f); snprintf(b,96,"%s  (%d)",t?"الفريق الأزرق":"الفريق الأحمر",cnt); textC(x+colW/2,top+2*sc,b,sc,0xFFFFFFFF);
+      int y=top+15*sc,n=0; for(auto&l:A.lobby){ if((l.tm?1:0)!=t)continue; if(n++>=maxRows)break; bool me2=l.id==A.myId;
+        snprintf(b,96,"%s%s%s",l.id==A.hostId?"[مضيف] ":"",cleanName(l.n,l.id,l.b).c_str(),me2?"   (أنت)":"");
+        rrect(x,y,colW,rowH,5*sc,col,me2?0.5f:0.2f); if(me2)rrect(x,y,3*sc,rowH,2*sc,C_ACC); text(x+8*sc,y+4*sc,b,sc,C_TXT); y+=rowH+2*sc; } }
+    int py=cy+ch-80*sc; rrect(cx+16*sc,py,cw-32*sc,34*sc,6*sc,0xFF0B0F14,0.7f);
+    for(int q=0;q<2;q++){ int w=wIdx(q?A.loS:A.loP); int wi=weaponIdx(q?A.loS:A.loP); int ry=py+3*sc+q*16*sc;
+      textC(cx+32*sc,ry+3*sc,q?"ثانوي":"رئيسي",sm,q?0xFF8FB8FF:C_ACC); snprintf(b,96,"%s",WEAPONS[wi].name); text(cx+54*sc,ry+3*sc,b,sc,C_TXT);
+      snprintf(b,96,"%s · %s · %s · %s",optAr(w,A.att[q][0]),MUZ_AR[A.att[q][1]],UND_AR[A.att[q][2]],MAG_AR[A.att[q][3]]); text(cx+cw/3,ry+3*sc,b,sm,C_MUT); }
+    bool hostMe=A.myId==A.hostId; btn(cx+cw/4,cy+ch-42*sc,cw/2,18*sc,sc,hostMe?"ابدأ المباراة":"بانتظار المضيف…",hostMe,hostMe);
+    textC(W/2,cy+ch-18*sc,"D-pad: سلاح   مثلث: منظار   L1: فوهة   R1: مقبض   R2: مخزن   (L2 = الثانوي)",sm,C_MUT); textC(W/2,cy+ch-9*sc,"مربع: تبديل الفريق    O: خروج",sm,C_MUT);
   }
   if(msgT>0&&menu!=6)textC(W/2,cy+ch-48*sc,msg,sc,0xFFFF6060);
 }
