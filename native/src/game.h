@@ -56,7 +56,7 @@ struct Game{
     int total=1+nBots*2-1; e.assign(total,Ent());
     for(int i=0;i<total;i++){Ent&p=e[i];p.bot=i>0;p.team=(i==0)?0:((i&1)?1:0);snprintf(p.name,16,"%s",nm(i).c_str());p.wpn=i==0?prim:rand()%WEAPON_COUNT;}
     if(role==1)for(auto&c:cli)if(c.on&&c.ent>0&&c.ent<total){ e[c.ent].remote=true; e[c.ent].bot=false; }
-    dn.on=false; dnCd=0; grs.clear(); vh.clear(); drive=-1; puffs.clear(); if(role<=1)for(int k=0;k<w.m->nv;k++){ VH::Veh v; v.x=v.sx=w.m->veh[k].x; v.z=v.sz=w.m->veh[k].z; v.h=v.sh=w.m->veh[k].h; vh.push_back(v); }
+    dn.on=false; dnCd=0; grs.clear(); vh.clear(); drive=-1; puffs.clear(); if(role<=1)for(int k=0;k<w.m->nv;k++)vh.push_back(makeVeh(k));
     matchId++; evq.clear(); score[0]=score[1]=0;over=false;t=0;tr.clear();
     for(auto&p:e)spawn(p);
   }
@@ -99,16 +99,33 @@ struct Game{
   void hurtVeh(VH::Veh&v,float amt,int by){ if(v.dead||amt<=0)return; v.hp-=amt; if(v.hp<=0)explodeVeh(v,by); else if(v.hp<150)v.burn=true; }
   void damageVeh(VH::Veh&v,int part,float d,int by){ if(v.dead)return;
     if(part>=10){ int i=part-10; if((v.tires>>i)&1)return; v.tireHp[i]-=d; if(v.tireHp[i]<=0)v.tires|=1<<i; return; }
-    hurtVeh(v,part==1?d*1.3f:d*0.35f,by); if(by==meI)hitMark=0.25f; }
+    hurtVeh(v,(part==1?d*1.3f:d*0.35f)*VH::vp(v).armor,by); if(by==meI)hitMark=0.25f; }
   int vConf=0;
   void puffsBoom(float x,float z){ for(int k=0;k<14;k++)puffs.push_back({x+(frand()-0.5f)*3,0.6f+frand()*1.5f,z+(frand()-0.5f)*3,1.5f+frand()*2.f,1.2f+frand()*1.2f,1.2f+frand()*1.5f,k<8}); SFX::play(SFX::EXPLODE,std::max(0.2f,1.f-hypotf(x-e[meI].b.x,z-e[meI].b.z)/80.f)); }
-  void exitVeh(){ if(drive<0)return; VH::Veh&v=vh[drive]; Ent&p=e[meI]; static const float SP[4][2]={{-1.9f,-0.25f},{1.9f,-0.25f},{0,3.6f},{0,-3.6f}};
-    float bx=v.x,bz=v.z; for(auto&s:SP){ float wx,wz; VH::l2w(v,s[0],s[1],wx,wz); if(!blocked(w,wx,0.05f,wz,PK.h)){ bx=wx;bz=wz;break; } }
+  VH::Veh makeVeh(int k){ VH::Veh v; if(k<w.m->nv){ v.x=v.sx=v.tx=w.m->veh[k].x; v.z=v.sz=v.tz=w.m->veh[k].z; v.h=v.sh=v.th=w.m->veh[k].h; v.type=w.m->veh[k].t; } v.hp=VH::VPS[v.type==1].hp; v.ty=v.h; return v; }
+  float camX=0,camY=3,camZ=0; bool pFireV=false;
+  // مدفع الدبابة: قذيفة بخط مستقيم، انفجار شظايا
+  void cannonFx(VH::Veh&v,float dx,float dy,float dz,bool dmg,int by){
+    float ox=v.x+dx*4.1f,oy=1.65f+dy*4.1f,oz=v.z+dz*4.1f; float best=std::min<float>(raycastMap(w,ox,oy,oz,dx,dy,dz,160.f),160.f);
+    for(auto&o:vh){ if(&o==&v||o.dead)continue; int pt; float tv=VH::rayVeh(o,ox,oy,oz,dx,dy,dz,best,pt); if(tv<best)best=tv; }
+    float ex=ox+dx*best,ey=std::max(0.1f,oy+dy*best),ez=oz+dz*best; v.cannonT=2.5f; v.kick=1.f;
+    if(tr.size()<64)tr.push_back({ox,oy,oz,ex,ey,ez,0.12f}); if(role==1&&trOut.size()<8)trOut.push_back({ox,oy,oz,ex,ey,ez});
+    for(int j=0;j<6;j++)puffs.push_back({ox+(frand()-0.5f)*0.6f,oy,oz+(frand()-0.5f)*0.6f,0.8f+frand(),0.5f+frand()*0.4f,0.5f,false});
+    for(int j=0;j<12;j++)puffs.push_back({ex+(frand()-0.5f)*3,ey+frand()*1.5f,ez+(frand()-0.5f)*3,1.2f+frand()*1.8f,0.8f+frand()*0.6f,1.f+frand()*1.2f,j<6});
+    sparkAt(ex,ey,ez,0,-1,0,40); SFX::play(SFX::EXPLODE,1.f); if(by==meI)hitMark=0.3f;
+    if(!dmg)return; const float R=6.5f;
+    for(int i=0;i<(int)e.size();i++){ if(!e[i].alive)continue; if(e[i].team==e[by].team&&i!=by)continue; float qx=e[i].b.x-ex,qy=e[i].b.y+1.f-ey,qz=e[i].b.z-ez,d=sqrtf(qx*qx+qy*qy+qz*qz); if(d<R)hurt(i,by,230.f*powf(1-d/R,0.9f),false); }
+    for(auto&o:vh){ if(o.dead)continue; float qx=o.x-ex,qz=o.z-ez,d=sqrtf(qx*qx+qz*qz); if(d<R+1.5f)hurtVeh(o,420.f*(1-d/(R+1.5f)),by); }
+  }
+  void tankAimDir(VH::Veh&v,float yaw,float pitch,float*d){ float cp=cosf(pitch),ddx=-sinf(yaw)*cp,ddy=sinf(pitch),ddz=-cosf(yaw)*cp;
+    float t=std::min<float>(raycastMap(w,camX,camY,camZ,ddx,ddy,ddz,160.f),160.f); float px=camX+ddx*t,py=camY+ddy*t,pz=camZ+ddz*t; float ax=px-v.x,ay=py-1.65f,az=pz-v.z,l=sqrtf(ax*ax+ay*ay+az*az)+1e-5f; d[0]=ax/l;d[1]=ay/l;d[2]=az/l; }
+  void exitVeh(){ if(drive<0)return; VH::Veh&v=vh[drive]; Ent&p=e[meI]; static const float SPS[4][2]={{-1.9f,-0.25f},{1.9f,-0.25f},{0,3.6f},{0,-3.6f}},SPT[4][2]={{2.6f,0},{-2.6f,0},{0,4.2f},{0,-4.2f}}; const float (*SP)[2]=v.type==1?SPT:SPS;
+    float bx=v.x,bz=v.z; for(int q=0;q<4;q++){ auto&s=SP[q]; float wx,wz; VH::l2w(v,s[0],s[1],wx,wz); if(!blocked(w,wx,0.05f,wz,PK.h)){ bx=wx;bz=wz;break; } }
     p.b=Body(); p.b.x=bx;p.b.z=bz;p.b.y=0.3f; for(int k=0;k<30;k++){moveBody(w,p.b,0,0,0.04f,false,false);if(p.b.onGround)break;} p.pitch=0; v.driver=-1; drive=-1; }
   void updateVeh(float dt,const Input&in){
     Ent&me=e[meI]; nearVeh=false; bool tri=in.tri&&!prev.tri;
     if(drive>=0&&(!me.alive||vh[drive].dead)){ vh[drive].driver=-1; drive=-1; }
-    if(me.alive&&drive<0){ int best=-1; float bd=2.3f; for(int k=0;k<(int)vh.size();k++){ auto&v=vh[k]; if(v.dead)continue; float lx,lz; VH::w2l(v,me.b.x,me.b.z,lx,lz); float dd=hypotf(std::max<float>(0.f,fabsf(lx)-VH::HW),std::max<float>(0.f,fabsf(lz)-2.5f));
+    if(me.alive&&drive<0){ int best=-1; float bd=2.3f; for(int k=0;k<(int)vh.size();k++){ auto&v=vh[k]; if(v.dead)continue; float lx,lz; VH::w2l(v,me.b.x,me.b.z,lx,lz); const VH::VP&P=VH::vp(v); float dd=hypotf(std::max<float>(0.f,fabsf(lx)-P.hw),std::max<float>(0.f,fabsf(lz)-P.hl));
         if(dd<bd&&me.b.y<1.5f&&v.driver<0&&(v.team<0||v.team==me.team)){bd=dd;best=k;} }
       nearVeh=best>=0; if(nearVeh&&tri){ drive=best; vh[best].driver=meI; vh[best].team=me.team; me.pitch=-0.18f; me.crouch=false; me.reloadT=-1; lookIdle=0; } }
     else if(me.alive&&drive>=0&&tri)exitVeh();
@@ -118,17 +135,20 @@ struct Game{
       if(role==2&&v.dead)continue;
       if(role==1&&!v.dead&&v.driver>=0&&v.driver!=meI){ // يقوده لاعب عن بُعد: الحالة من مدخلاته
         if(v.burn){ v.hp-=6*dt; if(v.hp<=0){ explodeVeh(v,v.driver); } } continue; }
-      if(v.dead){ v.respawnT-=dt; if(v.respawnT<=0){ VH::Veh n; n.x=n.sx=v.sx;n.z=n.sz=v.sz;n.h=n.sh=v.sh; v=n; } continue; }
+      if(v.dead){ v.respawnT-=dt; if(v.respawnT<=0){ VH::Veh n; n.type=v.type; n.hp=VH::vp(v).hp; n.x=n.sx=v.sx;n.z=n.sz=v.sz;n.h=n.sh=n.ty=v.sh; v=n; } continue; }
       bool dr=drive==k&&me.alive;
-      float thr=0,st=0; bool hb=false; if(dr){ thr=std::max<float>(-1.f,std::min<float>(1.f,in.my+(in.fire?1.f:0.f)-(in.ads?1.f:0.f))); st=in.mx; hb=in.jump; }
+      float thr=0,st=0; bool hb=false; if(dr){ thr=v.type==1?std::max<float>(-1.f,std::min<float>(1.f,in.my-(in.ads?1.f:0.f))):std::max<float>(-1.f,std::min<float>(1.f,in.my+(in.fire?1.f:0.f)-(in.ads?1.f:0.f))); st=in.mx; hb=in.jump; }
+      if(v.type==1){ if(v.cannonT>0)v.cannonT-=dt; v.kick=std::max<float>(0.f,v.kick-dt*3); int di=dr?meI:v.driver; if(di>=0&&di<(int)e.size()){ v.ty=e[di].yaw; v.tp=std::max<float>(-0.35f,std::min<float>(0.5f,e[di].pitch)); } else v.ty=v.h;
+        if(dr&&in.fire&&v.cannonT<=0&&role!=2&&role!=3){ float d[3]; tankAimDir(v,me.yaw,me.pitch,d); cannonFx(v,d[0],d[1],d[2],true,meI); }
+        else if(dr&&role==2&&in.fire&&v.cannonT<=0){ float d[3]; tankAimDir(v,me.yaw,me.pitch,d); v.cannonT=2.5f; v.kick=1.f; SFX::play(SFX::EXPLODE,0.8f); } }
       else hb=fabsf(v.speed)<2.f;
       float crash=VH::step(w,v,vh,thr,st,hb,dt);
-      if(crash>VH::CRASHMIN&&v.crashT<=0){ v.crashT=0.45f; if(role!=2)hurtVeh(v,(crash-VH::CRASHMIN)*9,v.driver); if(dr)dmgFlash=std::max<float>(dmgFlash,0.15f); } if(v.crashT>0)v.crashT-=dt;
+      if(crash>VH::vp(v).crashMin&&v.crashT<=0){ v.crashT=0.45f; if(role!=2)hurtVeh(v,(crash-VH::vp(v).crashMin)*9,v.driver); if(dr)dmgFlash=std::max<float>(dmgFlash,0.15f); } if(v.crashT>0)v.crashT-=dt;
       if(v.dead)continue;
       if(v.burn){ if(role!=2)v.hp-=6*dt; v.smoke-=dt; if(v.smoke<=0){ v.smoke=0.12f; puffs.push_back({v.x+(frand()-0.5f),1.3f,v.z+(frand()-0.5f),1.6f,0.9f,0.5f,frand()<0.3f}); } if(v.hp<=0&&role!=2){ explodeVeh(v,v.driver); continue; } }
       for(int i=0;i<(int)e.size();i++){ Ent&p=e[i]; if(!p.alive||(dr&&i==meI)||p.gone)continue; VH::pushOut(v,p.b.x,p.b.z,p.b.y);
-        if(role!=2&&dr&&fabsf(v.speed)>5.f&&p.team!=me.team){ float lx,lz; VH::w2l(v,p.b.x,p.b.z,lx,lz); if(fabsf(lx)<VH::HW+0.45f&&fabsf(lz)<2.5f+0.45f&&p.b.y<1.8f&&p.prot<=0)hurt(i,meI,fabsf(v.speed)*14,false); } }
-      if(dr){ float sx,sz; VH::l2w(v,-0.45f,-0.25f,sx,sz); me.b.x=sx;me.b.z=sz;me.b.y=0.35f;me.b.vy=0; me.moving=false; }
+        if(role!=2&&dr&&fabsf(v.speed)>5.f&&p.team!=me.team){ float lx,lz; VH::w2l(v,p.b.x,p.b.z,lx,lz); if(fabsf(lx)<VH::vp(v).hw+0.45f&&fabsf(lz)<VH::vp(v).hl+0.45f&&p.b.y<1.8f&&p.prot<=0)hurt(i,meI,fabsf(v.speed)*(v.type==1?24:14),false); } }
+      if(dr){ float sx,sz; if(v.type==1)VH::l2w(v,0,-0.5f,sx,sz); else VH::l2w(v,-0.45f,-0.25f,sx,sz); me.b.x=sx;me.b.z=sz;me.b.y=v.type==1?1.0f:0.35f;me.b.vy=0; me.moving=false; }
     }
     for(auto&q:puffs){ q.t-=dt; q.y+=q.vy*dt; q.sz+=dt*0.8f; } puffs.erase(std::remove_if(puffs.begin(),puffs.end(),[](Puff&q){return q.t<=0;}),puffs.end());
   }
@@ -282,7 +302,7 @@ struct Game{
     }
     for(int k=0;k<h.nEvt;k++){ NetEvt v; memcpy(&v,pk.d+off,sizeof v); off+=sizeof v; if((int8_t)(v.id-lastEvt)>0){ lastEvt=v.id; if(v.killer==meI)hitMark=0.25f; char b[64]; snprintf(b,64,"%s > %s%s",nm(v.killer).c_str(),nm(v.victim).c_str(),v.head?" HS":""); addFeed(b); } }
     for(int k=0;k<h.nTr;k++){ NetTr q; memcpy(&q,pk.d+off,sizeof q); off+=sizeof q; tr.push_back({q.x0,q.y0,q.z0,q.x1,q.y1,q.z1,0.09f}); }
-    if(h.nVeh>0&&(int)vh.size()!=h.nVeh){ vh.clear(); for(int k=0;k<h.nVeh;k++){ VH::Veh v; if(k<w.m->nv){ v.x=v.sx=v.tx=w.m->veh[k].x; v.z=v.sz=v.tz=w.m->veh[k].z; v.h=v.sh=v.th=w.m->veh[k].h; } vh.push_back(v); } drive=-1; }
+    if(h.nVeh>0&&(int)vh.size()!=h.nVeh){ vh.clear(); for(int k=0;k<h.nVeh;k++)vh.push_back(makeVeh(k)); drive=-1; }
     for(int k=0;k<h.nVeh&&k<(int)vh.size();k++){ NetVeh n; memcpy(&n,pk.d+off,sizeof n); off+=sizeof n; VH::Veh&v=vh[k];
       bool wasDead=v.dead; v.dead=n.flags&1; v.burn=n.flags&2; v.hp=n.hp; v.tx=n.x;v.tz=n.z;v.th=n.h;
       if(k!=drive){ v.speed=n.speed; v.steer=n.steer; v.driver=n.driver; if(!wasDead&&v.dead){ puffsBoom(v.x,v.z); } if(wasDead&&!v.dead){ v.x=n.x;v.z=n.z;v.h=n.h; } if(v.dead)v.driver=-1; }
@@ -322,10 +342,10 @@ struct Game{
   void updateRemote(int i,float dt){
     Ent&p=e[i]; const NetInput&n=p.rin; if(n.t!=T_INPUT)return;
     for(int k=0;k<(int)vh.size();k++)if(vh[k].driver==i&&n.veh!=k+1)vh[k].driver=-1;
-    if(n.veh>0&&n.veh<=(int)vh.size()){ VH::Veh&v=vh[n.veh-1]; if(!v.dead&&(v.driver<0||v.driver==i)&&p.alive){ v.driver=i; v.team=p.team; v.x=n.vx;v.z=n.vz;v.h=n.vh;v.speed=n.vsp; } }
+    if(n.veh>0&&n.veh<=(int)vh.size()){ VH::Veh&v=vh[n.veh-1]; if(!v.dead&&(v.driver<0||v.driver==i)&&p.alive){ v.driver=i; v.team=p.team; v.x=n.vx;v.z=n.vz;v.h=n.vh;v.speed=n.vsp; if(v.type==1&&(n.flags&1)&&v.cannonT<=0){ float cp=cosf(n.pitch); cannonFx(v,-sinf(n.yaw)*cp,sinf(n.pitch),-cosf(n.yaw)*cp,true,i); } } }
     p.b.x=std::max<float>(-w.m->W/2.f,std::min<float>(w.m->W/2.f,n.x)); p.b.y=n.y; p.b.z=std::max<float>(-w.m->D/2.f,std::min<float>(w.m->D/2.f,n.z)); p.yaw=n.yaw;p.pitch=n.pitch;p.crouch=n.flags&2;p.sprint=n.flags&8;p.moving=n.flags&16;
     if(p.moving)p.phase+=dt*8; if(n.wpn<WEAPON_COUNT&&n.wpn!=p.wpn)giveWeapon(p,n.wpn);
-    if(n.flags&4)reloadStart(p); updateWeapon(i,dt,(n.flags&1)&&!p.sprint);
+    if(n.flags&4)reloadStart(p); updateWeapon(i,dt,(n.flags&1)&&!p.sprint&&!(n.veh>0&&n.veh<=(int)vh.size()));
   }
   // ======== التحديث ========
   void drawDroneModel(float x,float y,float z,float yaw,bool mine){
@@ -497,8 +517,8 @@ struct Game{
   void render(){
     Ent&me=e[meI]; float eyeH=me.alive?(me.b.y+(me.crouch?PK.eyec:PK.eye)):me.b.y+0.6f;
     float fov=1.3f; if(adsHeld&&me.alive){fov=1.3f/zoomOf(me);}
-    Cam c{me.b.x,eyeH,me.b.z,me.yaw,me.pitch,fov};
-    if(drive>=0&&me.alive){ const VH::Veh&v=vh[drive]; float cp=cosf(me.pitch),fxw=-sinf(me.yaw)*cp,fyw=sinf(me.pitch),fzw=-cosf(me.yaw)*cp; float cx0=v.x,cy0=2.2f,cz0=v.z; float D=8.f; float tw2=raycastMap(w,cx0,cy0,cz0,-fxw,-fyw,-fzw,D); D=std::min<float>(D,tw2-0.3f); D=std::max<float>(1.5f,D); c.x=cx0-fxw*D; c.y=std::max<float>(0.5f,cy0-fyw*D); c.z=cz0-fzw*D; }
+    Cam c{me.b.x,eyeH,me.b.z,me.yaw,me.pitch,fov}; { }
+    if(drive>=0&&me.alive){ const VH::Veh&v=vh[drive]; float cp=cosf(me.pitch),fxw=-sinf(me.yaw)*cp,fyw=sinf(me.pitch),fzw=-cosf(me.yaw)*cp; float cx0=v.x,cy0=v.type==1?2.3f:2.2f,cz0=v.z; float D=v.type==1?11.f:8.f; float tw2=raycastMap(w,cx0,cy0,cz0,-fxw,-fyw,-fzw,D); D=std::min<float>(D,tw2-0.3f); D=std::max<float>(v.type==1?6.5f:1.5f,D); c.x=cx0-fxw*D; c.y=std::max<float>(0.5f,cy0-fyw*D); c.z=cz0-fzw*D; camX=c.x;camY=c.y;camZ=c.z; }
     if(dn.on&&me.alive)c=Cam{dn.x,dn.y,dn.z,dn.yaw,dn.pitch,1.3f};
     r.setCam(c); r.world(w);
     for(auto&v:vh){ float dx=v.x-c.x,dz=v.z-c.z,dd=sqrtf(dx*dx+dz*dz); if(dd<r.fogF)VH::draw(r,v,dd); }
@@ -582,7 +602,7 @@ struct Game{
     // ---- أسفل الوسط: الذخيرة أو لوحة الشاص ----
     if(drive>=0&&me.alive){ const VH::Veh&v=vh[drive]; int pw=96*sc,ph=22*sc,px=W/2-pw/2,py=H-ph-6*sc; rrect(px,py,pw,ph,8*sc,0xFF0B0F14,0.8f);
       snprintf(b,64,"%d",(int)(fabsf(v.speed)*3.6f)); textC(W/2-14*sc,py+3*sc,b,sc*2,0xFFFFFFFF); text(W/2+6*sc,py+8*sc,"km/h",sc,0xFF8FA0B4);
-      int bw=pw-20*sc; rrect(px+10*sc,py+ph-6*sc,bw,3*sc,sc,0xFF1E2833); rrect(px+10*sc,py+ph-6*sc,std::max<float>(2,(int)(bw*std::max<float>(0.f,v.hp)/VH::HP)),3*sc,sc,v.hp>150?0xFF3CD070:0xFFE04030);
+      int bw=pw-20*sc; rrect(px+10*sc,py+ph-6*sc,bw,3*sc,sc,0xFF1E2833); rrect(px+10*sc,py+ph-6*sc,std::max<float>(2,(int)(bw*std::max<float>(0.f,v.hp)/VH::vp(v).hp)),3*sc,sc,v.hp>150?0xFF3CD070:0xFFE04030);
       textC(W/2,py-12*sc,"Triangle: نزول",sm,0xFFB8C4D4); }
     else if(!dn.on){ int pw=124*sc,ph=19*sc,px=W/2-pw/2,py=H-ph-6*sc; rrect(px,py,pw,ph,8*sc,0xFF0B0F14,0.8f);
       text(px+pw-8*sc-tw(d.name,sm),py+ph/2-3*sc,d.name,sm,me.reloadT>=0?0xFFFFC040:0xFFFFB020);

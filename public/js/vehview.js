@@ -1,11 +1,12 @@
 // رسم الشاص (تويوتا لاند كروزر بيك أب) والذخيرة المتساقطة وتأثيرات الدخان والنار
 import { trs, mul, tmp } from './gl.js';
-import { SEATS, l2w } from '/shared/vehicle.js';
+import { SEATS, VT, l2w } from '/shared/vehicle.js';
 
 const BODY = [0.78, 0.72, 0.58], DARK = [0.13, 0.13, 0.14], GLASS = [0.25, 0.36, 0.45], RUBBER = [0.06, 0.06, 0.07], HUB = [0.55, 0.56, 0.58];
 const WHEELS = [[-0.95, -1.55], [0.95, -1.55], [-0.95, 1.5], [0.95, 1.5]];
 
 export function drawVehicle(eng, v, now, far, night) {
+  if (v.type === 1) return drawTank(eng, v, now, far);
   const dead = !!(v.flags & 2), burn = !!(v.flags & 1);
   const hpk = Math.max(0, Math.min(1, v.hp / 450));
   const tint = dead ? 0.16 : 0.55 + 0.45 * hpk;           // يسوَدّ مع الضرر
@@ -87,9 +88,60 @@ export function drawVehicle(eng, v, now, far, night) {
   });
 }
 
+
+// ---- الدبابة: هيكل مجنزر + برج يدور + مدفع برجوع ----
+const T_BODY = [0.34, 0.39, 0.25], T_DARK = [0.11, 0.12, 0.1], T_TRACK = [0.07, 0.07, 0.07], T_STEEL = [0.45, 0.47, 0.44];
+function drawTank(eng, v, now, far) {
+  const dead = !!(v.flags & 2), hpk = Math.max(0, Math.min(1, v.hp / VT[1].hp));
+  const tint = dead ? 0.16 : 0.55 + 0.45 * hpk, col = (c) => [c[0] * tint, c[1] * tint, c[2] * tint];
+  const V = trs(tmp(), v.x, 0, v.z, v.h, 0, 1, 1, 1);
+  const P = (M, x, y, z, sx, sy, sz, c, unlit, alpha, pitch = 0) => eng.cubeAt(mul(tmp(), M, trs(tmp(), x, y, z, 0, pitch, sx, sy, sz)), c[0], c[1], c[2], unlit, alpha);
+  const body = col(T_BODY), dark = col(T_DARK), steel = col(T_STEEL);
+  const rel = (v.ty === undefined ? v.h : v.ty) - v.h;
+  const TU = mul(tmp(), V, trs(tmp(), 0, 1.3, -0.1, rel, 0, 1, 1, 1));
+  if (far) {
+    P(V, 0, 0.8, 0, 3.0, 0.9, 6.2, body); P(TU, 0, 0.35, 0.1, 2.1, 0.7, 2.6, body); P(TU, 0, 0.35, -2.4, 0.22, 0.22, 3.6, dark);
+    return;
+  }
+  // الجنازير والعجلات
+  for (const sx of [-1, 1]) {
+    P(V, sx * 1.45, 0.5, 0, 0.62, 0.85, 6.5, T_TRACK);
+    P(V, sx * 1.45, 0.96, 0, 0.7, 0.06, 6.4, dark);                                   // رفرف الجنزير
+    for (let i = 0; i < 6; i++) { const z = -2.5 + i * 1.0; 
+      eng.cylAt(mul(tmp(), mul(tmp(), V, trs(tmp(), sx * 1.5, 0.4, z, 0, v.spin || 0, 1, 1, 1)), trs(tmp(), 0, 0, 0, 0, 0, 0.42, 0.74, 0.74)), 0.2 * tint, 0.21 * tint, 0.19 * tint); }
+    for (let i = 0; i < 9; i++) { const z = -3.05 + (((now / 90 * Math.sign(v.speed || 1) * Math.min(1, Math.abs(v.speed || 0) / 4) + i * 0.7) % 6.3 + 6.3) % 6.3); P(V, sx * 1.45, 0.09, z - 3.15, 0.66, 0.05, 0.12, dark); }   // عوارض الجنزير المتحركة
+  }
+  // الهيكل
+  P(V, 0, 0.78, 0, 2.55, 0.62, 6.0, body);
+  P(V, 0, 1.0, -2.55, 2.5, 0.3, 1.5, body, false, 1, -0.5);                           // لوحة أمامية مائلة
+  P(V, 0, 1.12, 2.7, 2.4, 0.26, 1.2, body);                                             // سطح المحرك
+  for (let i = 0; i < 4; i++) P(V, -0.7 + i * 0.47, 1.28, 2.7, 0.3, 0.03, 0.9, dark);   // شبك التهوية
+  P(V, 0.75, 1.2, -2.2, 0.55, 0.24, 0.55, dark);                                        // فتحة السائق
+  P(V, 0, 0.7, -3.08, 2.4, 0.4, 0.08, dark); P(V, -0.95, 0.88, -3.1, 0.32, 0.18, 0.06, [1, 0.95, 0.75], !dead, 1); P(V, 0.95, 0.88, -3.1, 0.32, 0.18, 0.06, [1, 0.95, 0.75], !dead, 1);
+  P(V, -0.95, 1.18, 0.3, 0.35, 0.18, 1.4, steel); P(V, 0.95, 1.18, 0.9, 0.5, 0.2, 1.1, [0.2, 0.2, 0.18]);       // معدات على الرفرف
+  for (const sx of [-1, 1]) P(V, sx * 1.28, 1.2, 2.2, 0.28, 0.28, 0.7, steel);
+  // البرج
+  P(TU, 0, 0.32, 0.15, 2.3, 0.62, 2.9, body);
+  P(TU, 0, 0.3, -1.4, 1.7, 0.54, 0.7, body, false, 1, -0.3);                            // واجهة البرج
+  P(TU, 0, 0.22, 1.6, 1.8, 0.4, 0.5, body);                                              // مؤخرة البرج
+  P(TU, 0.55, 0.72, 0.5, 0.75, 0.12, 0.75, dark); P(TU, 0.55, 0.8, 0.5, 0.5, 0.06, 0.5, steel); // فتحة القائد
+  P(TU, -0.6, 0.72, 0.1, 0.1, 0.1, 0.5, dark); P(TU, -0.6, 0.78, 0.35, 0.05, 0.3, 0.05, [0.08, 0.08, 0.08]); // رشاش / هوائي
+  P(TU, -1.18, 0.35, 0.2, 0.08, 0.3, 1.4, steel); P(TU, 1.18, 0.35, 0.2, 0.08, 0.3, 1.4, steel);          // صناديق جانبية
+  // المدفع
+  const kick = (v.kick || 0) * 0.45;
+  const GB = mul(tmp(), TU, trs(tmp(), 0, 0.35, -1.7, 0, v.tp || 0, 1, 1, 1));
+  P(TU, 0, 0.35, -1.65, 0.8, 0.7, 0.3, dark);                                           // قناع المدفع
+  P(GB, 0, 0, -1.4 + kick, 0.24, 0.24, 3.2, dark);                                      // ماسورة
+  P(GB, 0, 0, -3.15 + kick, 0.36, 0.36, 0.34, [0.07, 0.07, 0.07]);                      // فرامل الفوهة
+  P(GB, 0, 0.17, -1.2 + kick, 0.12, 0.06, 2.0, steel);
+  if ((v.kick || 0) > 0.6) P(GB, 0, 0, -3.6, 0.7, 0.7, 0.8, [1, 0.8, 0.3], true, (v.kick - 0.6) * 2.2, 0);   // وميض الفوهة
+  // أضواء خلفية
+  P(V, -1.0, 0.72, 3.04, 0.3, 0.14, 0.05, [0.9, 0.1, 0.1], !dead); P(V, 1.0, 0.72, 3.04, 0.3, 0.14, 0.05, [0.9, 0.1, 0.1], !dead);
+}
+
 // تأثيرات: دخان/نار بحسب حالة المركبة. fx = كائن Effects
 export function vehicleFx(fx, v, dt) {
-  const dead = !!(v.flags & 2), burn = !!(v.flags & 1), hp = v.hp;
+  const dead = !!(v.flags & 2), burn = !!(v.flags & 1), hp = v.type === 1 ? v.hp * 0.41 : v.hp;
   v._t = (v._t || 0) + dt;
   // غبار خلف العجلات عند السير
   if (!dead && Math.abs(v.speed) > 3 && ((v.tires & 12) !== 12)) {

@@ -349,8 +349,8 @@ const MAPS = [
     const W = 200, D = 140, b = builder(W, D);
     b.border(2.6);
     const vehicles = [];
-    const vsym = (x, z, h) => { vehicles.push({ x, z, h }); vehicles.push({ x: -x, z: -z, h: h + Math.PI }); };
-    vsym(-88, -14, -Math.PI / 2); vsym(-88, 14, -Math.PI / 2); vsym(-76, 40, -Math.PI / 2); vsym(-76, -40, -Math.PI / 2);
+    const vsym = (x, z, h, t = 0) => { vehicles.push({ x, z, h, t }); vehicles.push({ x: -x, z: -z, h: h + Math.PI, t }); };
+    vsym(-88, -14, -Math.PI / 2); vsym(-88, 14, -Math.PI / 2); vsym(-76, 40, -Math.PI / 2); vsym(-76, -40, -Math.PI / 2, 1);
     // طرق مرسومة: حلقة وطريق رئيسي
     b.patch(0, 0, W - 20, 8, 7); b.patchSym(-60, 25, 8, 60, 7); b.patch(0, 0, 40, 40, 6);
     // قاعدة: مرآب وأكياس رمل

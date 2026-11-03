@@ -21,7 +21,7 @@ for (let id = 0; id < MAP_COUNT; id++) {
   }
   // المركبات: خالية من التصادم ومتصلة ببعضها وبقاعدتي الفريقين
   if (m.vehicles.length) {
-    for (const v of m.vehicles) if (vehCollides(m, v.x, v.z, v.h)) bad(`موضع مركبة محجوب ${v.x},${v.z}`);
+    for (const v of m.vehicles) if (vehCollides(m, v.x, v.z, v.h, null, v.t)) bad(`موضع مركبة محجوب ${v.x},${v.z}`);
     const cs = 1.5, cols = Math.ceil(m.W / cs), rows = Math.ceil(m.D / cs), free = new Uint8Array(cols * rows);
     for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) { const x = -m.W / 2 + (i + 0.5) * cs, z = -m.D / 2 + (j + 0.5) * cs; free[j * cols + i] = (!vehCollides(m, x, z, 0) || !vehCollides(m, x, z, Math.PI / 2)) ? 1 : 0; }
     const idx = (x, z) => Math.floor((z + m.D / 2) / cs) * cols + Math.floor((x + m.W / 2) / cs);

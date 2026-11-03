@@ -314,3 +314,5 @@ body.touch #stat{position:absolute;left:var(--el);bottom:max(4px,var(--sb));top:
 @media (max-height:520px){.chip{padding:5px 8px;font-size:11px}.lo-att{gap:5px}.lo-bars{gap:3px 8px}}
 
 #supp{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 35%,rgba(0,0,0,.55) 75%,rgba(0,0,0,.9) 100%);backdrop-filter:blur(1.5px);-webkit-backdrop-filter:blur(1.5px)}
+
+#vhud .cbar{margin-top:6px;height:6px}#vcan{display:block;height:100%;width:100%;background:linear-gradient(90deg,#c0392b,#f1c40f)}

@@ -15,6 +15,7 @@ async function mk(touch) {
   page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
   await page.goto(url); return page;
 }
+const sel = async (page, id, v) => page.evaluate(([id, v]) => { const e = document.getElementById(id); e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); }, [id, v]);
 const page = await mk(false);
 console.log('1) لعب منفرد (بدون أي اتصال بالخادم)');
 let wsOpened = false; page.on('websocket', () => { wsOpened = true; });
@@ -28,7 +29,7 @@ await page.waitForFunction(() => document.getElementById('chatLog').textContent.
 ok(true, 'الدردشة تعمل في اللوبي');
 ok(!(await page.isDisabled('#cfgMap')) && !(await page.isDisabled('#cfgFf')), 'المضيف يستطيع تغيير الخريطة والإعدادات');
 for (let map = 0; map < 5; map++) {
-  await page.selectOption('#cfgMap', String(map)); await page.selectOption('#cfgFill', '3');
+  await sel(page, 'cfgMap', String(map)); await sel(page, 'cfgFill', '3');
   await page.waitForTimeout(300);
   await page.click('#btnStart');
   await page.waitForFunction(() => window.__wz.me.alive, null, { timeout: 8000 });
@@ -110,7 +111,7 @@ ok(!(await a.isDisabled('#cfgMap')), 'المضيف يغيّر الإعدادات
 await b.fill('#lobbyIn', 'مرحبا من ب'); await b.click('#lobbySend');
 await a.waitForFunction(() => document.getElementById('chatLog').textContent.includes('مرحبا من ب'));
 ok(true, 'الدردشة تصل بين اللاعبين');
-await a.selectOption('#cfgMap', '4'); await a.selectOption('#cfgFill', '2');
+await sel(a, 'cfgMap', '4'); await sel(a, 'cfgFill', '2');
 await b.waitForFunction(() => document.getElementById('cfgMap').value === '4');
 ok(true, 'تغيير الخريطة يظهر عند الآخرين');
 await a.click('#btnStart');
@@ -127,7 +128,7 @@ console.log('5) واجهة اللمس');
 const tp = await mk(true);
 await tp.fill('#name', 'جوال'); await tp.tap('#btnSolo'); await tp.waitForSelector('#lobby:not(.hidden)');
 await tp.screenshot({ path: `${out}/lobby-touch.png` });
-await tp.selectOption('#cfgMap', '4'); await tp.selectOption('#cfgFill', '3'); await tp.tap('#btnStart');
+await sel(tp, 'cfgMap', '4'); await sel(tp, 'cfgFill', '3'); await tp.tap('#btnStart');
 await tp.waitForFunction(() => window.__wz.me.alive, null, { timeout: 8000 });
 await tp.waitForTimeout(1500);
 await tp.screenshot({ path: `${out}/game-touch.png` });

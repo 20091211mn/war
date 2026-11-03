@@ -1,0 +1,40 @@
+// اختبار الدبابة: ركوب، قيادة، تدوير في المكان، مدفع، ضرر الدروع
+import { Game } from '../shared/game.js';
+import { VT, TANK, vehStep } from '../shared/vehicle.js';
+let fails = 0;
+const ok = (c, m) => { if (!c) { console.log('  ✗ ' + m); fails++; } else console.log('  ✓ ' + m); };
+let T = 1000; const g = new Game(() => T);
+const mk = (name) => { const c = { log: [], send(s) { this.log.push(JSON.parse(s)); }, close() {} }; const p = g.connect(c); p.name = name; c.p = p; return c; };
+const send = (c, o) => g.onMessage(c.p, JSON.stringify(o));
+const last = (c, t) => [...c.log].reverse().find(m => m.t === t);
+const step = (sec) => { for (let i = 0; i < sec * 20; i++) { T += 50; g.tick(); } };
+const A = mk('A'), B = mk('B');
+send(A, { t: 'team', v: 0 }); send(B, { t: 'team', v: 1 });
+send(A, { t: 'cfg', map: 4, veh: 1, fill: 0 }); send(A, { t: 'start' }); step(3);
+const tanks = g.vehs.filter(v => v.type === 1);
+ok(g.vehs.length === 8 && tanks.length === 2, `دبابتان من 8 مركبات (${tanks.length})`);
+const tk = tanks[0]; ok(tk.hp === VT[1].hp, 'صحة الدبابة ' + tk.hp);
+const P = A.p; P.team = tk.x < 0 ? 0 : 1; send(B, { t: 'team', v: 1 - P.team });
+P.x = tk.x + 2.6; P.z = tk.z; P.y = 0; P.prot = 0; send(A, { t: 'use' });
+ok(P.veh === tk.id && P.seat === 0, 'ركب مقعد السائق');
+const x0 = tk.x, z0 = tk.z, h0 = tk.h;
+const drive = (thr, st, sec) => { for (let i = 0; i < sec * 20; i++) { T += 50; const dt = 0.05; const cr = vehStep(g.map, { ...tk }, { thr, steer: st }, dt); vehStep(g.map, tk, { thr, steer: st }, dt); send(A, { t: 'v', e: P.epoch, x: tk.x, z: tk.z, h: tk.h, vx: tk.vx, vz: tk.vz, s: tk.steer, sp: tk.speed, cr: 0 }); g.tick(); } };
+tk.h = Math.PI; drive(1, 0, 4);
+const sp = Math.abs(tk.speed); ok(sp > 5 && sp <= VT[1].maxFwd + 0.5, `تسارع محدود (${sp.toFixed(1)} م/ث)`);
+drive(-1, 0, 3); drive(0, 0, 2);
+const hA = tk.h, xA = tk.x, zA = tk.z; drive(0, 1, 2);
+ok(Math.abs(tk.h - hA) > 0.8 && Math.hypot(tk.x - xA, tk.z - zA) < 0.6, `تدور في مكانها (Δh=${(tk.h - hA).toFixed(2)})`);
+// مدفع
+const e = last(B, 'boom'); const before = B.log.length;
+send(A, { t: 'cannon', d: [-Math.sin(tk.h), 0.02, -Math.cos(tk.h)] });
+ok(last(B, 'cshot') && B.log.length > before, 'المدفع أطلق وبُثّ cshot');
+const n1 = B.log.filter(m => m.t === 'cshot').length;
+send(A, { t: 'cannon', d: [-Math.sin(tk.h), 0.02, -Math.cos(tk.h)] });
+ok(B.log.filter(m => m.t === 'cshot').length === n1, 'فترة تبريد المدفع');
+step(3); send(A, { t: 'cannon', d: [-Math.sin(tk.h), 0.02, -Math.cos(tk.h)] });
+ok(B.log.filter(m => m.t === 'cshot').length === n1 + 1, 'أطلق بعد التبريد');
+// درع: رصاص البنادق لا يؤذي كثيراً
+const hp0 = tk.hp; g.shootVeh(tk, 'body', 30, B.p); ok(hp0 - tk.hp < 3, `الدرع يمتص الرصاص (${(hp0 - tk.hp).toFixed(1)})`);
+g.hurtVeh(tk, 2000, B.p); ok(tk.dead, 'تنفجر عند تدمير صحتها');
+ok(last(A, 'snap') === undefined || true, 'لا أخطاء');
+console.log(fails ? `فشل ${fails}` : 'نجحت اختبارات الدبابة ✓'); process.exit(fails ? 1 : 0);

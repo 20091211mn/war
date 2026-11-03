@@ -2,7 +2,7 @@
 import { WEAPONS, PRIMARIES, computeStats, sanitizeLoadout, damageAt, defaultLoadout, sanitizeAtt } from './weapons.js';
 import { buildMap, MAP_COUNT, MAP_NAMES } from './maps.js';
 import { PLAYER, rayPlayer, raycastMap, moveBody, blocked, groundAt } from './physics.js';
-import { VEH, SEATS, rayVehicle, seatWorld, w2l, l2w, vehStep, vehCollides, pushOutVeh } from './vehicle.js';
+import { VEH, SEATS, VT, TANK, vp, seatsOf, rayVehicle, seatWorld, w2l, l2w, vehStep, vehCollides, pushOutVeh } from './vehicle.js';
 import { extras, DRONE, raySphere } from './extras.js';
 import { buildNav, findPath, cellOf, cellCenter, nearestFree } from './nav.js';
 
@@ -224,6 +224,7 @@ export class Game {
         if (dirs.length) { p.w = w; this.processShot(p, w, dirs); }
         break;
       }
+      case 'cannon': this.onCannon(p, m); break;
       case 'rl': this.bcastExcept(p, { t: 'rl', id: p.id }); break;
       case 'gren': {
         if (this.phase !== 'playing' || !p.alive || p.grenades <= 0 || !Array.isArray(m.d) || (p.veh >= 0 && p.seat === 0)) break;
@@ -441,11 +442,41 @@ export class Game {
   }
 
   // ---------- المركبات ----------
+  // ---------- مدفع الدبابة ----------
+  onCannon(p, m) {
+    const v = this.vehOf(p);
+    if (!v || v.type !== 1 || p.seat !== 0 || v.dead || this.phase !== 'playing' || !p.alive || !Array.isArray(m.d)) return;
+    const now = this.now(); if (now < v.cannonAt) return;
+    const [dx0, dy0, dz0] = m.d; if (![dx0, dy0, dz0].every(fin)) return;
+    const l = Math.hypot(dx0, dy0, dz0); if (l < 0.5) return;
+    const dx = dx0 / l, dy = dy0 / l, dz = dz0 / l;
+    v.cannonAt = now + TANK.cd;
+    const ox = v.x + dx * TANK.muzzleLen, oy = 1.65 + dy * TANK.muzzleLen, oz = v.z + dz * TANK.muzzleLen;
+    let best = raycastMap(this.map, ox, oy, oz, dx, dy, dz, TANK.range); if (best === Infinity) best = TANK.range;
+    for (const o of this.vehs) { if (o === v || o.dead) continue; const r = rayVehicle(o, ox, oy, oz, dx, dy, dz, best); if (r && r.t < best) best = r.t; }
+    for (const q of this.players.values()) { if (q === p || !q.alive || q.veh >= 0) continue; const r = rayPlayer(q, ox, oy, oz, dx, dy, dz, best); if (r && r.t < best) best = r.t; }
+    const ex = ox + dx * best, ey = Math.max(0.1, oy + dy * best), ez = oz + dz * best;
+    this.bcast({ t: 'cshot', v: v.id, o: [r2(ox), r2(oy), r2(oz)], e: [r2(ex), r2(ey), r2(ez)] });
+    this.cannonBoom(ex, ey, ez, p);
+  }
+  cannonBoom(x, y, z, owner) {
+    const R = TANK.splash;
+    this.bcast({ t: 'boom', x: r2(x), y: r2(y), z: r2(z) });
+    for (const q of [...this.players.values()]) {
+      if (!q.alive) continue;
+      if (q.team === owner.team && q.id !== owner.id && !this.cfg.ff) continue;
+      const d = Math.hypot(q.x - x, q.y + 1 - y, q.z - z); if (d > R) continue;
+      this.hurt(q, TANK.dmg * Math.pow(1 - d / R, 0.9), owner, false, 'tank', x, z);
+    }
+    for (const o of this.vehs) { if (o.dead) continue; const d = Math.hypot(o.x - x, o.z - z); if (d < R + 1.5) this.hurtVeh(o, TANK.vdmg * (1 - d / (R + 1.5)), owner); }
+  }
+
   mkVeh(sp, i) {
-    return { id: i, x: sp.x, z: sp.z, h: sp.h, vx: 0, vz: 0, steer: 0, tires: 0, speed: 0, hp: VEH.hp, tireHp: [VEH.tireHp, VEH.tireHp, VEH.tireHp, VEH.tireHp],
+    const P = VT[sp.t === 1 ? 1 : 0];
+    return { id: i, type: sp.t === 1 ? 1 : 0, cannonAt: 0, x: sp.x, z: sp.z, h: sp.h, vx: 0, vz: 0, steer: 0, tires: 0, speed: 0, hp: P.hp, tireHp: [P.tireHp, P.tireHp, P.tireHp, P.tireHp],
       seats: [0, 0, 0, 0, 0], team: -1, burn: false, dead: false, respawnAt: 0, sp, lastV: 0, lastAtk: 0, lastCrash: 0, dyn: null };
   }
-  linkVehs() { for (const v of this.vehs) v.dyn = this.vehs.filter(o => o !== v).map(o => [o.x, o.z, o.h]); }
+  linkVehs() { for (const v of this.vehs) v.dyn = this.vehs.filter(o => o !== v).map(o => [o.x, o.z, o.h, o.type | 0]); }
   vehOf(p) { return p.veh >= 0 ? this.vehs[p.veh] || null : null; }
 
   useVeh(p) {
@@ -455,13 +486,13 @@ export class Game {
     for (const v of this.vehs) {
       if (v.dead) continue;
       const [lx, lz] = w2l(v, p.x, p.z);
-      const d = Math.hypot(Math.max(0, Math.abs(lx) - VEH.hw), Math.max(0, Math.abs(lz) - 2.5));
+      const P = vp(v), d = Math.hypot(Math.max(0, Math.abs(lx) - P.hw), Math.max(0, Math.abs(lz) - P.hl));
       if (d < bd && p.y < 1.5 && (v.team < 0 || v.team === p.team)) { bd = d; best = { v, lx, lz }; }
     }
     if (!best) return;
     const { v, lx, lz } = best;
     const order = lz < -0.2 ? (lx < 0 ? [0, 1, 2, 3, 4] : [1, 0, 3, 2, 4]) : (lx < 0 ? [2, 3, 4, 1, 0] : [3, 2, 4, 1, 0]);
-    const s = order.find(i => !v.seats[i]);
+    const s = (v.type === 1 ? [0, 1] : order).find(i => !v.seats[i]);
     if (s === undefined) return;
     this.sitIn(p, v, s);
   }
@@ -474,7 +505,7 @@ export class Game {
   }
   switchSeat(p, s) {
     const v = this.vehOf(p);
-    if (!v || s < 0 || s >= SEATS.length || v.seats[s] || s === p.seat) return;
+    if (!v || s < 0 || s >= seatsOf(v).length || v.seats[s] || s === p.seat) return;
     if (s === 0 && v.hp <= 0) return;
     v.seats[p.seat] = 0; v.seats[s] = p.id; p.seat = s;
     p.epoch++;
@@ -489,8 +520,8 @@ export class Game {
   }
   exitVeh(p) {
     const v = this.vehOf(p); if (!v) return;
-    const side = SEATS[p.seat].x < 0 ? -1 : 1;
-    const cands = p.seat === 4 ? [[0, 3.3], [-2, 2], [2, 2]] : [[side * 1.9, SEATS[p.seat].z], [-side * 1.9, SEATS[p.seat].z], [0, 3.4], [0, -3.4]];
+    const ST = seatsOf(v), PV = vp(v), side = ST[p.seat].x < 0 ? -1 : 1;
+    const cands = v.type === 1 ? [[PV.hw + 1, 0], [-PV.hw - 1, 0], [0, PV.hl + 1], [0, -PV.hl - 1]] : p.seat === 4 ? [[0, 3.3], [-2, 2], [2, 2]] : [[side * 1.9, ST[p.seat].z], [-side * 1.9, ST[p.seat].z], [0, 3.4], [0, -3.4]];
     let spot = null;
     for (const [lx, lz] of cands) {
       const [x, , z] = l2w(v, lx, 0, lz), y = groundAt(this.map, x, z, 0);
@@ -514,13 +545,13 @@ export class Game {
     if (Math.hypot(nx - v.x, nz - v.z) > 34 * dt + 0.8) { this.sendTo(p, { t: 'vfix', x: r2(v.x), z: r2(v.z), h: r3(v.h), vx: r2(v.vx), vz: r2(v.vz) }); v.lastV = now; return; }
     v.lastV = now; v.x = nx; v.z = nz; v.h = m.h; v.vx = clamp(m.vx, -40, 40); v.vz = clamp(m.vz, -40, 40); v.steer = clamp(m.s, -0.6, 0.6); v.speed = clamp(m.sp, -40, 40);
     for (let i = 0; i < 5; i++) if (v.seats[i]) { const q = this.players.get(v.seats[i]); if (q) this.placeOccupant(q, v); }
-    if (fin(m.cr) && m.cr > VEH.crashMin && now - v.lastCrash > 450) { v.lastCrash = now; this.crashVeh(v, Math.min(m.cr, 35), p); }
+    if (fin(m.cr) && m.cr > vp(v).crashMin && now - v.lastCrash > 450) { v.lastCrash = now; this.crashVeh(v, Math.min(m.cr, 35), p); }
   }
   crashVeh(v, speed, driver) {
     this.bcast({ t: 'vcrash', v: v.id, s: r2(speed) });
     const occ = speed > 9 ? (speed - 9) * 4 : 0;
     if (occ > 0) for (const id of [...v.seats]) { const q = id ? this.players.get(id) : null; if (q && q.alive) this.hurt(q, occ, q, false, 'veh', v.x, v.z); }
-    this.hurtVeh(v, (speed - VEH.crashMin) * 9, driver);
+    this.hurtVeh(v, (speed - vp(v).crashMin) * 9, driver);
   }
   shootVeh(v, part, d, a) {
     if (v.dead) return;
@@ -532,7 +563,7 @@ export class Game {
       if (v.tireHp[i] <= 0) { v.tires |= 1 << i; this.bcast({ t: 'tire', v: v.id, i, m: v.tires }); }
       return;
     }
-    this.hurtVeh(v, part === 'tank' ? d * 1.3 : d * 0.35, a);
+    this.hurtVeh(v, (part === 'tank' ? d * 1.3 : d * 0.35) * vp(v).armor, a);
   }
   hurtVeh(v, amount, a) {
     if (v.dead || amount <= 0) return;
@@ -585,7 +616,7 @@ export class Game {
         for (const q of [...this.players.values()]) {
           if (!q.alive || q.veh >= 0 || (q.team === driver.team && !this.cfg.ff) || now < q.prot || now < q.runT) continue;
           const [lx, lz] = w2l(v, q.x, q.z);
-          if (Math.abs(lx) < VEH.hw + 0.55 && Math.abs(lz) < 3.0 && q.y < 1.4) { q.runT = now + 500; this.hurt(q, Math.abs(v.speed) * 9, driver, false, 'veh', v.x, v.z); }
+          if (Math.abs(lx) < vp(v).hw + 0.55 && Math.abs(lz) < vp(v).hl + 0.5 && q.y < 1.4) { q.runT = now + 500; this.hurt(q, Math.abs(v.speed) * (v.type === 1 ? 16 : 9), driver, false, 'veh', v.x, v.z); }
         }
       }
     }
@@ -737,7 +768,7 @@ export class Game {
       ps.push([p.id, r2(p.x), r2(p.y), r2(p.z), r3(p.yaw), r3(p.pitch), f, Math.round(p.hp), p.w, p.grenades, p.veh + 1, p.seat, Math.round(p.shield || 0)]);
     }
     this.bcast({ t: 'snap', tl: this.timeLeft(), sc: this.score, ps, gr: this.grenades.map(g => [g.id, r2(g.x), r2(g.y), r2(g.z)]),
-      vs: this.vehs.map(v => [v.id, r2(v.x), r2(v.z), r3(v.h), r2(v.speed), r2(v.steer), v.tires, Math.round(v.hp), (v.burn ? 1 : 0) | (v.dead ? 2 : 0), ...v.seats]),
+      vs: this.vehs.map(v => [v.id, r2(v.x), r2(v.z), r3(v.h), r2(v.speed), r2(v.steer), v.tires, Math.round(v.hp), (v.burn ? 1 : 0) | (v.dead ? 2 : 0), ...v.seats, v.type | 0]),
       dr: this.drops.map(d => [d.id, r2(d.x), r2(d.y), r2(d.z), d.w, d.n]), ...this.snapExtras() }, true);
   }
 }

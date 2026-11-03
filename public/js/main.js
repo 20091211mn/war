@@ -4,7 +4,7 @@ import { Engine, tmp } from './gl.js';
 import { WEAPONS, PRIMARIES, SECONDARIES, OPTICS, MUZZLES, UNDERS, MAGS, computeStats, sanitizeLoadout } from '/shared/weapons.js';
 import { buildMap } from '/shared/maps.js';
 import { PLAYER, moveBody, canStand, raycastMap, rayPlayer } from '/shared/physics.js';
-import { VEH, SEATS, seatWorld, rayVehicle, vehStep, pushOutVeh, w2l } from '/shared/vehicle.js';
+import { VEH, SEATS, VT, TANK, vp, seatsOf, seatWorld, rayVehicle, vehStep, pushOutVeh, w2l } from '/shared/vehicle.js';
 import { scan } from './lan.js';
 import { LocalHost, remoteLink } from './net.js';
 import { Snd } from './audio.js';
@@ -56,7 +56,7 @@ const me = {
   veh: -1, seat: 0, vview: 'fp', seatAt: 0, shake: 0, killer: '', killW: '', shield: 0, killerId: 0, drone: null, droneCd: 0,
 };
 // حالة المركبة التي أقودها (المحاكاة محلية، والخادم يتحقق)
-const LV = { x: 0, z: 0, h: 0, vx: 0, vz: 0, steer: 0, tires: 0, speed: 0, dyn: null, cr: 0, lastSend: 0, skidAt: 0 };
+const LV = { x: 0, z: 0, h: 0, vx: 0, vz: 0, steer: 0, tires: 0, speed: 0, dyn: null, cr: 0, lastSend: 0, skidAt: 0, type: 0 };
 let eng = null, fx = new Effects(), lastT = 0, lastSend = 0, lastPing = 0, lastRadar = 0, emaDt = 0.016, lastRender = 0;
 
 // ---------- الشاشات ----------
@@ -166,6 +166,7 @@ function onMsg(m) {
     case 'chat': addChat(m); break;
     case 'seat': onSeat(m); break;
     case 'exit': onExit(m); break;
+    case 'cshot': onCannonShot(m); break;
     case 'vfix': if (me.veh >= 0 && me.seat === 0) { LV.x = m.x; LV.z = m.z; LV.h = m.h; LV.vx = m.vx; LV.vz = m.vz; } break;
     case 'vboom': onVBoom(m); break;
     case 'vcrash': { const v = S.vehs.get(m.v); if (v && !(me.veh === m.v && me.seat === 0)) { const d = Math.hypot(v.x - me.x, v.z - me.z); Snd.crash(clamp(1 - d / 60, 0, 1) * clamp(m.s / 15, 0.3, 1), 0); fx.spark(v.x, 1, v.z, [1, 0.85, 0.4], 8, 4); } break; }
@@ -499,7 +500,7 @@ function onSnap(m) {
     const id = a[0]; vs.add(id);
     let v = S.vehs.get(id);
     if (!v || ((v.flags & 2) && !(a[8] & 2))) { // جديدة أو أعيد ظهورها
-      v = { id, x: a[1], z: a[2], h: a[3], tx: a[1], tz: a[2], th: a[3], speed: 0, steer: 0, tires: 0, hp: 450, flags: 0, seats: [0, 0, 0, 0, 0], spin: 0 };
+      v = { id, type: a[14] === 1 ? 1 : 0, x: a[1], z: a[2], h: a[3], tx: a[1], tz: a[2], th: a[3], speed: 0, steer: 0, tires: 0, hp: VT[a[14] === 1 ? 1 : 0].hp, flags: 0, seats: [0, 0, 0, 0, 0], spin: 0, kick: 0, ty: a[3], tp: 0 };
       S.vehs.set(id, v);
     }
     const driven = me.veh === id && me.seat === 0;
@@ -659,7 +660,7 @@ function onSeat(m) {
   me.veh = m.v; me.seat = m.s; me.epoch = m.e; me.seatAt = nowMs(); me.crouch = true; me.sprinting = false;
   if (was < 0 && v) { me.yaw = v.h; me.pitch = m.s === 0 ? -0.12 : 0; }
   me.vview = m.s === 0 ? 'chase' : 'fp';
-  if (m.s === 0 && v) { const sp = v.speed || 0; LV.x = v.x; LV.z = v.z; LV.h = v.h; LV.vx = -Math.sin(v.h) * sp; LV.vz = -Math.cos(v.h) * sp; LV.steer = 0; LV.tires = v.tires; LV.speed = sp; LV.cr = 0; v.tx = v.x; v.tz = v.z; v.th = v.h; }
+  if (m.s === 0 && v) { LV.type = v.type | 0; const sp = v.speed || 0; LV.x = v.x; LV.z = v.z; LV.h = v.h; LV.vx = -Math.sin(v.h) * sp; LV.vz = -Math.cos(v.h) * sp; LV.steer = 0; LV.tires = v.tires; LV.speed = sp; LV.cr = 0; v.tx = v.x; v.tz = v.z; v.th = v.h; }
   me.reloading = -1; me.adsT = 0; if (input.resetAds) input.resetAds();
   Snd.door(); updateAmmoHud();
 }
@@ -768,13 +769,40 @@ function tryFire(now, pressed) {
   updateAmmoHud();
 }
 
+// ---- دبابة: البرج يتبع اتجاه النظر، والنار = قذيفة مدفع ----
+function tankAim(v) { // نقطة التصويب: من الكاميرا على امتداد النظر
+  const c = S.lastCam || { x: v.x, y: 3, z: v.z }, d = aimDir(me.yaw, me.pitch);
+  let t = raycastMap(S.map, c.x, c.y, c.z, d[0], d[1], d[2], TANK.range); if (t === Infinity) t = TANK.range;
+  for (const o of S.vehs.values()) { if (o === v || (o.flags & 2)) continue; const q = rayVehicle(o, c.x, c.y, c.z, d[0], d[1], d[2], t); if (q && q.t < t) t = q.t; }
+  const px = c.x + d[0] * t, py = c.y + d[1] * t, pz = c.z + d[2] * t;
+  const dx = px - v.x, dy = py - 1.65, dz = pz - v.z, l = Math.hypot(dx, dy, dz) || 1;
+  return [dx / l, dy / l, dz / l];
+}
+function tankStep(v, dt, now) {
+  v.ty = me.yaw; v.tp = clamp(me.pitch, -0.35, 0.5);
+  v.kick = Math.max(0, (v.kick || 0) - dt * 3);
+  const ready = now >= (me.cannonAt || 0), pressed = consume('firePressed');
+  const bar = $('vcan'); if (bar) bar.style.width = (ready ? 100 : clamp(100 - (me.cannonAt - now) / TANK.cd * 100, 0, 100)) + '%';
+  if ((pressed || input.fire) && ready && !(v.flags & 2)) {
+    me.cannonAt = now + TANK.cd;
+    const d = tankAim(v); send({ t: 'cannon', d: d.map((x) => Math.round(x * 1e4) / 1e4) });
+  }
+}
+function onCannonShot(m) {
+  const v = S.vehs.get(m.v); if (v) v.kick = 1;
+  fx.tracer(m.o, m.e, false, true);
+  for (let i = 0; i < 6; i++) fx.smoke(m.o[0] + (Math.random() - 0.5) * 0.6, m.o[1] + (Math.random() - 0.3) * 0.5, m.o[2] + (Math.random() - 0.5) * 0.6, [0.55, 0.55, 0.5]);
+  fx.spark(m.o[0], m.o[1], m.o[2], [1, 0.8, 0.3], 14, 6);
+  const d = Math.hypot(m.o[0] - me.x, m.o[2] - me.z); Snd.boom(clamp(1 - d / 140, 0.1, 1) * 0.7, panOf({ x: m.o[0], z: m.o[2] }), clamp(d / 140, 0, 1));
+  if (me.veh === m.v) me.shake = Math.max(me.shake, 0.9); else if (d < 40) me.shake = Math.max(me.shake, 0.4 * (1 - d / 40));
+}
 // أقرب مركبة يمكن ركوبها (نفس منطق الخادم)
 function nearVehicle() {
   if (me.veh >= 0 || !me.alive || me.y > 1.5) return null;
   let best = null, bd = 2.3;
   for (const v of S.vehs.values()) {
     if (v.flags & 2) continue;
-    const [lx, lz] = w2l(v, me.x, me.z), d = Math.hypot(Math.max(0, Math.abs(lx) - VEH.hw), Math.max(0, Math.abs(lz) - 2.5));
+    const P = vp(v), [lx, lz] = w2l(v, me.x, me.z), d = Math.hypot(Math.max(0, Math.abs(lx) - P.hw), Math.max(0, Math.abs(lz) - P.hl));
     const team = v.seats.some(Boolean) ? teamOf(v.seats.find(Boolean)) : -1;
     if (d < bd && (team < 0 || team === me.team)) { bd = d; best = v; }
   }
@@ -782,12 +810,12 @@ function nearVehicle() {
 }
 // قيادة السيارة (المحاكاة عندي، الخادم يتحقق)
 function driveStep(v, dt, now) {
-  LV.tires = v.tires;
-  LV.dyn = []; for (const o of S.vehs.values()) if (o !== v) LV.dyn.push([o.x, o.z, o.h]);
+  LV.tires = v.tires; LV.type = v.type | 0;
+  LV.dyn = []; for (const o of S.vehs.values()) if (o !== v) LV.dyn.push([o.x, o.z, o.h, o.type | 0]);
   const inp = { thr: clamp(input.moveY, -1, 1), steer: clamp(input.moveX, -1, 1), hb: input.jumpHeld };
   const n = Math.max(1, Math.ceil(dt / (1 / 60))), h = dt / n;
   for (let i = 0; i < n; i++) { const cr = vehStep(S.map, LV, inp, h); if (cr > LV.cr) LV.cr = cr; }
-  if (LV.cr > VEH.crashMin && now - (driveStep.crashSnd || 0) > 500) { driveStep.crashSnd = now; Snd.crash(clamp(LV.cr / 14, 0.3, 1), 0); me.shake = Math.max(me.shake, clamp(LV.cr / 20, 0.15, 0.7)); }
+  if (LV.cr > vp(LV).crashMin && now - (driveStep.crashSnd || 0) > 500) { driveStep.crashSnd = now; Snd.crash(clamp(LV.cr / 14, 0.3, 1), 0); me.shake = Math.max(me.shake, clamp(LV.cr / 20, 0.15, 0.7)); }
   v.x = LV.x; v.z = LV.z; v.h = LV.h; v.tx = LV.x; v.tz = LV.z; v.th = LV.h; v.speed = LV.speed; v.steer = LV.steer;
   if (inp.hb && Math.abs(LV.speed) > 8 && now - LV.skidAt > 260) { LV.skidAt = now; Snd.skid(0.35, 0); }
   if (now - LV.lastSend > 50) {
@@ -797,7 +825,7 @@ function driveStep(v, dt, now) {
   }
 }
 function nextFreeSeat(v) {
-  for (let k = 1; k <= SEATS.length; k++) { const s = (me.seat + k) % SEATS.length; if (!v.seats[s]) return s; }
+  const ST = seatsOf(v); for (let k = 1; k <= ST.length; k++) { const s = (me.seat + k) % ST.length; if (!v.seats[s]) return s; }
   return -1;
 }
 
@@ -841,7 +869,7 @@ function update(dt, now) {
   if (me.veh >= 0 && vObj) {
     // ---- داخل مركبة ----
     consume('jump');
-    if (me.seat === 0) driveStep(vObj, dt, now);
+    if (me.seat === 0) { driveStep(vObj, dt, now); if (vObj.type === 1) tankStep(vObj, dt, now); }
     const [sx, sy, sz] = seatWorld(vObj, me.seat);
     me.x = sx; me.y = sy; me.z = sz; me.camY = sy; me.eyeH = PLAYER.eyec; me.crouch = true; me.vx = me.vz = 0; me.onGround = true; me.sprinting = false;
   } else {
@@ -938,13 +966,13 @@ function updateRemotes(dt, now) {
   let best = null, bd = 1e9;
   for (const v of S.vehs.values()) { if ((v.flags & 2) || !v.seats[0]) continue; const d = Math.hypot(v.x - me.x, v.z - me.z); if (d < bd) { bd = d; best = v; } }
   if (best && bd < 70) {
-    const own = me.veh === best.id, rpm = clamp(Math.abs(best.speed) / VEH.maxFwd, 0, 1);
+    const own = me.veh === best.id, rpm = clamp(Math.abs(best.speed) / vp(best).maxFwd, 0, 1);
     Snd.engine(rpm, own ? 0.9 : Math.pow(1 - bd / 70, 2), own ? 0 : panOf(best));
   } else Snd.engineOff();
 }
 function leanFor(v, seat, yaw, active) {
   if (!active || seat !== 1) return null;
-  const L = 0.4 * Math.sign(SEATS[seat].x || 1);
+  const L = 0.4 * Math.sign(seatsOf(v)[seat].x || 1);
   return [L * Math.cos(v.h - yaw), L * Math.sin(yaw - v.h)];
 }
 
@@ -959,10 +987,11 @@ function render(dt, now) {
   const myV = me.alive && me.veh >= 0 ? S.vehs.get(me.veh) : null;
   const chase = !!myV && me.vview === 'chase';
   if (chase) {
-    const d = aimDir(me.yaw, me.pitch), tx = myV.x, ty = 1.5, tz = myV.z; let dist = 7.5;
-    const t = raycastMap(S.map, tx, ty, tz, -d[0], -d[1], -d[2], dist + 0.4); if (t !== Infinity) dist = Math.max(1.5, t - 0.4);
+    const tk = myV.type === 1, d = aimDir(me.yaw, me.pitch), tx = myV.x, ty = tk ? 2.3 : 1.5, tz = myV.z; let dist = tk ? 11 : 7.5;
+    const t = raycastMap(S.map, tx, ty, tz, -d[0], -d[1], -d[2], dist + 0.4); if (t !== Infinity) dist = Math.max(tk ? 6.5 : 1.5, t - 0.4);
     cam = { x: tx - d[0] * dist, y: Math.max(0.6, ty - d[1] * dist), z: tz - d[2] * dist, yaw: me.yaw, pitch: me.pitch, fov: 74 };
   }
+  S.lastCam = cam;
   const droning = !!me.drone && me.alive;
   if (droning) cam = { x: me.drone.x, y: me.drone.y, z: me.drone.z, yaw: me.drone.yaw, pitch: me.drone.pitch, fov: 88 };
   if (!droning && !me.alive && me.killerId && !S.ended && !chase) {
@@ -975,7 +1004,8 @@ function render(dt, now) {
   }
   if (me.shake > 0) { cam.yaw += (Math.random() - 0.5) * 0.03 * me.shake; cam.pitch += (Math.random() - 0.5) * 0.03 * me.shake; }
   eng.begin(cam); eng.drawMap();
-  for (const v of S.vehs.values()) { if (!eng.visible(v.x, 1, v.z, 4)) continue; drawVehicle(eng, v, now, Math.hypot(v.x - cam.x, v.z - cam.z) > 55, S.cfg && S.cfg.tod > 0); }
+  for (const v of S.vehs.values()) { if (v.type === 1 && !(me.veh === v.id && me.seat === 0)) { const dr = v.seats[0] ? S.remote.get(v.seats[0]) : null; const ty = dr ? dr.yaw : v.th; let dy = ty - v.ty; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI; v.ty += dy * Math.min(1, dt * 6); v.tp = dr ? clamp(dr.pitch, -0.35, 0.5) : 0; v.kick = Math.max(0, (v.kick || 0) - dt * 3); }
+    if (!eng.visible(v.x, 1, v.z, 4)) continue; drawVehicle(eng, v, now, Math.hypot(v.x - cam.x, v.z - cam.z) > 55, S.cfg && S.cfg.tod > 0); }
   for (const k of S.kits.values()) if (k.up && Math.hypot(k.x - cam.x, k.z - cam.z) < 80 && eng.visible(k.x, 0.6, k.z, 1)) drawKit(eng, k, now);
   if (S.zone) drawZone(eng, S.zone, now);
   const mineIds = new Set(me.st.filter(Boolean).map((s) => s.id));
@@ -1056,8 +1086,9 @@ function hudSlow(now, st, chase) {
   $('vhud').classList.toggle('hidden', !myV);
   if (myV) {
     $('vspd').textContent = Math.round(Math.abs(myV.speed) * 3.6);
-    $('vhp').style.width = clamp(myV.hp / 450 * 100, 0, 100) + '%';
-    const ti = $('vtires').children; for (let i = 0; i < 4; i++) ti[i].className = (myV.tires >> i & 1) ? 'bad' : 'ok';
+    $('vhp').style.width = clamp(myV.hp / vp(myV).hp * 100, 0, 100) + '%';
+    const tkv = myV.type === 1; $('vtires').style.display = tkv ? 'none' : ''; const cb = $('vcanbar'); if (cb) cb.style.display = tkv && me.seat === 0 ? '' : 'none';
+    if (!tkv) { const ti = $('vtires').children; for (let i = 0; i < 4; i++) ti[i].className = (myV.tires >> i & 1) ? 'bad' : 'ok'; }
     $('vseat').textContent = ['السائق', 'الراكب الأمامي', 'الصندوق (يسار)', 'الصندوق (يمين)', 'الصندوق (خلف)'][me.seat];
     if (myV.flags & 1) { $('prompt').textContent = 'المركبة تحترق! انزل فورًا'; $('prompt').classList.remove('hidden'); }
     else { $('prompt').textContent = input.touch ? '' : 'E نزول · F تبديل المقعد · V الكاميرا' + (me.seat === 0 ? ' · Space فرامل اليد' : ''); $('prompt').classList.toggle('hidden', input.touch || now - me.seatAt > 6000); }
@@ -1101,7 +1132,7 @@ function radar() {
   c.fillStyle = 'rgba(170,190,210,.45)';
   if (radar.map !== S.map) { radar.map = S.map; radar.list = S.map.boxes.filter((b) => b.y1 >= 0.8 && b.y0 <= 2.5); }
   for (const b of radar.list) { if (Math.abs(b.x0 - me.x) > R * 1.5 && Math.abs(b.x1 - me.x) > R * 1.5) continue; if (Math.abs(b.z0 - me.z) > R * 1.5 && Math.abs(b.z1 - me.z) > R * 1.5) continue; c.fillRect(b.x0 - me.x, b.z0 - me.z, b.x1 - b.x0, b.z1 - b.z0); }
-  for (const v of S.vehs.values()) { c.save(); c.translate(v.x - me.x, v.z - me.z); c.rotate(-v.h); c.fillStyle = v.flags & 2 ? '#555' : '#ffd23b'; c.fillRect(-1, -2.5, 2, 5); c.restore(); }
+  for (const v of S.vehs.values()) { c.save(); c.translate(v.x - me.x, v.z - me.z); c.rotate(-v.h); c.fillStyle = v.flags & 2 ? '#555' : v.type === 1 ? '#9bd36a' : '#ffd23b'; if (v.type === 1) c.fillRect(-1.5, -3.1, 3, 6.2); else c.fillRect(-1, -2.5, 2, 5); c.restore(); }
   for (const k of S.kits.values()) if (k.up) { c.fillStyle = '#fff'; c.fillRect(k.x - me.x - 1, k.z - me.z - 1, 2, 2); c.fillStyle = '#e74c3c'; c.fillRect(k.x - me.x - 0.25, k.z - me.z - 0.9, 0.5, 1.8); c.fillRect(k.x - me.x - 0.9, k.z - me.z - 0.25, 1.8, 0.5); }
   if (S.zone) { const zc = ['#ff4d4d', '#4d8dff', '#b04dff', '#ffffff'][S.zone.state]; c.strokeStyle = zc; c.lineWidth = 0.9; c.beginPath(); c.arc(S.zone.x - me.x, S.zone.z - me.z, S.zone.r, 0, 6.283); c.stroke(); c.fillStyle = zc + '33'; c.fill(); }
   const mine = new Set(me.st.filter(Boolean).map((s) => s.id));
@@ -1142,6 +1173,6 @@ function boot() {
   show('menu');
   requestAnimationFrame(frame);
   try { if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(() => {}); } catch { /* */ }
-  window.__wz = { S, me, LV, eng, startSolo, joinTo, send };
+  window.__wz = { S, me, LV, eng, startSolo, joinTo, send, input };
 }
 boot();
