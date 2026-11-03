@@ -2,8 +2,8 @@
 let ctx = null, master = null, dry = null, wet = null, noiseBuf = null, enabled = true;
 
 function makeImpulse(c, seconds, decay) {
-  const len = Math.floor(c.sampleRate * seconds), b = c.createBuffer(2, len, c.sampleRate);
-  for (let ch = 0; ch < 2; ch++) { const d = b.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay); }
+  const len = Math.floor(c.sampleRate * seconds), b = c.createBuffer(1, len, c.sampleRate);
+  for (let ch = 0; ch < 1; ch++) { const d = b.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay); }
   return b;
 }
 
@@ -19,7 +19,7 @@ export const Snd = {
       master.connect(comp); comp.connect(ctx.destination);
       dry = ctx.createGain(); dry.connect(master);
       wet = ctx.createGain(); wet.gain.value = 0.35;
-      const conv = ctx.createConvolver(); conv.buffer = makeImpulse(ctx, 1.4, 3.2);
+      const conv = ctx.createConvolver(); conv.buffer = makeImpulse(ctx, 0.7, 3.2);
       wet.connect(conv); conv.connect(master);
       noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
       const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -28,6 +28,14 @@ export const Snd = {
   },
   setVolume(v) { if (master) master.gain.value = v * 1.1; enabled = v > 0; },
   // عقدة خرج: pan، vol، dist (0..1 ليقلّ الحدّة)، rev (مقدار الصدى)
+  // ميزانية أصوات: على الأجهزة الضعيفة كثرة العقد الصوتية المتزامنة (إطلاق متعدد + ارتدادات) تسبب لاق؛ نتجاهل الأصوات الضعيفة/البعيدة عند الازدحام
+  _budget(dur, vol, max = 7) {
+    const t = ctx.currentTime, a = this._ends || (this._ends = []);
+    while (a.length && a[0] < t) a.shift();
+    if (a.length >= max && vol < 0.8) return false;
+    if (a.length >= max * 2) return false;
+    a.push(t + dur); a.sort((x, y) => x - y); return true;
+  },
   _out(pan = 0, vol = 1, dist = 0, rev = 0.25) {
     const g = ctx.createGain(); g.gain.value = vol;
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 18000 - dist * 15000; lp.Q.value = 0.4;
@@ -59,6 +67,8 @@ export const Snd = {
       lmg: [0.35, 1100, 1.15, 85, 0.32, 1.1], dmr: [0.5, 1000, 1.25, 75, 0.4, 1.2], sniper: [0.9, 800, 1.5, 60, 0.6, 1.4], shotgun: [0.6, 700, 1.4, 70, 0.4, 1],
     }[kind] || [0.3, 1500, 1, 110, 0.3, 1];
     const [tail, body, g, low, rev, crack] = P;
+    if (!this._budget(Math.min(tail, 0.35), vol)) return;
+    const lite = !!(this._ends && this._ends.length > 4) || vol < 0.35;
     const out = this._out(pan, vol * (muted ? 0.4 : 1) * 0.9, dist, muted ? 0.1 : rev);
     const jitter = 0.92 + Math.random() * 0.16;
     if (muted) {
@@ -69,13 +79,14 @@ export const Snd = {
     }
     this._noise(out, t, 0.018, 'highpass', 4500 * jitter, 2500, 0.7, g * crack * 1.1);       // طقطقة حادة
     this._noise(out, t, tail, 'bandpass', body * jitter, body * 0.25, 0.6, g * 1.2);          // جسم الطلقة
-    this._noise(out, t + 0.004, tail * 1.4, 'lowpass', 3500, 400, 0.5, g * 0.7);              // ذيل
+    if (!lite) this._noise(out, t + 0.004, tail * 1.4, 'lowpass', 3500, 400, 0.5, g * 0.7);   // ذيل (يُحذف عند الازدحام)
     this._tone(out, t, 0.2 + tail * 0.3, low * 2.4 * jitter, low * 0.45, g * 1.3);             // دويّ منخفض
+    if (lite) return;
     if (kind === 'shotgun') { this._noise(out, t + 0.012, 0.25, 'lowpass', 1800, 200, 0.6, g * 0.8); }
     if (kind === 'sniper' || kind === 'dmr') this._noise(out, t + 0.05, 0.5, 'bandpass', 600, 150, 0.5, g * 0.35);
   },
   step(vol = 0.3, pan = 0, dist = 0) {
-    if (!ctx || !enabled || vol <= 0.01) return;
+    if (!ctx || !enabled || vol <= 0.01 || !this._budget(0.1, vol, 5)) return;
     const t = ctx.currentTime, out = this._out(pan, vol, dist, 0.08);
     this._tone(out, t, 0.08, 120 + Math.random() * 30, 55, 0.9);
     this._noise(out, t, 0.06, 'bandpass', 900 + Math.random() * 500, 400, 1.3, 0.7, 0.002);
@@ -104,7 +115,7 @@ export const Snd = {
     this._tone(o, t, 0.12, 880, 880, 0.55, 'triangle'); this._tone(o, t + 0.09, 0.2, 1320, 1320, 0.55, 'triangle');
   },
   crack(vol = 0.8, pan = 0) { // طلقة تمرّ بجانب الرأس
-    if (!ctx || !enabled) return; const t = ctx.currentTime, o = this._out(pan, vol, 0, 0.05);
+    if (!ctx || !enabled || !this._budget(0.06, vol, 6)) return; const t = ctx.currentTime, o = this._out(pan, vol, 0, 0.05);
     this._noise(o, t, 0.045, 'highpass', 4500, 2500, 0.8, 1.0, 0.001); this._tone(o, t, 0.06, 2600, 700, 0.35, 'triangle');
   },
   ring(vol = 0.6, sec = 2.5) { // طنين الأذن بعد انفجار قريب + كتم مؤقت للصوت

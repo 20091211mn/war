@@ -166,16 +166,18 @@ export function drawViewmodel(eng, vm) {
 }
 
 // ---- المؤثرات ----
+const CAP_LITE = { parts: 36, decals: 36, smokes: 16, tracers: 12, shells: 10 }, CAP_FULL = { parts: 70, decals: 90, smokes: 40, tracers: 24, shells: 30 };
 export class Effects {
-  constructor() { this.tracers = []; this.parts = []; this.booms = []; this.smokes = []; this.flames = []; this.shells = []; this.decals = []; }
-  decal(x, y, z, blood) { if (this.decals.length >= 90) this.decals.shift(); this.decals.push({ x, y, z, age: 0, blood: !!blood, s: 0.05 + Math.random() * 0.04 }); }
-  dust(x, z, k = 1) { if (this.smokes.length < 40) this.smokes.push({ x, y: 0.15, z, vx: (Math.random() - 0.5) * 0.8, vz: (Math.random() - 0.5) * 0.8, age: 0, life: 0.9 + Math.random() * 0.6, col: [0.78, 0.68, 0.5], rise: 0.35, sz: 0.5 + k * 0.6, a: 0.32 }); }
-  shell(x, y, z, yaw, big) { if (this.shells.length >= 30) this.shells.shift(); const rx = Math.cos(yaw), rz = -Math.sin(yaw), v = 1.8 + Math.random() * 1.2; this.shells.push({ x, y, z, vx: rx * v + (Math.random() - 0.5), vy: 1.6 + Math.random(), vz: rz * v + (Math.random() - 0.5), age: 0, life: 2.5, big, rot: Math.random() * 6 }); }
-  smoke(x, y, z, col) { if (this.smokes.length < 36) this.smokes.push({ x, y, z, vx: (Math.random() - 0.5) * 0.5, vz: (Math.random() - 0.5) * 0.5, age: 0, life: 1.8 + Math.random() * 1.4, col }); }
+  constructor() { this.tracers = []; this.parts = []; this.booms = []; this.smokes = []; this.flames = []; this.shells = []; this.decals = []; this.lite = false; }
+  get cap() { return this.lite ? CAP_LITE : CAP_FULL; }
+  decal(x, y, z, blood) { if (this.decals.length >= this.cap.decals) this.decals.shift(); this.decals.push({ x, y, z, age: 0, blood: !!blood, s: 0.05 + Math.random() * 0.04 }); }
+  dust(x, z, k = 1) { if (this.smokes.length < this.cap.smokes) this.smokes.push({ x, y: 0.15, z, vx: (Math.random() - 0.5) * 0.8, vz: (Math.random() - 0.5) * 0.8, age: 0, life: 0.9 + Math.random() * 0.6, col: [0.78, 0.68, 0.5], rise: 0.35, sz: 0.5 + k * 0.6, a: 0.32 }); }
+  shell(x, y, z, yaw, big) { if (this.shells.length >= this.cap.shells) this.shells.shift(); const rx = Math.cos(yaw), rz = -Math.sin(yaw), v = 1.8 + Math.random() * 1.2; this.shells.push({ x, y, z, vx: rx * v + (Math.random() - 0.5), vy: 1.6 + Math.random(), vz: rz * v + (Math.random() - 0.5), age: 0, life: 2.5, big, rot: Math.random() * 6 }); }
+  smoke(x, y, z, col) { if (this.smokes.length < this.cap.smokes) this.smokes.push({ x, y, z, vx: (Math.random() - 0.5) * 0.5, vz: (Math.random() - 0.5) * 0.5, age: 0, life: 1.8 + Math.random() * 1.4, col }); }
   flame(x, y, z) { if (this.flames.length < 24) this.flames.push({ x, y, z, age: 0, life: 0.35 + Math.random() * 0.25 }); }
-  tracer(o, e, muted, hit) { if (this.tracers.length < 24) this.tracers.push({ o, e, age: 0, muted }); }
+  tracer(o, e, muted, hit) { if (this.tracers.length < this.cap.tracers) this.tracers.push({ o, e, age: 0, muted }); }
   spark(x, y, z, col, n = 5, spd = 3) {
-    for (let i = 0; i < n && this.parts.length < 70; i++) {
+    for (let i = 0; i < (this.lite ? Math.ceil(n * 0.6) : n) && this.parts.length < this.cap.parts; i++) {
       this.parts.push({ x, y, z, vx: (Math.random() - 0.5) * spd, vy: Math.random() * spd * 0.8, vz: (Math.random() - 0.5) * spd, life: 0.25 + Math.random() * 0.25, age: 0, col, s: 0.03 + Math.random() * 0.03 });
     }
   }
@@ -199,7 +201,7 @@ export class Effects {
       const mx = t.o[0] + dx / L * (tl + len / 2), my = t.o[1] + dy / L * (tl + len / 2), mz = t.o[2] + dz / L * (tl + len / 2);
       const m = basis(tmp(), mx, my, mz, dx / L, dy / L, dz / L, 0.02, 0.02, len);
       eng.cubeAt(m, 1, 0.85, 0.5, true, t.muted ? 0.25 : 0.8, true);
-      eng.cubeAt(basis(tmp(), mx, my, mz, dx / L, dy / L, dz / L, 0.06, 0.06, len * 0.9), 1, 0.6, 0.2, true, t.muted ? 0.06 : 0.22, true); // هالة
+      if (!this.lite) eng.cubeAt(basis(tmp(), mx, my, mz, dx / L, dy / L, dz / L, 0.06, 0.06, len * 0.9), 1, 0.6, 0.2, true, t.muted ? 0.06 : 0.22, true); // هالة
       const hx = t.o[0] + dx / L * s, hy = t.o[1] + dy / L * s, hz = t.o[2] + dz / L * s; // رأس الرصاصة
       eng.cubeAt(basis(tmp(), hx, hy, hz, dx / L, dy / L, dz / L, 0.045, 0.045, 0.09), 1, 1, 0.85, true, t.muted ? 0.4 : 1, true);
     }

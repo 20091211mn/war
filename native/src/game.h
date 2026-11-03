@@ -154,12 +154,14 @@ struct Game{
   }
   void fire(int i){
     Ent&p=e[i]; const WeaponDef&d=WEAPONS[p.wpn];
-    { float ddx=p.b.x-e[meI].b.x,ddz=p.b.z-e[meI].b.z; float vv=1.f-sqrtf(ddx*ddx+ddz*ddz)/70.f; SFX::play(d.pellets>1?SFX::SHOTGUN:(p.wpn==3?SFX::SNIPER:(p.wpn>=6?SFX::PISTOL:SFX::SHOT)),i==meI?1.f:vv*0.8f,0); }
+    float aDm=1.f,aHip=1.f,aRv=1.f,aRh=1.f,aVol=1.f; // تأثير الملحقات (كما في النسخة الأندرويد/الويب): كاتم/معوّض فوهة، مقبض، ليزر
+    if(i==meI&&role!=3){ const GAtt&at=wAtt[p.wpn&15]; if(at.muz==1){aDm=0.95f;aRv*=0.92f;aVol=0.4f;} else if(at.muz==2){aRh*=0.55f;aRv*=0.88f;} if(at.under==1){aRv*=0.82f;aRh*=0.85f;aHip=0.9f;} else if(at.under==2)aHip=0.6f; }
+    { float ddx=p.b.x-e[meI].b.x,ddz=p.b.z-e[meI].b.z; float vv=1.f-sqrtf(ddx*ddx+ddz*ddz)/70.f; SFX::play(d.pellets>1?SFX::SHOTGUN:(p.wpn==3?SFX::SNIPER:(p.wpn>=6?SFX::PISTOL:SFX::SHOT)),(i==meI?1.f:vv*0.8f)*aVol,0); }
     if(i==meI&&drive<0&&shells.size()<40){ float cy=cosf(p.yaw),sy=sinf(p.yaw); float rx=cy,rz=-sy; // اليمين
       shells.push_back({p.b.x+rx*0.2f-sy*0.3f,p.b.y+(p.crouch?PK.eyec:PK.eye)-0.18f,p.b.z+rz*0.2f-cy*0.3f,rx*(1.8f+frand())+(frand()-0.5f),1.8f+frand()*0.8f,rz*(1.8f+frand())+(frand()-0.5f),1.5f}); }
     p.ammo--; p.cd=60.f/d.rpm; p.flash=0.06f; p.prot=0;
     float moveF=p.moving?1.6f:1.f; bool ads=(i==meI)&&adsHeld;
-    float sp=(ads?d.ads:d.hip)*moveF; if(p.crouch)sp*=0.7f;
+    float sp=(ads?d.ads:d.hip*aHip)*moveF; if(p.crouch)sp*=0.7f;
     float eyeY=p.b.y+(p.crouch?PK.eyec:PK.eye);
     std::string dj;
     for(int k=0;k<d.pellets;k++){
@@ -171,12 +173,12 @@ struct Game{
       for(int j=0;j<(int)e.size();j++){ if(j==i||!e[j].alive||e[j].team==p.team)continue;
         RayHit h=rayPlayer(e[j].b.x,e[j].b.y,e[j].b.z,e[j].crouch,p.b.x,eyeY,p.b.z,dx,dy,dz,best); if(h.ok&&h.t<best){best=h.t;hv=j;hh=h.head;} }
       { VH::Veh*vhit=nullptr;int vpart=0; for(auto&v:vh){ if(v.dead)continue; if(v.driver>=0&&v.driver!=i&&e[v.driver].team==p.team)continue; int pt2; float tv=VH::rayVeh(v,p.b.x,eyeY,p.b.z,dx,dy,dz,best,pt2); if(tv<best){best=tv;vhit=&v;vpart=pt2;hv=-1;} }
-        if(vhit)damageVeh(*vhit,vpart,dmgAt(d,best),i); }
-      if(hv>=0)hurt(hv,i,dmgAt(d,best)*(hh?d.head:1.f),hh);
+        if(vhit)damageVeh(*vhit,vpart,dmgAt(d,best)*aDm,i); }
+      if(hv>=0)hurt(hv,i,dmgAt(d,best)*aDm*(hh?d.head:1.f),hh);
       if(best<d.r1*1.39f)sparkAt(p.b.x+dx*best,eyeY+dy*best,p.b.z+dz*best,dx,dy,dz,hv>=0?0:5); if(tr.size()<64)tr.push_back({p.b.x+dx*0.5f,eyeY-0.12f,p.b.z+dz*0.5f,p.b.x+dx*best,eyeY+dy*best,p.b.z+dz*best,0.09f}); if(role==1&&trOut.size()<8)trOut.push_back({p.b.x+dx*0.5f,eyeY-0.12f,p.b.z+dz*0.5f,p.b.x+dx*best,eyeY+dy*best,p.b.z+dz*best});
     }
     if(role==3&&i==meI&&!dj.empty())aclShoot(dj);
-    if(i==meI&&role!=2){ p.rkP+=d.recoilV*(ads?0.6f:1.f)*1.6f; p.rkY+=(frand()-0.5f)*d.recoilH*3.f; }
+    if(i==meI&&role!=2){ p.rkP+=d.recoilV*aRv*(ads?0.6f:1.f)*1.6f; p.rkY+=(frand()-0.5f)*d.recoilH*aRh*3.f; }
   }
   bool adsHeld=false;
   void reloadStart(Ent&p){const WeaponDef&d=WEAPONS[p.wpn]; if(p.reloadT>=0||p.ammo>=cap(p)||p.mags<=0)return; p.reloadT=0; if(&p==&e[meI])SFX::play(SFX::RELOAD,0.7f); if(role==3&&&p==&e[meI])aclReload(); }

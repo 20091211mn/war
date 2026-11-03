@@ -341,6 +341,7 @@ function applySettings() {
   input.sensTouch = 0.0012 * (settings.sens + 1) * 0.75 + 0.0006;
   Snd.setVolume(settings.vol);
   if (eng) eng.resize(settings.quality);
+  fx.lite = settings.quality <= 0.6;
 }
 function bindUI() {
   $('name').value = settings.name; $('quality').value = String(settings.quality);
@@ -1165,6 +1166,7 @@ function frame(ts) {
 function boot() {
   document.querySelectorAll('[data-ic]').forEach((el) => { el.outerHTML = icon(el.dataset.ic, Number(el.dataset.s) || 28); });
   bindUI(); enhanceSelects();
+  fx.lite = settings.quality <= 0.6;
   try { eng = new Engine($('gl')); eng.resize(settings.quality); }
   catch (e) { showError('جهازك لا يدعم الرسم ثلاثي الأبعاد', String(e.message || e), 'إعادة المحاولة'); return; }
   initInput($('gl'), { pause: () => { if (S.typing) return; if (S.paused) resume(); else pause(); }, unlocked: () => { if (S.inGame && !S.ended && !S.paused && !input.touch && me.alive && !S.typing) pause(); }, canLock: () => S.inGame && !S.paused && !S.ended && !S.typing && !!$('gl').requestPointerLock });
