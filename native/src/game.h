@@ -15,7 +15,7 @@ inline int g_aclTime=0;
 #define BUILD_ID 0
 #endif
 struct Input{
-  bool tri=false;
+  bool tri=false,seat=false;
   float mx=0,my=0;      // حركة: x يمين، y أمام
   float lx=0,ly=0;      // نظر: x يمين، y أعلى (معدّل)
   bool fire=false,ads=false,jump=false,crouch=false,reload=false,sprint=false,swapP=false,swapN=false,grenade=false,drone=false,use=false,start=false,confirm=false,back=false;
@@ -119,7 +119,7 @@ struct Game{
   }
   void tankAimDir(VH::Veh&v,float yaw,float pitch,float*d){ float cp=cosf(pitch),ddx=-sinf(yaw)*cp,ddy=sinf(pitch),ddz=-cosf(yaw)*cp;
     float t=std::min<float>(raycastMap(w,camX,camY,camZ,ddx,ddy,ddz,160.f),160.f); float px=camX+ddx*t,py=camY+ddy*t,pz=camZ+ddz*t; float ax=px-v.x,ay=py-1.65f,az=pz-v.z,l=sqrtf(ax*ax+ay*ay+az*az)+1e-5f; d[0]=ax/l;d[1]=ay/l;d[2]=az/l; }
-  void exitVeh(){ if(drive<0)return; VH::Veh&v=vh[drive]; Ent&p=e[meI]; static const float SPS[4][2]={{-1.9f,-0.25f},{1.9f,-0.25f},{0,3.6f},{0,-3.6f}},SPT[4][2]={{2.6f,0},{-2.6f,0},{0,4.2f},{0,-4.2f}}; const float (*SP)[2]=v.type==1?SPT:SPS;
+  void exitVeh(){ gunner=false; if(drive<0)return; VH::Veh&v=vh[drive]; Ent&p=e[meI]; static const float SPS[4][2]={{-1.9f,-0.25f},{1.9f,-0.25f},{0,3.6f},{0,-3.6f}},SPT[4][2]={{2.6f,0},{-2.6f,0},{0,4.2f},{0,-4.2f}}; const float (*SP)[2]=v.type==1?SPT:SPS;
     float bx=v.x,bz=v.z; for(int q=0;q<4;q++){ auto&s=SP[q]; float wx,wz; VH::l2w(v,s[0],s[1],wx,wz); if(!blocked(w,wx,0.05f,wz,PK.h)){ bx=wx;bz=wz;break; } }
     p.b=Body(); p.b.x=bx;p.b.z=bz;p.b.y=0.3f; for(int k=0;k<30;k++){moveBody(w,p.b,0,0,0.04f,false,false);if(p.b.onGround)break;} p.pitch=0; v.driver=-1; drive=-1; }
   void updateVeh(float dt,const Input&in){
@@ -137,18 +137,19 @@ struct Game{
         if(v.burn){ v.hp-=6*dt; if(v.hp<=0){ explodeVeh(v,v.driver); } } continue; }
       if(v.dead){ v.respawnT-=dt; if(v.respawnT<=0){ VH::Veh n; n.type=v.type; n.hp=VH::vp(v).hp; n.x=n.sx=v.sx;n.z=n.sz=v.sz;n.h=n.sh=n.ty=v.sh; v=n; } continue; }
       bool dr=drive==k&&me.alive;
-      float thr=0,st=0; bool hb=false; if(dr){ thr=v.type==1?std::max<float>(-1.f,std::min<float>(1.f,in.my-(in.ads?1.f:0.f))):std::max<float>(-1.f,std::min<float>(1.f,in.my+(in.fire?1.f:0.f)-(in.ads?1.f:0.f))); st=in.mx; hb=in.jump; }
+      if(dr&&role!=3){ if(in.seat&&!pSeat)gunner=!gunner; pSeat=in.seat; }
+      float thr=0,st=0; bool hb=false; if(dr&&gunner){ hb=true; } else if(dr){ thr=v.type==1?std::max<float>(-1.f,std::min<float>(1.f,in.my-(in.ads?1.f:0.f))):std::max<float>(-1.f,std::min<float>(1.f,in.my+(in.fire?1.f:0.f)-(in.ads?1.f:0.f))); st=in.mx; hb=in.jump; }
       if(v.type==1){ if(v.cannonT>0)v.cannonT-=dt; v.kick=std::max<float>(0.f,v.kick-dt*3); int di=dr?meI:v.driver; if(di>=0&&di<(int)e.size()){ v.ty=e[di].yaw; v.tp=std::max<float>(-0.35f,std::min<float>(0.5f,e[di].pitch)); } else v.ty=v.h;
-        if(dr&&in.fire&&v.cannonT<=0&&role!=2&&role!=3){ float d[3]; tankAimDir(v,me.yaw,me.pitch,d); cannonFx(v,d[0],d[1],d[2],true,meI); }
-        else if(dr&&role==2&&in.fire&&v.cannonT<=0){ float d[3]; tankAimDir(v,me.yaw,me.pitch,d); v.cannonT=2.5f; v.kick=1.f; SFX::play(SFX::EXPLODE,0.8f); } }
-      else hb=fabsf(v.speed)<2.f;
+        if(dr&&!gunner&&in.fire&&v.cannonT<=0&&role!=2&&role!=3){ float d[3]; tankAimDir(v,me.yaw,me.pitch,d); cannonFx(v,d[0],d[1],d[2],true,meI); }
+        else if(dr&&!gunner&&role==2&&in.fire&&v.cannonT<=0){ float d[3]; tankAimDir(v,me.yaw,me.pitch,d); v.cannonT=2.5f; v.kick=1.f; SFX::play(SFX::EXPLODE,0.8f); } }
+      if(!dr)hb=fabsf(v.speed)<2.f; // بلا سائق: فرامل يد عند البطء فقط
       float crash=VH::step(w,v,vh,thr,st,hb,dt);
       if(crash>VH::vp(v).crashMin&&v.crashT<=0){ v.crashT=0.45f; if(role!=2)hurtVeh(v,(crash-VH::vp(v).crashMin)*9,v.driver); if(dr)dmgFlash=std::max<float>(dmgFlash,0.15f); } if(v.crashT>0)v.crashT-=dt;
       if(v.dead)continue;
       if(v.burn){ if(role!=2)v.hp-=6*dt; v.smoke-=dt; if(v.smoke<=0){ v.smoke=0.12f; puffs.push_back({v.x+(frand()-0.5f),1.3f,v.z+(frand()-0.5f),1.6f,0.9f,0.5f,frand()<0.3f}); } if(v.hp<=0&&role!=2){ explodeVeh(v,v.driver); continue; } }
       for(int i=0;i<(int)e.size();i++){ Ent&p=e[i]; if(!p.alive||(dr&&i==meI)||p.gone)continue; VH::pushOut(v,p.b.x,p.b.z,p.b.y);
         if(role!=2&&dr&&fabsf(v.speed)>5.f&&p.team!=me.team){ float lx,lz; VH::w2l(v,p.b.x,p.b.z,lx,lz); if(fabsf(lx)<VH::vp(v).hw+0.45f&&fabsf(lz)<VH::vp(v).hl+0.45f&&p.b.y<1.8f&&p.prot<=0)hurt(i,meI,fabsf(v.speed)*(v.type==1?24:14),false); } }
-      if(dr){ float sx,sz; if(v.type==1)VH::l2w(v,0,-0.5f,sx,sz); else VH::l2w(v,-0.45f,-0.25f,sx,sz); me.b.x=sx;me.b.z=sz;me.b.y=v.type==1?1.0f:0.35f;me.b.vy=0; me.moving=false; }
+      if(dr){ float sx,sz; if(gunner){ if(v.type==1)VH::l2w(v,0,2.0f,sx,sz); else VH::l2w(v,-0.55f,1.2f,sx,sz); me.b.y=v.type==1?1.55f:0.85f; } else if(v.type==1){ VH::l2w(v,0,-0.5f,sx,sz); me.b.y=1.0f; } else { VH::l2w(v,-0.45f,-0.25f,sx,sz); me.b.y=0.35f; } me.b.x=sx;me.b.z=sz;me.b.vy=0; me.moving=false; }
     }
     for(auto&q:puffs){ q.t-=dt; q.y+=q.vy*dt; q.sz+=dt*0.8f; } puffs.erase(std::remove_if(puffs.begin(),puffs.end(),[](Puff&q){return q.t<=0;}),puffs.end());
   }
@@ -224,7 +225,7 @@ struct Game{
     updateWeapon(i,dt,trig); if(p.ammo<=cap(p)/6&&!trig)reloadStart(p);
   }
   // ---- اللاعب ----
-  int mySeat()const; bool passenger()const{ return role==3&&drive>=0&&mySeat()>0; }
+  bool gunner=false,pSeat=false; int mySeat()const; bool passenger()const{ return drive>=0&&(role==3?mySeat()>0:gunner); }
   void updatePlayer(float dt,const Input&in){
     Ent&p=e[meI]; adsHeld=in.ads;
     float zoom=in.ads?zoomOf(p):1.f; float sens=1.f/ (in.ads?std::max<float>(1.f,zoom*0.8f):1.f);
@@ -234,7 +235,7 @@ struct Game{
       if(fabsf(in.lx)+fabsf(in.ly)<0.05f){ lookIdle+=dt; if(lookIdle>1.0f){ float dy=vh[drive].h-p.yaw; while(dy>3.14159f)dy-=6.28318f; while(dy<-3.14159f)dy+=6.28318f; p.yaw+=dy*std::min<float>(1.f,dt*1.6f); } } else lookIdle=0;
       if(passenger()){ // راكب في صندوق/مقعد الشاص: حرية النظر والتصويب والإطلاق من مقعده
         p.pitch=std::max<float>(-1.2f,std::min<float>(1.2f,p.pitch)); p.crouch=true; p.sprint=false; p.moving=false; lookIdle=0;
-        if(in.reload)reloadStart(p); if(in.swapP&&!prev.swapP)aclSwapSlot();
+        if(in.reload)reloadStart(p); if(role==3){ if(in.swapP&&!prev.swapP)aclSwapSlot(); } else if((in.swapP&&!prev.swapP)||(in.swapN&&!prev.swapN)){ prim=(prim+(in.swapN&&!prev.swapN?1:WEAPON_COUNT-1))%WEAPON_COUNT; giveWeapon(p,prim); }
         bool trg=in.fire; if(!WEAPONS[p.wpn].autof&&prev.fire)trg=false; updateWeapon(meI,dt,trg); return; }
       p.pitch=std::max<float>(-0.7f,std::min<float>(0.5f,p.pitch)); p.crouch=false; p.sprint=false; p.moving=false; adsHeld=false; return; }
     bool wantCrouch=in.crouch; if(!wantCrouch&&p.crouch&&blocked(w,p.b.x,p.b.y,p.b.z,PK.h))wantCrouch=true; p.crouch=wantCrouch;
@@ -338,7 +339,7 @@ struct Game{
       if(joining){ joinT+=dt; if(joinT>0.4f&&joinT<8.f){ static float ra=0; ra+=dt; if(ra>0.4f){ra=0;NetHello h{T_HELLO,NET_VER};sock.send(hostAddr,&h,sizeof h);} } if(joinT>=8.f){joining=false;sock.close_();say("NO REPLY FROM HOST");} }
       if(role==2){ srvSilence+=dt; if(srvSilence>4.f){ netClose(); menu=1; say("DISCONNECTED"); return; }
         inT+=dt; if(inT>=1.f/30){ inT=0; const Ent&p=e[meI]; NetInput n; n.t=T_INPUT;n.slot=(uint8_t)meI;n.seq=++netSeq;n.x=p.b.x;n.y=p.b.y;n.z=p.b.z;n.yaw=p.yaw;n.pitch=p.pitch;
-          n.flags=(lastIn.fire?1:0)|(p.crouch?2:0)|(lastIn.reload?4:0)|(p.sprint?8:0)|(p.moving?16:0)|(lastIn.ads?32:0); n.wpn=prim; n.veh=0;n.vx=n.vz=n.vh=n.vsp=0; if(drive>=0&&drive<(int)vh.size()){ const VH::Veh&v=vh[drive]; n.veh=(uint8_t)(drive+1);n.vx=v.x;n.vz=v.z;n.vh=v.h;n.vsp=v.speed; } sock.send(hostAddr,&n,sizeof n); } }
+          n.flags=(gunner?128:0)|(lastIn.fire?1:0)|(p.crouch?2:0)|(lastIn.reload?4:0)|(p.sprint?8:0)|(p.moving?16:0)|(lastIn.ads?32:0); n.wpn=prim; n.veh=0;n.vx=n.vz=n.vh=n.vsp=0; if(drive>=0&&drive<(int)vh.size()){ const VH::Veh&v=vh[drive]; n.veh=(uint8_t)(drive+1);n.vx=v.x;n.vz=v.z;n.vh=v.h;n.vsp=v.speed; } sock.send(hostAddr,&n,sizeof n); } }
     }
     if(menu==2&&beaconRx.ready()){ while(beaconRx.recv(pk)){ if(pk.n<(int)sizeof(NetBeacon)||pk.d[0]!=T_BEACON)continue; NetBeacon bc; memcpy(&bc,pk.d,sizeof bc); bool f=false;
         for(auto&h:hosts)if(h.a.sin_addr.s_addr==pk.from.sin_addr.s_addr){h.map=bc.map;h.players=bc.players;h.seen=0;f=true;}
@@ -349,10 +350,10 @@ struct Game{
   void updateRemote(int i,float dt){
     Ent&p=e[i]; const NetInput&n=p.rin; if(n.t!=T_INPUT)return;
     for(int k=0;k<(int)vh.size();k++)if(vh[k].driver==i&&n.veh!=k+1)vh[k].driver=-1;
-    if(n.veh>0&&n.veh<=(int)vh.size()){ VH::Veh&v=vh[n.veh-1]; if(!v.dead&&(v.driver<0||v.driver==i)&&p.alive){ v.driver=i; v.team=p.team; v.x=n.vx;v.z=n.vz;v.h=n.vh;v.speed=n.vsp; if(v.type==1&&(n.flags&1)&&v.cannonT<=0){ float cp=cosf(n.pitch); cannonFx(v,-sinf(n.yaw)*cp,sinf(n.pitch),-cosf(n.yaw)*cp,true,i); } } }
+    if(n.veh>0&&n.veh<=(int)vh.size()){ VH::Veh&v=vh[n.veh-1]; if(!v.dead&&(v.driver<0||v.driver==i)&&p.alive){ v.driver=i; v.team=p.team; v.x=n.vx;v.z=n.vz;v.h=n.vh;v.speed=n.vsp; if(v.type==1&&!(n.flags&128)&&(n.flags&1)&&v.cannonT<=0){ float cp=cosf(n.pitch); cannonFx(v,-sinf(n.yaw)*cp,sinf(n.pitch),-cosf(n.yaw)*cp,true,i); } } }
     p.b.x=std::max<float>(-w.m->W/2.f,std::min<float>(w.m->W/2.f,n.x)); p.b.y=n.y; p.b.z=std::max<float>(-w.m->D/2.f,std::min<float>(w.m->D/2.f,n.z)); p.yaw=n.yaw;p.pitch=n.pitch;p.crouch=n.flags&2;p.sprint=n.flags&8;p.moving=n.flags&16;
     if(p.moving)p.phase+=dt*8; if(n.wpn<WEAPON_COUNT&&n.wpn!=p.wpn)giveWeapon(p,n.wpn);
-    if(n.flags&4)reloadStart(p); updateWeapon(i,dt,(n.flags&1)&&!p.sprint&&!(n.veh>0&&n.veh<=(int)vh.size()));
+    if(n.flags&4)reloadStart(p); updateWeapon(i,dt,(n.flags&1)&&!p.sprint&&(!(n.veh>0&&n.veh<=(int)vh.size())||(n.flags&128)));
   }
   // ======== التحديث ========
   void drawDroneModel(float x,float y,float z,float yaw,bool mine){

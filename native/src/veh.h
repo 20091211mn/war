@@ -6,7 +6,7 @@ namespace VH{
 static const float HP=450,L=3.0f,HW=1.0f,MAXFWD=26,MAXREV=7,ACCEL=7.5f,BRAKE=16,MAXSTEER=0.52f,TIREHP=30,CRASHMIN=4;
 struct VP{ float hp,L,hw,hl,maxFwd,maxRev,accel,brake,maxSteer,crashMin,armor; int nseats; bool tracked; };
 static const VP VPS[2]={ {450,3.0f,1.0f,2.5f,26,7,7.5f,16,0.52f,4,1.f,5,false}, {1100,3.6f,1.5f,3.1f,11,5,3.8f,12,1.f,6,0.14f,2,true} };
-struct Veh{ int type=0; float kick=0,ty=0,tp=0,cannonT=0; float x=0,z=0,h=0,vx=0,vz=0,steer=0,speed=0,hp=HP,tireHp[4]={30,30,30,30}; int tires=0,driver=-1,team=-1; bool dead=false,burn=false; float respawnT=0,sx=0,sz=0,sh=0,smoke=0,crashT=0,tx=0,tz=0,th=0; };
+struct Veh{ int occ=0; int type=0; float kick=0,ty=0,tp=0,cannonT=0; float x=0,z=0,h=0,vx=0,vz=0,steer=0,speed=0,hp=HP,tireHp[4]={30,30,30,30}; int tires=0,driver=-1,team=-1; bool dead=false,burn=false; float respawnT=0,sx=0,sz=0,sh=0,smoke=0,crashT=0,tx=0,tz=0,th=0; };
 static inline void l2w(const Veh&v,float lx,float lz,float&ox,float&oz){ float c=cosf(v.h),s=sinf(v.h); ox=v.x+c*lx+s*lz; oz=v.z-s*lx+c*lz; }
 static inline void w2l(const Veh&v,float wx,float wz,float&lx,float&lz){ float c=cosf(v.h),s=sinf(v.h),dx=wx-v.x,dz=wz-v.z; lx=c*dx-s*dz; lz=s*dx+c*dz; }
 static inline const VP&vp(const Veh&v){ return VPS[v.type==1?1:0]; }
