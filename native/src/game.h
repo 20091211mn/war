@@ -499,11 +499,11 @@ struct Game{
   void cycleAtt(int what){ Ent&p=e[meI]; GAtt&a=wAtt[p.wpn&15]; if(what==0){ int o[4]; int n=optList(p.wpn,o); int k=0; for(int i=0;i<n;i++)if(o[i]==a.optic)k=i; a.optic=o[(k+1)%n]; } else if(what==1)a.muz=(a.muz+1)%3; else if(what==2)a.under=(a.under+1)%3; else a.mag=(a.mag+1)%3; applyWAtt(p); } // optic: 0 حديدي 1 نقطة 2 x2 3 x4 4 x8
   const RPose*rlp=nullptr; // حركة التعبئة الحالية للمجسّم الأول فقط
   // موديل AWM (مثلثات بألوان رؤوس مولَّدة من awm.glb): مجموعات 0 أمامي 1 مخزن 2 ترباس 3 كعب
-  struct AwmV{float x,y,z,nx,ny,nz,r,g,b;}; std::vector<AwmV> awmV;
+  struct AwmV{float x,y,z,nx,ny,nz,r,g,b;}; std::vector<AwmV> awmV; std::vector<float> awmW; std::vector<char> awmDone;
   void awmInit(){ if(!awmV.empty())return; awmV.resize(AWMD::NV); for(int i=0;i<AWMD::NV;i++){ AwmV&v=awmV[i]; v.x=AWMD::LO[0]+(AWMD::pos[i*3]+32768)/65535.f*AWMD::RNG[0]; v.y=AWMD::LO[1]+(AWMD::pos[i*3+1]+32768)/65535.f*AWMD::RNG[1]; v.z=AWMD::LO[2]+(AWMD::pos[i*3+2]+32768)/65535.f*AWMD::RNG[2]; v.nx=AWMD::nor[i*3]/127.f; v.ny=AWMD::nor[i*3+1]/127.f; v.nz=AWMD::nor[i*3+2]/127.f; v.r=AWMD::col[i*3]/255.f; v.g=AWMD::col[i*3+1]/255.f; v.b=AWMD::col[i*3+2]/255.f; } }
   void drawAwmGroup(int grp,float ox,float oy,float oz,float yaw,float pitch,float roll,float dz,float k,bool lit,const float*tint){
     awmInit(); int off=0; for(int i=0;i<grp;i++)off+=AWMD::GRP[i]; int cnt=AWMD::GRP[grp]; if(cnt<=0)return;
-    static thread_local std::vector<float> W; W.resize((size_t)AWMD::NV*6); static thread_local std::vector<char> done; done.assign(AWMD::NV,0);
+    std::vector<float>&W=awmW; W.resize((size_t)AWMD::NV*6); std::vector<char>&done=awmDone; done.assign(AWMD::NV,0);
     float rc=cosf(roll),rs=sinf(roll);
     auto xf=[&](int vi){ if(done[vi])return; done[vi]=1; const AwmV&v=awmV[vi]; float lx=v.x,ly=v.y; if(roll!=0){float t=lx*rc-ly*rs;ly=lx*rs+ly*rc;lx=t;} float o[3]; Renderer::rot(yaw,pitch,lx,ly,v.z+dz,o); float nx=v.nx,ny=v.ny; if(roll!=0){float t=nx*rc-ny*rs;ny=nx*rs+ny*rc;nx=t;} float n[3]; Renderer::rot(yaw,pitch,nx,ny,v.nz,n);
       float*w=&W[(size_t)vi*6]; w[0]=ox+o[0];w[1]=oy+o[1];w[2]=oz+o[2];w[3]=n[0];w[4]=n[1];w[5]=n[2]; };
