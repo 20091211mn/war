@@ -178,7 +178,7 @@ function onMsg(m) {
     case 'dron': onDron(m); break;
     case 'dfix': if (me.drone) { me.drone.x = m.x; me.drone.y = m.y; me.drone.z = m.z; me.drone.vx = me.drone.vy = me.drone.vz = 0; } break;
     case 'ammo': onAmmo(m); break;
-    case 'rl': { const r = S.remote.get(m.id); if (r && S.inGame) { const d = dist3(r, me); Snd.reload(clamp(1 - d / 25, 0, 1) * 0.6, panOf(r)); } break; }
+    case 'rl': { const r = S.remote.get(m.id); if (r && S.inGame) { const d = dist3(r, me), info = S.players.get(m.id), rs = info ? statsFor(info, r.w === 1 ? 1 : 0) : null, dur = rs ? rs.reload : 2; r.rl0 = nowMs(); r.rlD = dur * 1000; Snd.reload(clamp(1 - d / 25, 0, 1) * 0.6, panOf(r), dur, rs ? rs.kind : 'rifle'); } break; }
     case 'left': S.remote.delete(m.id); break;
     case 'end': onEnd(m); break;
     case 'pong': S.ping = Math.round(nowMs() - m.c); break;
@@ -708,7 +708,7 @@ function updateAmmoHud() {
 function startReload(now) {
   const st = curStats(), am = me.ammo[me.w];
   if (!st || me.reloading >= 0 || am.mag >= st.mag || am.res <= 0 || now < me.swapAt + 350) return;
-  me.reloading = me.w; me.reloadStart = now; me.reloadEnd = now + st.reload * 1000; Snd.reload(0.5, 0); send({ t: 'rl' });
+  me.reloading = me.w; me.reloadStart = now; me.reloadEnd = now + st.reload * 1000; Snd.reload(0.5, 0, st.reload, st.kind); send({ t: 'rl' });
 }
 function aimDir(yaw, pitch) { const cp = Math.cos(pitch); return [-Math.sin(yaw) * cp, Math.sin(pitch), -Math.cos(yaw) * cp]; }
 function spreadDir(f, sp) {
@@ -1016,7 +1016,7 @@ function render(dt, now) {
     const info = S.players.get(r.id); if (!info) continue;
     const v = r.seated ? S.vehs.get(r.veh - 1) : null, cab = r.seated && r.seat < 2;
     const dd = Math.hypot(r.x - cam.x, r.z - cam.z); if (dd > 110 || !eng.visible(r.x, r.y + 1, r.z, 1.5)) continue;
-    drawAvatar(eng, { far: dd > 38, x: r.x, y: r.y - (cab ? 0.36 : 0), z: r.z, yaw: r.yaw, pitch: r.pitch, crouch: r.seated ? !cab : r.crouch, sit: cab, lean: v ? leanFor(v, r.seat, r.yaw, r.ads || r.reveal) : null, team: info.tm, moving: r.moving, sprint: r.sprint, stats: statsFor(info, r.w === 1 ? 1 : 0), deadT: dead ? dt2 : -1, flash: r.flash, phase: r.phase }, now);
+    drawAvatar(eng, { far: dd > 38, x: r.x, y: r.y - (cab ? 0.36 : 0), z: r.z, yaw: r.yaw, pitch: r.pitch, crouch: r.seated ? !cab : r.crouch, sit: cab, lean: v ? leanFor(v, r.seat, r.yaw, r.ads || r.reveal) : null, team: info.tm, moving: r.moving, sprint: r.sprint, stats: statsFor(info, r.w === 1 ? 1 : 0), rl: r.rl0 && now - r.rl0 < r.rlD ? (now - r.rl0) / r.rlD : -1, deadT: dead ? dt2 : -1, flash: r.flash, phase: r.phase }, now);
   }
   for (const o of S.drones.values()) {
     o.x += (o.tx - o.x) * Math.min(1, dt * 14); o.y += (o.ty - o.y) * Math.min(1, dt * 14); o.z += (o.tz - o.z) * Math.min(1, dt * 14);

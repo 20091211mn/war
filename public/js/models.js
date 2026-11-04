@@ -17,14 +17,14 @@ const OPT = { red: [0.03, 0.035, 0.05, 0.075], x2: [0.034, 0.034, 0.12, 0.08], x
 export const sightTop = (st) => { const g = GUNS[st.kind], o = st.att.optic; return o !== 'iron' && OPT[o] ? OPT[o][3] : g.sy; };
 
 // يرسم السلاح في مصفوفة المجموعة G
-export function drawGun(eng, G, st, flash) {
+export function drawGun(eng, G, st, flash, opts) {
   const g = GUNS[st.kind], a = st.att;
   const part = (x, y, z, sx, sy, sz, col, unlit) => {
     const m = mul(tmp(), G, trs(tmp(), x, y, z, 0, 0, sx, sy, sz));
     eng.cubeAt(m, col[0], col[1], col[2], unlit);
   };
-  for (const p of g.parts) part(p[0], p[1], p[2], p[3], p[4], p[5], C[p[6]]);
-  if (g.mag) {
+  for (let i = 0; i < g.parts.length; i++) { const p = g.parts[i], dz = opts && opts.shift && opts.shift[i] || 0; if (opts && opts.hideRear && p[2] - p[5] / 2 > 0.1 && i !== 0) continue; part(p[0], p[1], p[2] + dz, p[3], p[4], p[5], C[p[6]]); }
+  if (g.mag && !(opts && opts.hideMag)) {
     const k = a.mag === 'ext' ? 1.4 : 1;
     part(g.mag[0], g.mag[1] - (k - 1) * g.mag[4] * 0.5, g.mag[2], g.mag[3], g.mag[4] * k, g.mag[5], a.mag === 'fast' ? C.o : C.b);
   }
@@ -52,6 +52,80 @@ export function drawGun(eng, G, st, flash) {
     fl(s * 0.35, s * 3.2, s * 0.5, -0.01, 1, 0.75, 0.3, 0.8); // صليب عمودي
     fl(s * 0.5, s * 0.5, s * 3.2, -0.12, 1, 0.6, 0.2, 0.6);   // لسان أمامي
   }
+}
+
+
+// ---- حركة التعبئة (مشتركة للاعب الأول والآخرين) ----
+// t: 0..1 تقدّم التعبئة. الإحداثيات في فضاء السلاح (الأمام = -Z). تُرجع إزاحة السلاح ومواضع المخزن القديم/الجديد واليد اليسرى.
+const _ez = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+const seg = (t, a, b) => _ez((t - a) / (b - a));
+const mix3 = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+export const RELOAD_SYNC = { out: 0.17, in: 0.5, seat: 0.585, pull: 0.69, slam: 0.83 }; // نقاط الصوت (كسر من مدة التعبئة)
+const BRASS = [0.85, 0.62, 0.18];
+export function reloadPose(kind, t) {
+  const g = GUNS[kind], sg = kind === 'shotgun', pistol = kind === 'pistol' || kind === 'magnum';
+  const M = g.mag ? [g.mag[0], g.mag[1], g.mag[2]] : [0, -0.08, 0.05], MS = g.mag ? [g.mag[3], g.mag[4], g.mag[5]] : [0.028, 0.09, 0.04];
+  const H0 = pistol ? [-0.03, -0.075, 0.05] : [-0.005, -0.05, g.mz * 0.42];
+  const tilt = seg(t, 0, 0.13) - seg(t, 0.88, 1);
+  const P = { hideRear: true, y: 0.09 * tilt, x: -0.1 * tilt, z: -0.12 * tilt, rx: -0.2 * tilt, ry: 0, rz: -0.5 * tilt, hand: H0, hideMag: false, mags: [], shells: [], bolt: 0, shift: null, handle: false, tilt };
+  const pouch = [-0.14, -0.17, 0.06];
+  if (sg) {
+    const W = [0.14, 0.30, 0.46, 0.62]; let hand = H0;
+    const port = [0, -0.035, -0.02];
+    let cur = null;
+    for (let k = 0; k < 4; k++) {
+      const a = W[k], b = a + 0.14;
+      if (t >= a && t < b + 0.02) {
+        const u = (t - a) / (b - a);
+        const pos = u < 0.45 ? mix3(pouch, [-0.05, -0.2, 0.02], seg(u, 0, 0.45)) : mix3([-0.05, -0.2, 0.02], port, seg(u, 0.45, 0.9));
+        if (u < 0.92) cur = pos;
+        hand = [pos[0] - 0.01, pos[1] - 0.045, pos[2]];
+      }
+    }
+    if (cur) P.shells.push(cur);
+    const pump = seg(t, 0.78, 0.84) - seg(t, 0.84, 0.9);
+    if (t >= 0.76 && t < 0.92) { P.shift = { 2: 0.12 * pump, 3: 0.12 * pump }; hand = [-0.005, -0.04 + 0.0, g.mz * 0.42 + 0.12 * pump]; }
+    else if (t >= 0.9) hand = mix3([-0.005, -0.04, g.mz * 0.42], H0, seg(t, 0.9, 0.97));
+    else if (t < 0.14) hand = mix3(H0, pouch, seg(t, 0.04, 0.14));
+    P.hand = hand; return P;
+  }
+  const Mb = [M[0], M[1] - MS[1] * 0.5 - 0.02, M[2]];            // أسفل بئر المخزن
+  const hOld = seg(t, 0.14, 0.30);
+  if (t < 0.58) P.hideMag = true;
+  // المخزن القديم: يُسحب ثم يسقط بجاذبية
+  if (t >= 0.0 && t < 0.52) {
+    if (t < 0.30) P.mags.push({ p: [M[0] - 0.01 * hOld, M[1] - 0.17 * hOld, M[2]], s: MS });
+    else { const q = t - 0.30; if (q < 0.17) P.mags.push({ p: [M[0] - 0.01 - q * 0.5, M[1] - 0.17 - 12 * q * q, M[2] + q * 0.3], s: MS }); }
+  }
+  // اليد: تقترب ثم تسحب ثم تنتقل لجيب المخزن ثم تدخل الجديد
+  let hand = H0, nm = null;
+  if (t < 0.14) hand = mix3(H0, Mb, seg(t, 0.0, 0.14));
+  else if (t < 0.30) hand = [Mb[0] - 0.01 * hOld, Mb[1] - 0.17 * hOld, Mb[2]];
+  else if (t < 0.40) hand = mix3([Mb[0] - 0.01, Mb[1] - 0.17, Mb[2]], pouch, seg(t, 0.30, 0.40));
+  else if (t < 0.58) {
+    const k = t < 0.52 ? seg(t, 0.40, 0.52) : 1, slam = seg(t, 0.52, 0.575);
+    const a = mix3(pouch, [Mb[0], Mb[1] - 0.04, Mb[2]], k), mpos = t < 0.52 ? a : mix3([Mb[0], Mb[1] - 0.04, Mb[2]], M, slam);
+    nm = { p: mpos, s: MS }; hand = [mpos[0] - 0.015, mpos[1] - MS[1] * 0.5 - 0.03, mpos[2]];
+  } else if (t < 0.69) hand = mix3([M[0] - 0.015, M[1] - 0.07, M[2]], pistol ? [0.0, 0.025, 0.06] : [0.0, 0.05, 0.05], seg(t, 0.585, 0.69));
+  else if (t < 0.84) hand = pistol ? [0.0, 0.025, 0.06] : [0.0, 0.05, 0.05];
+  else hand = mix3(pistol ? [0.0, 0.025, 0.06] : [0.0, 0.05, 0.05], H0, seg(t, 0.84, 0.95));
+  if (nm) P.mags.push(nm);
+  // بعد الدخول لحظة "دقّة" (ارتداد صغير)
+  P.z += 0.022 * Math.max(0, Math.sin(Math.min(1, Math.max(0, (t - 0.57) / 0.06)) * Math.PI)) - 0.012 * Math.max(0, Math.sin(Math.min(1, Math.max(0, (t - 0.82) / 0.05)) * Math.PI));
+  // الترباس / الشريحة: يُسحب ثم يُطلق
+  const b = seg(t, 0.69, 0.78) - seg(t, 0.8, 0.83); P.bolt = 0.06 * b;
+  if (pistol) { P.shift = { 0: P.bolt }; if (t >= 0.69 && t < 0.84) hand = [0.0, 0.025, 0.06 + P.bolt]; }
+  else { P.handle = t >= 0.58 && t < 0.9; if (t >= 0.69 && t < 0.84) hand = [0.0, 0.05, 0.05 + P.bolt]; }
+  P.hand = hand;
+  return P;
+}
+// يرسم عناصر التعبئة المتحركة (مخازن/خراطيش/مقبض التلقيم) داخل فضاء السلاح G
+export function drawReloadExtras(eng, G, st, P) {
+  const part = (p, s, col, unlit) => eng.cubeAt(mul(tmp(), G, trs(tmp(), p[0], p[1], p[2], 0, 0, s[0], s[1], s[2])), col[0], col[1], col[2], unlit);
+  const fast = st.att && st.att.mag === 'fast';
+  for (const m of P.mags) part(m.p, m.s, fast ? C.o : C.b);
+  for (const sh of P.shells) { part(sh, [0.02, 0.02, 0.07], BRASS); part([sh[0], sh[1], sh[2] + 0.03], [0.021, 0.021, 0.018], [0.7, 0.1, 0.08]); }
+  if (P.handle) part([st.kind === 'sniper' ? 0.062 : 0.03, st.kind === 'sniper' ? 0.0 : 0.032, 0.05 + P.bolt], [0.014, 0.014, 0.04], C.g);
 }
 
 // ---- اللاعب (من منظور الآخرين) ----
@@ -132,11 +206,17 @@ export function drawAvatar(eng, a, t) {
   };
   if (st) {
     const base = a.sprint ? 0.9 : Math.PI / 2;
-    arm(0.27, base + ap - 0.12 + br); arm(-0.27, base + ap + 0.12 + br);
-    const G = pivot(tmp(), U, 0.12, 1.3 - Y0, 0, ap - L, 0, -0.05, -0.38, 1, 1, 1);
-    drawGun(eng, G, st, a.flash || 0);
+    const RP = a.rl >= 0 ? reloadPose(st.kind, a.rl) : null;
+    arm(0.27, base + ap - 0.12 + br); arm(-0.27, base + ap + 0.12 + br + (RP ? RP.tilt * 0.55 : 0));
+    let G = pivot(tmp(), U, 0.12, 1.3 - Y0, 0, ap - L, 0, -0.05, -0.38, 1, 1, 1);
+    if (RP) G = mul(tmp(), mul(tmp(), G, trs(tmp(), RP.x * 0.6, RP.y * 0.7, RP.z, RP.ry * 0.8, RP.rx * 0.6, 1, 1, 1)), rotZ(RP.rz * 0.7));
+    drawGun(eng, G, st, a.flash || 0, RP);
+    if (RP) drawReloadExtras(eng, G, st, RP);
   } else { arm(0.27, 0.05); arm(-0.27, -0.05); }
 }
+
+const _rz = new Float32Array(16);
+function rotZ(a) { const c = Math.cos(a), sn = Math.sin(a); _rz.fill(0); _rz[0] = c; _rz[1] = sn; _rz[4] = -sn; _rz[5] = c; _rz[10] = 1; _rz[15] = 1; return _rz; }
 
 // ---- مجسم السلاح بمنظور اللاعب ----
 export function drawViewmodel(eng, vm) {
@@ -146,19 +226,23 @@ export function drawViewmodel(eng, vm) {
   let x = hip[0] + (ads[0] - hip[0]) * k, y = hip[1] + (ads[1] - hip[1]) * k, z = hip[2] + (ads[2] - hip[2]) * k;
   x += vm.bobX + vm.swayX; y += vm.bobY + vm.swayY; z += vm.kick * 0.045;
   let rx = vm.kick * 0.05, ry = 0.07 * (1 - k); { const tt = performance.now() / 1000; y += Math.sin(tt * 1.7) * 0.0025 * (1 - k * 0.7); x += Math.sin(tt * 0.9) * 0.0015; }
-  if (vm.reload >= 0) { const s = Math.sin(vm.reload * Math.PI); y -= s * 0.13; rx -= s * 0.5; x += s * 0.03; }
+  const RP = vm.reload >= 0 ? reloadPose(st.kind, vm.reload) : null;
+  if (RP) { x += RP.x; y += RP.y; z += RP.z; rx += RP.rx; ry += RP.ry; }
   if (vm.swap < 1) { const s = 1 - vm.swap; y -= s * 0.25; rx -= s * 0.6; }
   if (vm.sprint) { y -= 0.06; rx -= 0.35; ry = 0.4; x -= 0.04; }
   eng.beginViewmodel();
-  const G = trs(tmp(), x, y, z, ry, rx, 1, 1, 1);
-  drawGun(eng, G, st, vm.flash);
+  const G = RP && RP.rz ? mul(tmp(), trs(tmp(), x, y, z, ry, rx, 1, 1, 1), rotZ(RP.rz)) : trs(tmp(), x, y, z, ry, rx, 1, 1, 1);
+  drawGun(eng, G, st, vm.flash, RP);
+  if (RP) drawReloadExtras(eng, G, st, RP);
   // الأيدي والأكمام
   const sleeve = TEAM_D[vm.team] || TEAM_D[0], skin = C.s;
   const part = (px, py, pz, sx, sy, sz, c) => eng.cubeAt(mul(tmp(), G, trs(tmp(), px, py, pz, 0, 0, sx, sy, sz)), c[0], c[1], c[2], false);
   const gz = st.kind === 'pistol' || st.kind === 'magnum' ? 0.04 : 0.06;
   part(0.0, -0.075, gz, 0.05, 0.05, 0.06, skin);
   part(0.015, -0.12, gz + 0.12, 0.065, 0.06, 0.28, sleeve);
-  if (st.kind !== 'pistol' && st.kind !== 'magnum') {
+  if (RP) { // اليد اليسرى تتبع حركة التعبئة
+    const h = RP.hand; part(h[0], h[1], h[2], 0.055, 0.05, 0.07, skin); part(h[0] - 0.03, h[1] - 0.05, h[2] + 0.2, 0.06, 0.055, 0.3, sleeve);
+  } else if (st.kind !== 'pistol' && st.kind !== 'magnum') {
     part(-0.005, -0.05, g.mz * 0.42, 0.055, 0.05, 0.07, skin);
     part(-0.03, -0.09, g.mz * 0.42 + 0.2, 0.06, 0.055, 0.3, sleeve);
   } else part(-0.03, -0.075, gz + 0.01, 0.05, 0.05, 0.06, skin);

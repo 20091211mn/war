@@ -1,3 +1,4 @@
+import { renderShot, renderMech, SHOT_PARAMS, MECH_DUR } from './synth.js';
 // صوتيات مولّدة برمجيًا: طبقات (طقطقة + جسم + دويّ منخفض) + صدى غرفة + ترشيح بحسب المسافة
 let ctx = null, master = null, dry = null, wet = null, noiseBuf = null, enabled = true;
 
@@ -24,6 +25,7 @@ export const Snd = {
       noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
       const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
       if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      this._warmStart();
     } catch { ctx = null; }
   },
   setVolume(v) { if (master) master.gain.value = v * 1.1; enabled = v > 0; },
@@ -58,6 +60,41 @@ export const Snd = {
     const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(gain, t + attack); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.05);
   },
+  // ---- مكتبة العينات المولَّدة: تُبنى على دفعات صغيرة وقت الخمول كي لا تسبب تقطيعًا ----
+  _bufs: {},
+  _queue: [],
+  _warmStart() {
+    if (this._warming) return; this._warming = true;
+    const kinds = ['rifle', 'pistol', 'smg', 'shotgun', 'sniper', 'dmr', 'lmg', 'magnum'];
+    for (const k of kinds) this._queue.push(['shot', k, 1, false]);
+    for (const m of Object.keys(MECH_DUR)) this._queue.push(['mech', m, 1]);
+    for (const k of kinds) this._queue.push(['shot', k, 2, false]);
+    const tick = () => {
+      const j = this._queue.shift(); if (!j) { this._warming = false; return; }
+      this._make(j); setTimeout(tick, 90);
+    };
+    setTimeout(tick, 400);
+  },
+  _make(j) {
+    if (!ctx) return;
+    const key = j[0] === 'mech' ? 'm:' + j[1] : 's:' + j[1] + (j[3] ? 'S' : '');
+    const arr = this._bufs[key] || (this._bufs[key] = []); if (arr.length >= j[2]) return;
+    try {
+      const data = j[0] === 'mech' ? renderMech(j[1], j[2], ctx.sampleRate) : renderShot(j[1], j[2], ctx.sampleRate, !!j[3]);
+      const b = ctx.createBuffer(1, data.length, ctx.sampleRate); b.getChannelData(0).set(data); arr.push(b);
+    } catch { /* */ }
+  },
+  _get(key, kind, supp) { // يعيد عينة جاهزة، أو يطلب بناءها (أولوية) ويعيد null
+    const a = this._bufs[key];
+    if (a && a.length) return a[(Math.random() * a.length) | 0];
+    if (!this._pend) this._pend = {};
+    if (!this._pend[key]) { this._pend[key] = 1; this._queue.unshift(kind === 'mech' ? ['mech', key.slice(2), 1] : ['shot', key.slice(2).replace('S', ''), 1, supp]); if (!this._warming) this._warmStart(); }
+    return null;
+  },
+  _playBuf(buf, when, vol, pan, dist, rev, rate = 1) {
+    const out = this._out(pan, vol, dist, rev), src = ctx.createBufferSource();
+    src.buffer = buf; src.playbackRate.value = rate; src.connect(out); src.start(when);
+  },
   shot(kind, vol = 1, pan = 0, muted = false, dist = 0) {
     if (!ctx || !enabled || vol <= 0.01) return;
     const t = ctx.currentTime + 0.001;
@@ -68,6 +105,8 @@ export const Snd = {
     }[kind] || [0.3, 1500, 1, 110, 0.3, 1];
     const [tail, body, g, low, rev, crack] = P;
     if (!this._budget(Math.min(tail, 0.35), vol)) return;
+    { const key = 's:' + (SHOT_PARAMS[kind] ? kind : 'rifle') + (muted ? 'S' : ''), buf = this._get(key, 'shot', muted);
+      if (buf) { this._playBuf(buf, t, vol * (muted ? 0.55 : 1) * 0.95, pan, dist, muted ? 0.08 : 0.12 + rev * 0.3, 0.97 + Math.random() * 0.06); return; } }
     const lite = !!(this._ends && this._ends.length > 4) || vol < 0.35;
     const out = this._out(pan, vol * (muted ? 0.4 : 1) * 0.9, dist, muted ? 0.1 : rev);
     const jitter = 0.92 + Math.random() * 0.16;
@@ -91,7 +130,16 @@ export const Snd = {
     this._tone(out, t, 0.08, 120 + Math.random() * 30, 55, 0.9);
     this._noise(out, t, 0.06, 'bandpass', 900 + Math.random() * 500, 400, 1.3, 0.7, 0.002);
   },
-  reload(vol = 0.5, pan = 0) {
+  // تعبئة بصوت ميكانيكي واقعي متزامن مع حركة التعبئة (نقاط التوقيت نفسها في RELOAD_SYNC بـ models.js)
+  reload(vol = 0.5, pan = 0, dur = 2, kind = 'rifle') {
+    if (!ctx || !enabled) return;
+    if (!this._bufs['m:magout'] || !this._bufs['m:magout'].length) { this._get('m:magout', 'mech'); return this._reloadOld(vol, pan); }
+    const t = ctx.currentTime, E = (name, at, v = 1) => { const b = this._get('m:' + name, 'mech'); if (b) this._playBuf(b, t + Math.max(0.01, at * dur), vol * v, pan, 0, 0.08, 0.97 + Math.random() * 0.06); };
+    if (kind === 'shotgun') { for (let k = 0; k < 4; k++) E('shell', 0.14 + 0.16 * k + 0.1); E('pump', 0.8); }
+    else if (kind === 'pistol' || kind === 'magnum') { E('magout', 0.17); E('magin', 0.5); E('slide', 0.7); }
+    else { E('magout', 0.17); E('magin', 0.5); E('bolt', 0.69); E('slam', 0.83); }
+  },
+  _reloadOld(vol = 0.5, pan = 0) {
     if (!ctx || !enabled) return;
     const t = ctx.currentTime, out = this._out(pan, vol, 0, 0.1);
     const click = (dt, f, g) => { this._noise(out, t + dt, 0.04, 'bandpass', f, f * 0.6, 3, g, 0.001); this._tone(out, t + dt, 0.05, f * 0.5, f * 0.3, g * 0.5, 'square'); };
