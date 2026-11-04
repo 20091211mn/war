@@ -13,7 +13,7 @@ static bool B(uint32_t m){return (pd.buttons&m)!=0;}
 static float stickN(uint8_t v){return ((int)v-128)/127.f;}
 
 static void* audioThread(void*){
-  sceAudioOutInit(); int h=sceAudioOutOpen(ORBIS_USER_SERVICE_USER_ID_SYSTEM,ORBIS_AUDIO_OUT_PORT_TYPE_MAIN,0,256,48000,ORBIS_AUDIO_OUT_PARAM_FORMAT_S16_STEREO);
+  SFX::initBuffers(); sceAudioOutInit(); int h=sceAudioOutOpen(ORBIS_USER_SERVICE_USER_ID_SYSTEM,ORBIS_AUDIO_OUT_PORT_TYPE_MAIN,0,256,48000,ORBIS_AUDIO_OUT_PARAM_FORMAT_S16_STEREO);
   if(h<=0)return NULL; static int16_t buf[256*2];
   for(;;){ SFX::mix(buf,256); sceAudioOutOutput(h,buf); }
   return NULL; }

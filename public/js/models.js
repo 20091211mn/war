@@ -241,7 +241,7 @@ export function drawViewmodel(eng, vm) {
   part(0.0, -0.075, gz, 0.05, 0.05, 0.06, skin);
   part(0.015, -0.12, gz + 0.12, 0.065, 0.06, 0.28, sleeve);
   if (RP) { // اليد اليسرى تتبع حركة التعبئة
-    const h = RP.hand; part(h[0], h[1], h[2], 0.055, 0.05, 0.07, skin); part(h[0] - 0.03, h[1] - 0.05, h[2] + 0.2, 0.06, 0.055, 0.3, sleeve);
+    const h = RP.hand; part(h[0], h[1], h[2], 0.055, 0.05, 0.07, skin); part(h[0] - 0.03, h[1] - 0.05, h[2] + 0.13, 0.06, 0.055, 0.18, sleeve);
   } else if (st.kind !== 'pistol' && st.kind !== 'magnum') {
     part(-0.005, -0.05, g.mz * 0.42, 0.055, 0.05, 0.07, skin);
     part(-0.03, -0.09, g.mz * 0.42 + 0.2, 0.06, 0.055, 0.3, sleeve);

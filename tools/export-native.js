@@ -20,6 +20,7 @@ o += `struct MapDef{float W,D;int nb,nd,nv,nr,nbl;const Box*boxes;const Box*deco
 const ws = Object.values(WEAPONS);
 o += 'struct WeaponDef{const char*id;float dmg,head,rpm;int autof,pellets,mag,mags;float reload,hip,ads,recoilV,recoilH,r0,r1,minMul,move,zoom;int type;const char*name;};\n';
 o += `static const int WEAPON_COUNT=${ws.length};\nstatic const WeaponDef WEAPONS[]={${Object.entries(WEAPONS).map(([id, w]) => `{"${id}",${w.dmg},${w.head},${w.rpm},${w.auto ? 1 : 0},${w.pellets},${w.mag},${w.mags},${w.reload},${w.hip},${w.ads},${w.recoilV},${w.recoilH},${w.range[0]},${w.range[1]},${w.minMul},${w.move},${w.zoom},${w.type === 'primary' ? 0 : 1},"${w.name}"}`).join(',\n')}};\n`;
+{ const KID = { pistol: 0, magnum: 1, rifle: 2, smg: 3, lmg: 4, dmr: 5, sniper: 6, shotgun: 7 }; o += `static const int WKIND[]={${ws.map((w) => KID[w.kind] ?? 2).join(',')}};\n`; }
 o += 'struct GPart{float x,y,z,sx,sy,sz;char c;};\nstruct GunDef{float mz,sy;int np;GPart p[20];int hasMag;float mag[6];};\n';
 o += `static const GunDef GUNDEFS[]={${Object.values(WEAPONS).map((w) => { const g = GUNS[w.kind]; return `{${g.mz},${g.sy},${g.parts.length},{${g.parts.map((q) => `{${q.slice(0, 6).join(',')},'${q[6]}'}`).join(',')}},${g.mag ? 1 : 0},{${(g.mag || [0, 0, 0, 0, 0, 0]).join(',')}}}`; }).join(',\n')}};\n`;
 fs.writeFileSync('native/gen/data.h', o);

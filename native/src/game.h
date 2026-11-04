@@ -6,6 +6,7 @@
 #include "ar.h"
 #include "net.h"
 #include "sfx.h"
+#include "reload.h"
 #include "ws.h"
 #include <string>
 #include <cstdlib>
@@ -157,7 +158,7 @@ struct Game{
     Ent&p=e[i]; const WeaponDef&d=WEAPONS[p.wpn];
     float aDm=1.f,aHip=1.f,aRv=1.f,aRh=1.f,aVol=1.f; // تأثير الملحقات (كما في النسخة الأندرويد/الويب): كاتم/معوّض فوهة، مقبض، ليزر
     if(i==meI&&role!=3){ const GAtt&at=wAtt[p.wpn&15]; if(at.muz==1){aDm=0.95f;aRv*=0.92f;aVol=0.4f;} else if(at.muz==2){aRh*=0.55f;aRv*=0.88f;} if(at.under==1){aRv*=0.82f;aRh*=0.85f;aHip=0.9f;} else if(at.under==2)aHip=0.6f; }
-    { float ddx=p.b.x-e[meI].b.x,ddz=p.b.z-e[meI].b.z; float vv=1.f-sqrtf(ddx*ddx+ddz*ddz)/70.f; SFX::play(d.pellets>1?SFX::SHOTGUN:(p.wpn==3?SFX::SNIPER:(p.wpn>=6?SFX::PISTOL:SFX::SHOT)),(i==meI?1.f:vv*0.8f)*aVol,0); }
+    { float ddx=p.b.x-e[meI].b.x,ddz=p.b.z-e[meI].b.z; float vv=1.f-sqrtf(ddx*ddx+ddz*ddz)/70.f; SFX::shot(WKIND[p.wpn%WEAPON_COUNT],aVol<1.f,(i==meI?1.f:vv*0.8f)*(aVol<1.f?1.f:1.f),0); }
     if(i==meI&&drive<0&&shells.size()<40){ float cy=cosf(p.yaw),sy=sinf(p.yaw); float rx=cy,rz=-sy; // اليمين
       shells.push_back({p.b.x+rx*0.2f-sy*0.3f,p.b.y+(p.crouch?PK.eyec:PK.eye)-0.18f,p.b.z+rz*0.2f-cy*0.3f,rx*(1.8f+frand())+(frand()-0.5f),1.8f+frand()*0.8f,rz*(1.8f+frand())+(frand()-0.5f),1.5f}); }
     p.ammo--; p.cd=60.f/d.rpm; p.flash=0.06f; p.prot=0;
@@ -182,7 +183,7 @@ struct Game{
     if(i==meI&&role!=2){ p.rkP+=d.recoilV*aRv*(ads?0.6f:1.f)*1.6f; p.rkY+=(frand()-0.5f)*d.recoilH*aRh*3.f; }
   }
   bool adsHeld=false;
-  void reloadStart(Ent&p){const WeaponDef&d=WEAPONS[p.wpn]; if(p.reloadT>=0||p.ammo>=cap(p)||p.mags<=0)return; p.reloadT=0; if(&p==&e[meI])SFX::play(SFX::RELOAD,0.7f); if(role==3&&&p==&e[meI])aclReload(); }
+  void reloadStart(Ent&p){const WeaponDef&d=WEAPONS[p.wpn]; if(p.reloadT>=0||p.ammo>=cap(p)||p.mags<=0)return; p.reloadT=0; if(&p==&e[meI])SFX::reload(WKIND[p.wpn%WEAPON_COUNT],d.reload*p.relM,0.8f); if(role==3&&&p==&e[meI])aclReload(); }
   void updateWeapon(int i,float dt,bool trig){
     Ent&p=e[i]; const WeaponDef&d=WEAPONS[p.wpn]; if(p.cd>0)p.cd-=dt; if(p.flash>0)p.flash-=dt;
     if(p.reloadT>=0){p.reloadT+=dt; if(p.reloadT>=d.reload*p.relM){p.reloadT=-1;p.mags--;p.ammo=cap(p);} return;}
@@ -465,12 +466,13 @@ struct Game{
   static int optList(int w,int*o){ static const int L[8][4]={{0,1,2,3},{0,1,2,-1},{0,1,-1,-1},{3,4,-1,-1},{0,1,2,3},{1,2,3,4},{0,1,-1,-1},{0,1,-1,-1}}; int n=0; for(int i=0;i<4;i++)if(L[w&7][i]>=0)o[n++]=L[w&7][i]; return n; }
   void applyWAtt(Ent&p){ if(role==3||p.wpn<0||p.wpn>=16)return; GAtt&a=wAtt[p.wpn]; if(&p==&e[meI]){ static const float Z[5]={0,1.5f,2.2f,3.6f,6.f}; optZ=Z[a.optic]; } p.magM=a.mag==1?1.5f:1.f; p.relM=a.mag==1?1.12f:a.mag==2?0.72f:1.f; if(p.ammo>cap(p))p.ammo=cap(p); }
   void cycleAtt(int what){ Ent&p=e[meI]; GAtt&a=wAtt[p.wpn&15]; if(what==0){ int o[4]; int n=optList(p.wpn,o); int k=0; for(int i=0;i<n;i++)if(o[i]==a.optic)k=i; a.optic=o[(k+1)%n]; } else if(what==1)a.muz=(a.muz+1)%3; else if(what==2)a.under=(a.under+1)%3; else a.mag=(a.mag+1)%3; applyWAtt(p); } // optic: 0 حديدي 1 نقطة 2 x2 3 x4 4 x8
+  const RPose*rlp=nullptr; // حركة التعبئة الحالية للمجسّم الأول فقط
   void drawGunAt(float ox,float oy,float oz,float yaw,float pitch,int wi,float flash,bool lit,float k,const GAtt*at=nullptr,bool hideOptic=false){
-    const GunDef&g=GUNDEFS[wi]; GAtt a=at?*at:GAtt(); if(hideOptic)a.optic=0; // أثناء التصويب عبر المنظار: لا نرسم جسم المنظار كي لا يحجب الرؤية
-    auto part=[&](float x,float y,float z,float sx,float sy,float sz,const float*c){float o[3];Renderer::rot(yaw,pitch,x,y,z,o);r.obb(ox+o[0],oy+o[1],oz+o[2],sx*.5f,sy*.5f,sz*.5f,yaw,pitch,c[0]*k,c[1]*k,c[2]*k,true,lit);};
-    for(int i=0;i<g.np;i++){float c[3];gcol(g.p[i].c,c);part(g.p[i].x,g.p[i].y,g.p[i].z,g.p[i].sx,g.p[i].sy,g.p[i].sz,c);}
+    const GunDef&g=GUNDEFS[wi]; GAtt a=at?*at:GAtt(); if(hideOptic)a.optic=0; const RPose*R=rlp; float rl=R?R->rz:0.f; r.obbRoll=rl; // أثناء التصويب عبر المنظار: لا نرسم جسم المنظار كي لا يحجب الرؤية
+    auto part=[&](float x,float y,float z,float sx,float sy,float sz,const float*c){float o[3];{float xx=x,yy=y; if(rl!=0){float c_=cosf(rl),s_=sinf(rl); xx=x*c_-y*s_; yy=x*s_+y*c_;} Renderer::rot(yaw,pitch,xx,yy,z,o);}r.obb(ox+o[0],oy+o[1],oz+o[2],sx*.5f,sy*.5f,sz*.5f,yaw,pitch,c[0]*k,c[1]*k,c[2]*k,true,lit);};
+    for(int i=0;i<g.np;i++){float c[3];gcol(g.p[i].c,c); if(R&&R->hideRear&&i!=0&&g.p[i].z-g.p[i].sz*0.5f>0.1f)continue; float dz=(R&&(i==R->shiftIdx||i==R->shiftIdx2))?R->shiftV:0.f; part(g.p[i].x,g.p[i].y,g.p[i].z+dz,g.p[i].sx,g.p[i].sy,g.p[i].sz,c);}
     float cb[3],cd[3]; gcol('b',cb); gcol('d',cd);
-    if(g.hasMag){ float kk=a.mag==1?1.4f:1.f; float c[3]; if(a.mag==2){c[0]=0.9f;c[1]=0.5f;c[2]=0.1f;} else gcol('b',c); part(g.mag[0],g.mag[1]-(kk-1)*g.mag[4]*0.5f,g.mag[2],g.mag[3],g.mag[4]*kk,g.mag[5],c); }
+    if(g.hasMag&&!(R&&R->hideMag)){ float kk=a.mag==1?1.4f:1.f; float c[3]; if(a.mag==2){c[0]=0.9f;c[1]=0.5f;c[2]=0.1f;} else gcol('b',c); part(g.mag[0],g.mag[1]-(kk-1)*g.mag[4]*0.5f,g.mag[2],g.mag[3],g.mag[4]*kk,g.mag[5],c); }
     if(a.optic>0){ static const float OP[5][4]={{0,0,0,0},{0.03f,0.035f,0.05f,0.075f},{0.034f,0.034f,0.12f,0.08f},{0.04f,0.04f,0.18f,0.085f},{0.045f,0.045f,0.24f,0.09f}}; const float*o=OP[a.optic]; float zc=-0.04f,top=o[3];
       part(0,0.044f,zc,0.024f,0.014f,o[2]*0.6f+0.04f,cb);
       if(a.optic==1){ float gl[3]={0.5f,0.8f,1}, rd[3]={1,0.1f,0.1f}; part(0,top-0.02f,zc,0.034f,0.04f,0.05f,cb); part(0,top-0.02f,zc-0.026f,0.026f,0.028f,0.004f,gl); part(0,top-0.018f,zc-0.028f,0.006f,0.006f,0.003f,rd); }
@@ -482,6 +484,12 @@ struct Game{
     else if(a.under==2){ float rd[3]={1,0.1f,0.1f}; part(0.03f,-0.015f,g.mz*0.5f,0.022f,0.026f,0.07f,cb); part(0.03f,-0.015f,g.mz*0.5f-0.04f,0.012f,0.012f,0.012f,rd); }
     if(flash>0){float c[3]={1,0.85f,0.4f},w2[3]={1,1,0.85f};float sz=(a.muz==1?0.35f:1.f)*(0.06f+0.05f*flash); float zz=g.mz+mzOff-0.03f;
       part(0,0.005f,zz,sz,sz,sz*2.2f,w2); part(0,0.005f,zz-0.01f,sz*3.2f,sz*0.35f,sz*0.5f,c); part(0,0.005f,zz-0.01f,sz*0.35f,sz*3.2f,sz*0.5f,c); part(0,0.005f,zz-0.12f,sz*0.5f,sz*0.5f,sz*3.f,c);}
+    if(R){ // عناصر التعبئة المتحركة: مخازن، خرطوشة، مقبض التلقيم
+      float mcol[3]; if(a.mag==2){mcol[0]=0.9f;mcol[1]=0.5f;mcol[2]=0.1f;} else gcol('b',mcol);
+      for(int q=0;q<R->nm;q++)part(R->mg[q][0],R->mg[q][1],R->mg[q][2],R->ms[0],R->ms[1],R->ms[2],mcol);
+      if(R->ns>0){ float br[3]={0.85f,0.62f,0.18f},cp[3]={0.7f,0.1f,0.08f}; part(R->sh[0][0],R->sh[0][1],R->sh[0][2],0.02f,0.02f,0.07f,br); part(R->sh[0][0],R->sh[0][1],R->sh[0][2]+0.03f,0.021f,0.021f,0.018f,cp); }
+      if(R->handle){ float gg[3]; gcol('g',gg); bool sn=(wi==3); part(sn?0.062f:0.03f,sn?0.f:0.032f,0.05f+R->bolt,0.014f,0.014f,0.04f,gg); } }
+    r.obbRoll=0;
   }
   void drawAvatar(const Ent&a,float camDist){
     float tc[2][3]={{0.82f,0.14f,0.14f},{0.15f,0.36f,0.9f}}; const float*c=tc[a.team]; const float td[2][3]={{0.5f,0.08f,0.08f},{0.08f,0.2f,0.55f}}; const float*d=td[a.team];
@@ -544,14 +552,14 @@ struct Game{
     if(me.alive&&(drive<0||passenger())&&!dn.on&&!(adsHeld&&zoomOf(me)>=2.f)){ r.flush(); r.zBias=1000.f; const GunDef&g=GUNDEFS[me.wpn]; float k=adsHeld?1.f:0.f; float top=g.sy;
       static float bob=0; bob+=me.moving?(me.sprint?0.17f:0.11f):0; float bx=sinf(bob)*0.008f*(me.moving?1:0),by=fabsf(cosf(bob))*0.008f*(me.moving?1:0);
       float x=0.17f*(1-k)+0*k+bx,y=-0.17f*(1-k)+(-top-0.002f)*k+by,z=-0.33f*(1-k)-0.36f*k; float kick=me.flash>0?0.045f:0.f; z+=kick; float rx=kick*1.2f,ry=0.07f*(1-k); y+=sinf(t*1.7f)*0.0025f*(1-k*0.7f); x+=sinf(t*0.9f)*0.0015f;
-      if(me.reloadT>=0){float sn=sinf(me.reloadT/WEAPONS[me.wpn].reload*3.14159f);y-=sn*0.13f;rx-=sn*0.5f;x+=sn*0.03f;}
+      RPose RP; bool inRl=false; if(me.reloadT>=0){ float tt=std::min<float>(1.f,me.reloadT/(WEAPONS[me.wpn].reload*me.relM)); int wk=WKIND[me.wpn%WEAPON_COUNT]; RL::pose(GUNDEFS[me.wpn],wk<=1,wk==7,tt,RP); inRl=true; x+=RP.x; y+=RP.y; z+=RP.z; rx+=RP.rx; ry+=RP.ry; }
       if(me.sprint){y-=0.06f;rx-=0.35f;ry=0.4f;x-=0.04f;}
       float O[3];Renderer::rot(me.yaw,me.pitch,x,y,z,O); float gy=me.yaw+ry,gp=me.pitch+rx; float ox=c.x+O[0],oy=c.y+O[1],oz=c.z+O[2];
-      drawGunAt(ox,oy,oz,gy,gp,me.wpn,me.flash>0?std::min<float>(1.f,me.flash*16.f):0.f,false,0.95f,role==3?&myAtt:&wAtt[me.wpn&15],adsHeld);
+      rlp=inRl?&RP:nullptr; drawGunAt(ox,oy,oz,gy,gp,me.wpn,me.flash>0?std::min<float>(1.f,me.flash*16.f):0.f,false,0.95f,role==3?&myAtt:&wAtt[me.wpn&15],adsHeld); rlp=nullptr;
       float sl[3]={me.team?0.08f:0.5f,me.team?0.2f:0.08f,me.team?0.55f:0.08f},sk[3]={.86f,.68f,.55f};
-      auto hp=[&](float px,float py,float pz,float sx,float sy,float sz,const float*cc){float o[3];Renderer::rot(gy,gp,px,py,pz,o);r.obb(ox+o[0],oy+o[1],oz+o[2],sx*.5f,sy*.5f,sz*.5f,gy,gp,cc[0]*0.95f,cc[1]*0.95f,cc[2]*0.95f,false,false);};
+      float hrl=inRl?RP.rz:0.f; auto hp=[&](float px,float py,float pz,float sx,float sy,float sz,const float*cc){float o[3];float xx=px,yy=py; if(hrl!=0){float c_=cosf(hrl),s_=sinf(hrl); xx=px*c_-py*s_; yy=px*s_+py*c_;} Renderer::rot(gy,gp,xx,yy,pz,o);r.obbRoll=hrl;r.obb(ox+o[0],oy+o[1],oz+o[2],sx*.5f,sy*.5f,sz*.5f,gy,gp,cc[0]*0.95f,cc[1]*0.95f,cc[2]*0.95f,false,false);r.obbRoll=0;};
       float gz=(me.wpn>=6)?0.04f:0.06f; hp(0,-0.075f,gz,.05f,.05f,.06f,sk); hp(0.015f,-0.12f,gz+0.12f,.065f,.06f,.28f,sl);
-      if(me.wpn<6){hp(-0.005f,-0.05f,g.mz*0.42f,.055f,.05f,.07f,sk);hp(-0.03f,-0.09f,g.mz*0.42f+0.2f,.06f,.055f,.3f,sl);} else hp(-0.03f,-0.075f,gz+0.01f,.05f,.05f,.06f,sk);
+      if(inRl){ hp(RP.hand[0],RP.hand[1],RP.hand[2],.055f,.05f,.07f,sk); hp(RP.hand[0]-0.03f,RP.hand[1]-0.05f,RP.hand[2]+0.13f,.06f,.055f,.18f,sl); } else if(me.wpn<6){hp(-0.005f,-0.05f,g.mz*0.42f,.055f,.05f,.07f,sk);hp(-0.03f,-0.09f,g.mz*0.42f+0.2f,.06f,.055f,.3f,sl);} else hp(-0.03f,-0.075f,gz+0.01f,.05f,.05f,.06f,sk);
     }
     if(adsHeld&&me.alive&&drive<0&&!dn.on&&zoomOf(me)>=3.4f){ // عدسة المنظار (مثل نسخة الأندرويد): أسود خارج دائرة + شعرة تصويب
       r.flush(); int Hh=r.H,Ww=r.W,rad=(int)(Hh*0.33f),cx=Ww/2,cy=Hh/2;

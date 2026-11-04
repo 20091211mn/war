@@ -209,13 +209,15 @@ struct Renderer {
     float cp=cosf(pitch),sp=sinf(pitch); float y1=y*cp-z*sp,z1=y*sp+z*cp;
     float c=cosf(yaw),s=sinf(yaw); o[0]=x*c+z1*s; o[1]=y1; o[2]=-x*s+z1*c;
   }
+  float obbRoll=0;
   void obb(float cx,float cy,float cz,float hx,float hy,float hz,float yaw,float pitch,float r,float g,float b,bool fogOn=true,bool lit=true){
     float P[8][3];
-    for(int i=0;i<8;i++){float o[3];rot(yaw,pitch,(i&1?hx:-hx),(i&2?hy:-hy),(i&4?hz:-hz),o);P[i][0]=cx+o[0];P[i][1]=cy+o[1];P[i][2]=cz+o[2];}
+    float rc=1,rs=0; if(obbRoll!=0){rc=cosf(obbRoll);rs=sinf(obbRoll);}
+    for(int i=0;i<8;i++){float o[3];float lx=(i&1?hx:-hx),ly=(i&2?hy:-hy);if(obbRoll!=0){float nx=lx*rc-ly*rs;ly=lx*rs+ly*rc;lx=nx;}rot(yaw,pitch,lx,ly,(i&4?hz:-hz),o);P[i][0]=cx+o[0];P[i][1]=cy+o[1];P[i][2]=cz+o[2];}
     static const int F[6][4]={{0,2,3,1},{4,5,7,6},{0,4,6,2},{1,3,7,5},{0,1,5,4},{2,6,7,3}};
     static const float N[6][3]={{0,0,-1},{0,0,1},{-1,0,0},{1,0,0},{0,-1,0},{0,1,0}};
     for(int f=0;f<6;f++){
-      float n[3];rot(yaw,pitch,N[f][0],N[f][1],N[f][2],n);
+      float n[3];{float nx0=N[f][0],ny0=N[f][1];if(obbRoll!=0){float nx=nx0*rc-ny0*rs;ny0=nx0*rs+ny0*rc;nx0=nx;}rot(yaw,pitch,nx0,ny0,N[f][2],n);}
       const float*q=P[F[f][0]]; if((cam.x-q[0])*n[0]+(cam.y-q[1])*n[1]+(cam.z-q[2])*n[2]<=0)continue;
       float l=lit?std::min<float>(1.25f,lightOf(n[0],n[1],n[2])):1.f; float pts[4][3]; for(int k=0;k<4;k++)memcpy(pts[k],P[F[f][k]],12);
       poly(pts,4,r*l,g*l,b*l,false,nullptr,fogOn);
