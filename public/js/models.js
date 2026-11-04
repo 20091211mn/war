@@ -23,12 +23,18 @@ export function drawGun(eng, G, st, flash, opts) {
     const m = mul(tmp(), G, trs(tmp(), x, y, z, 0, 0, sx, sy, sz));
     eng.cubeAt(m, col[0], col[1], col[2], unlit);
   };
+  if (st.kind === 'sniper' && eng.awm) { // موديل AWM الحقيقي (أجزاء: 0 أمامي، 1 مخزن، 2 ترباس، 3 كعب)
+    const R = opts || {}, aw = (gi, dz, c) => eng.awmAt(gi, dz ? mul(tmp(), G, trs(tmp(), 0, 0, dz, 0, 0, 1, 1, 1)) : G, c[0], c[1], c[2], false);
+    aw(0, 0, [1, 1, 1]); if (!R.hideRear) aw(3, 0, [1, 1, 1]);
+    aw(2, R.bolt || 0, [1, 1, 1]);
+    if (!R.hideMag) aw(1, 0, a.mag === 'fast' ? [1.5, 0.95, 0.5] : [1, 1, 1]);
+  } else
   for (let i = 0; i < g.parts.length; i++) { const p = g.parts[i], dz = opts && opts.shift && opts.shift[i] || 0; if (opts && opts.hideRear && p[2] - p[5] / 2 > 0.1 && i !== 0) continue; part(p[0], p[1], p[2] + dz, p[3], p[4], p[5], C[p[6]]); }
-  if (g.mag && !(opts && opts.hideMag)) {
+  if (g.mag && !(opts && opts.hideMag) && !(st.kind === 'sniper' && eng.awm)) {
     const k = a.mag === 'ext' ? 1.4 : 1;
     part(g.mag[0], g.mag[1] - (k - 1) * g.mag[4] * 0.5, g.mag[2], g.mag[3], g.mag[4] * k, g.mag[5], a.mag === 'fast' ? C.o : C.b);
   }
-  if (a.optic !== 'iron' && OPT[a.optic]) {
+  if (a.optic !== 'iron' && OPT[a.optic] && !(st.kind === 'sniper' && eng.awm)) {
     const o = OPT[a.optic], zc = -0.04, top = o[3];
     part(0, 0.034 + 0.01, zc, 0.024, 0.014, o[2] * 0.6 + 0.04, C.b);           // قاعدة التثبيت
     if (a.optic === 'red') {                                                      // نقطة حمراء: علبة + نافذة
@@ -125,7 +131,7 @@ export function drawReloadExtras(eng, G, st, P) {
   const fast = st.att && st.att.mag === 'fast';
   for (const m of P.mags) part(m.p, m.s, fast ? C.o : C.b);
   for (const sh of P.shells) { part(sh, [0.02, 0.02, 0.07], BRASS); part([sh[0], sh[1], sh[2] + 0.03], [0.021, 0.021, 0.018], [0.7, 0.1, 0.08]); }
-  if (P.handle) part([st.kind === 'sniper' ? 0.062 : 0.03, st.kind === 'sniper' ? 0.0 : 0.032, 0.05 + P.bolt], [0.014, 0.014, 0.04], C.g);
+  if (P.handle && !(st.kind === 'sniper' && eng.awm)) part([st.kind === 'sniper' ? 0.062 : 0.03, st.kind === 'sniper' ? 0.0 : 0.032, 0.05 + P.bolt], [0.014, 0.014, 0.04], C.g);
 }
 
 // ---- اللاعب (من منظور الآخرين) ----

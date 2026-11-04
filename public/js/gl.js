@@ -1,3 +1,4 @@
+import { AWM } from './awm-data.js';
 // محرك عرض WebGL صغير (بدون مكتبات): مجسّمات ملوّنة مضاءة + ضباب + سماء
 const VS = `
 attribute vec3 aPos; attribute vec3 aNor; attribute vec3 aCol;
@@ -37,14 +38,14 @@ void main(){
 }`;
 // نسخة مجمّعة (instanced): مصفوفة ولون كل جسم تأتي كسمات لكل نسخة، فيُرسم كل نوع بنداء واحد
 const VSI = `
-attribute vec3 aPos; attribute vec3 aNor; attribute vec4 aM0; attribute vec4 aM1; attribute vec4 aM2; attribute vec4 aM3; attribute vec4 aT;
+attribute vec3 aPos; attribute vec3 aNor; attribute vec3 aCol; attribute vec4 aM0; attribute vec4 aM1; attribute vec4 aM2; attribute vec4 aM3; attribute vec4 aT;
 uniform mat4 uVP;
 varying vec3 vN; varying vec3 vC; varying vec3 vP; varying float vU; varying float vA;
 void main(){
   mat4 M = mat4(aM0, aM1, aM2, aM3);
   vec4 w = M*vec4(aPos,1.0); vP = w.xyz;
   vN = aM0.xyz*aNor.x + aM1.xyz*aNor.y + aM2.xyz*aNor.z;
-  vC = aT.xyz; float u = step(1.5, aT.w); vU = u; vA = aT.w - 2.0*u;
+  vC = aT.xyz*aCol; float u = step(1.5, aT.w); vU = u; vA = aT.w - 2.0*u;
   gl_Position = uVP*w;
 }`;
 const FSI = FS.replace('uniform float uDetail; uniform float uAlpha; uniform float uUnlit;', 'uniform float uDetail; varying float vU; varying float vA;').replace('uUnlit > 0.5', 'vU > 0.5').replace(/uAlpha/g, 'vA');
@@ -198,7 +199,8 @@ export class Engine {
     this.skyBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, this.skyBuf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     this.cube = this._mesh(cubeData()); this.sphere = this._mesh(sphereData()); this.cyl = this._mesh(cylData()); this.tube = this._mesh(tubeData());
-    this.map = null;
+    this.map = null; this.awm = null;
+    try { this.awm = this._groups(AWM); } catch (e) { this.awm = null; }
     this.ext = null; this.lists = new Map();
     try { this.ext = gl.getExtension('ANGLE_instanced_arrays'); if (this.ext) this._initInst(); } catch (e) { this.ext = null; }
     this.VP = mat(); this.VPvm = mat(); this.proj = mat(); this.projVm = mat(); this.V = mat();
@@ -215,10 +217,11 @@ export class Engine {
     this.progI = this._program(VSI, FSI);
     const U = {}; for (const n of ['uVP', 'uSunDir', 'uSunI', 'uAmb', 'uFogCol', 'uFog', 'uCam', 'uDetail']) U[n] = gl.getUniformLocation(this.progI, n);
     this.UI = U;
-    const L = {}; for (const n of ['aPos', 'aNor', 'aM0', 'aM1', 'aM2', 'aM3', 'aT']) L[n] = gl.getAttribLocation(this.progI, n);
+    const L = {}; for (const n of ['aPos', 'aNor', 'aCol', 'aM0', 'aM1', 'aM2', 'aM3', 'aT']) L[n] = gl.getAttribLocation(this.progI, n);
     this.LI = L; this.instBuf = gl.createBuffer();
     this.fs = { vp: null, cam: [0, 0, 0], fog: [40, 120] };
     this.meshIds = new Map([[this.cube, 0], [this.sphere, 1], [this.cyl, 2], [this.tube, 3]]);
+    if (this.awm) this.awm.forEach((m, i) => this.meshIds.set(m, 4 + i));
   }
   _program(vs, fs) {
     const gl = this.gl;
@@ -226,6 +229,21 @@ export class Engine {
     const p = gl.createProgram(); gl.attachShader(p, mk(gl.VERTEX_SHADER, vs)); gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('link: ' + gl.getProgramInfoLog(p));
     return p;
+  }
+  // مجسّم بألوان رؤوس مقسّم إلى مجموعات (بنفس مخزن الرؤوس) — موديل AWM
+  _groups(A) {
+    const gl = this.gl, b64 = (s, T) => { const bin = atob(s), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new T(u.buffer); };
+    const pos = b64(A.pos, Int16Array), nor = b64(A.nor, Int8Array), col = b64(A.col, Uint8Array), idx = b64(A.idx, Uint16Array), n = A.n, v = new Float32Array(n * 9);
+    for (let i = 0; i < n; i++) {
+      for (let k = 0; k < 3; k++) { v[i * 9 + k] = A.lo[k] + (pos[i * 3 + k] + 32768) / 65535 * A.rng[k]; v[i * 9 + 3 + k] = nor[i * 3 + k] / 127; v[i * 9 + 6 + k] = col[i * 3 + k] / 255; }
+    }
+    const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, v, gl.STATIC_DRAW);
+    const out = []; let o = 0;
+    for (const c of A.groups) {
+      const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx.slice(o, o + c), gl.STATIC_DRAW);
+      out.push({ vb, ib, count: c }); o += c;
+    }
+    return out;
   }
   _mesh(d) {
     const gl = this.gl, n = d.pos.length / 3, v = new Float32Array(n * 9);
@@ -375,7 +393,7 @@ export class Engine {
     gl.uniform3f(U.uSunDir, th.sun[0] / sl, th.sun[1] / sl, th.sun[2] / sl); gl.uniform1f(U.uSunI, th.sunI); gl.uniform1f(U.uAmb, th.amb); gl.uniform3fv(U.uFogCol, th.fog); gl.uniform1f(U.uDetail, 0);
     // سمات
     for (const a of [this.A.pos, this.A.nor, this.A.col]) gl.disableVertexAttribArray(a);
-    for (const n of ['aPos', 'aNor', 'aM0', 'aM1', 'aM2', 'aM3', 'aT']) gl.enableVertexAttribArray(L[n]);
+    for (const n of ['aPos', 'aNor', 'aCol', 'aM0', 'aM1', 'aM2', 'aM3', 'aT']) gl.enableVertexAttribArray(L[n]);
     const order = [...this.lists.entries()].sort((a, b) => a[0] - b[0]);
     for (const [, l] of order) {
       if (!l.n) continue;
@@ -384,7 +402,8 @@ export class Engine {
       else { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE); gl.depthMask(false); }
       gl.bindBuffer(gl.ARRAY_BUFFER, l.mesh.vb); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, l.mesh.ib);
       gl.vertexAttribPointer(L.aPos, 3, gl.FLOAT, false, 36, 0); gl.vertexAttribPointer(L.aNor, 3, gl.FLOAT, false, 36, 12);
-      ext.vertexAttribDivisorANGLE(L.aPos, 0); ext.vertexAttribDivisorANGLE(L.aNor, 0);
+      gl.vertexAttribPointer(L.aCol, 3, gl.FLOAT, false, 36, 24);
+      ext.vertexAttribDivisorANGLE(L.aPos, 0); ext.vertexAttribDivisorANGLE(L.aNor, 0); ext.vertexAttribDivisorANGLE(L.aCol, 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.instBuf);
       gl.bufferData(gl.ARRAY_BUFFER, l.data.subarray(0, l.n * 20), gl.DYNAMIC_DRAW);
       for (let k = 0; k < 4; k++) { gl.vertexAttribPointer(L['aM' + k], 4, gl.FLOAT, false, 80, k * 16); ext.vertexAttribDivisorANGLE(L['aM' + k], 1); }
@@ -399,6 +418,7 @@ export class Engine {
     for (const a of [this.A.pos, this.A.nor, this.A.col]) gl.enableVertexAttribArray(a);
     this.cur = null;
   }
+  awmAt(group, m, r, g, b, unlit, alpha, add) { if (this.awm) this.draw(this.awm[group], m, r, g, b, unlit, alpha, add); }
   cubeAt(m, r, g, b, unlit, alpha, add) { this.draw(this.cube, m, r, g, b, unlit, alpha, add); }
   cylAt(m, r, g, b, unlit, alpha, add) { this.draw(this.cyl, m, r, g, b, unlit, alpha, add); }
   tubeAt(m, r, g, b, unlit, alpha, add) { this.draw(this.tube, m, r, g, b, unlit, alpha, add); }
