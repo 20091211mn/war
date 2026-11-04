@@ -29,7 +29,7 @@ int main(int,char**){
   int uid=0; sceUserServiceGetInitialUser(&uid);
   padH=scePadOpen(uid,0,0,NULL);
   static const int RESW=1920,RESH=1080; static Game g; g.r.startThreads(6); g.menu=1; g.init(RESW,RESH); // دقة ثابتة 1080p
-  uint32_t last=SDL_GetTicks(); bool dbg=false; uint32_t prevB=0; float acc=0,fpsT=0,fps=30; int fpsN=0; float smx=0,smy=0; int frame=0;
+  uint32_t last=SDL_GetTicks(); bool dbg=false; uint32_t prevB=0; float acc=0,fpsT=0,fps=30; int fpsN=0; float smx=0,smy=0; int frame=0; static const int DRW[5]={1920,1706,1536,1366,1280},DRH[5]={1080,960,864,768,720}; int dLvl=0,dUp=0; float dEma=20.f;
   for(;;){
     SDL_Event ev; while(SDL_PollEvent(&ev)){}
     memset(&pd,0,sizeof(pd)); if(padH>=0)scePadReadState(padH,&pd); else padH=scePadOpen(uid,0,0,NULL);
@@ -61,6 +61,10 @@ int main(int,char**){
     if(RWc==sw&&RHc==sh){ std::atomic<int> nx(0); const uint32_t*fbp=g.r.fb.data(); g.r.pool.exec([&]{ for(;;){ int y0=nx.fetch_add(16); if(y0>=sh)break; int y1=std::min(sh,y0+16); for(int y=y0;y<y1;y++)memcpy(dst+y*pitch,fbp+y*RWc,sw*4); } }); } else
     { std::atomic<int> nx(0); const uint32_t*fbp=g.r.fb.data(); g.r.pool.exec([&]{ for(;;){ int y0=nx.fetch_add(32); if(y0>=sh)break; for(int y=y0;y<std::min(sh,y0+32);y++){ const uint32_t*sr=fbp+(y*RHc/sh)*RWc; uint32_t*d=dst+y*pitch; for(int x=0;x<sw;x++)d[x]=sr[xm[x]]; } } }); }
     SDL_UnlockSurface(surf); SDL_UpdateWindowSurface(win);
+    { // دقة ديناميكية: هدف 40 إطارًا (25ms). نخفض الدقة الداخلية عند الثقل ونعيدها عند الوفرة، والشاشة ثابتة 1080p
+      dEma=dEma*0.92f+dt*1000.f*0.08f; if(g.menu&&dLvl){ dLvl=0; g.r.init(DRW[0],DRH[0]); } if(!g.menu&&frame%30==0){ int nl=dLvl;
+        if(dEma>27.f&&dLvl<4){ nl=dLvl+1; dUp=0; } else if(dEma<19.f&&dLvl>0){ if(++dUp>=4){ nl=dLvl-1; dUp=0; } } else dUp=0;
+        if(nl!=dLvl){ dLvl=nl; g.r.init(DRW[dLvl],DRH[dLvl]); } } }
     { uint32_t el=SDL_GetTicks()-now; if(el<16)sceKernelUsleep((16-el)*1000); } // سقف 60fps (الحدّ الأعلى فقط، بلا إبطاء)
   }
 }

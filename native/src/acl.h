@@ -187,7 +187,7 @@ void Game::aclUpdate(float dt,const Input&in){
 }
 int Game::mySeat()const{ return role==3?(ac?ac->seat:-1):(drive>=0?(gunner?2:0):-1); }
 void Game::aclRenderMenu(){
-  if(!ac)return; ACl&A=*ac; int W=r.W,H=r.H,sc=std::max(1,H/270),sm=std::max(1,sc-1); char b[96];
+  if(!ac)return; ACl&A=*ac; int W=r.W,H=r.H,sc=std::max(1,(H+135)/270),sm=std::max(1,sc-1); char b[96];
   int cw=W*66/100,ch=H*84/100,cx=(W-cw)/2,cy=(H-ch)/2; card(cx,cy,cw,ch,sc);
   textC(W/2,cy+8*sc,"انضم إلى لعبة أندرويد",sc*2,C_TXT); rect(W/2-24*sc,cy+30*sc,48*sc,2*sc,C_ACC);
   if(menu==5){

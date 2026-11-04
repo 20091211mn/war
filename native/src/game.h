@@ -621,7 +621,7 @@ struct Game{
     for(;*p;p++){ if(*p=='\n'){ flush(); ly+=em*3/2; } else line+=*p; } flush(); }
   void textC(int cx,int y,const char*s,int sc,uint32_t col){text(cx-tw(s,sc)/2,y,s,sc,col);}
   void hud(){
-    int W=r.W,H=r.H,sc=std::max(1,H/270); Ent&me=e[meI]; const WeaponDef&d=WEAPONS[me.wpn];
+    int W=r.W,H=r.H,sc=std::max(1,(H+135)/270); Ent&me=e[meI]; const WeaponDef&d=WEAPONS[me.wpn];
     { r.flush(); for(auto&o:e){ if(!o.alive||o.reveal<=0||&o==&me||o.team==me.team)continue; float ddx=o.b.x-r.cam.x,ddy=o.b.y+2.1f-r.cam.y,ddz=o.b.z-r.cam.z; float zc=ddx*r.fx+ddy*r.fy+ddz*r.fz; if(zc<0.5f)continue;
         float xc=ddx*r.rx+ddz*r.rz,yc=ddx*r.ux+ddy*r.uy+ddz*r.uz; int X=W/2+(int)(xc/zc*r.focal),Y=H/2-(int)(yc/zc*r.focal); if(X<8||X>W-8||Y<8||Y>H-8)continue; float a=std::min<float>(1.f,o.reveal*2.f);
         int s2=3*sc; for(int k=0;k<=s2;k++){ int wdt=s2-k; blendSpan(Y-k,X-wdt,X+wdt+1,0xFFFF3030,a); blendSpan(Y+k,X-wdt,X+wdt+1,0xFFFF3030,a); }
@@ -700,7 +700,7 @@ struct Game{
     const char*feat[4]={"دبابة ومركبات","ملحقات الأسلحة","مسيّرة استطلاع","لعب شبكي مشترك"}; for(int i=0;i<4;i++){ int pw=tw(feat[i],std::max(1,sc-1))+12*sc,px=cx-pw/2,py=y+80*sc+i*15*sc; rrect(px,py,pw,12*sc,6*sc,0xFF1B2430,0.9f); textC(cx,py+3*sc,feat[i],std::max(1,sc-1),i%2?0xFF8FB8FF:0xFFFF9A8A); } }
   void renderMenu(){ SFX::engSpeed.store(-1.f); SFX::droneVol.store(0.f);
     static float mt=0; mt+=0.016f; int showMap=menu==1?menuSel:mapIdx;
-    Cam c{0,6,0,mt*0.2f,-0.15f,1.2f}; if(w.id!=showMap)w.load(showMap); r.setCam(c); r.world(w); int W=r.W,H=r.H,sc=std::max(1,H/270); menuBg();
+    Cam c{0,6,0,mt*0.2f,-0.15f,1.2f}; if(w.id!=showMap)w.load(showMap); r.setCam(c); r.world(w); int W=r.W,H=r.H,sc=std::max(1,(H+135)/270); menuBg();
     char b[96]; int sm=std::max(1,sc-1);
     if(menu>=5){ aclRenderMenu(); return; }
     if(menu==3){ int cw=W*6/10,ch=H/2,cx=(W-cw)/2,cy=(H-ch)/2; card(cx,cy,cw,ch,sc); textC(W/2,cy+ch/2-18*sc,"جارٍ تشغيل الشبكة…",sc*2,C_TXT); snprintf(b,96,"STEP: %s",netWhat); textC(W/2,cy+ch/2+10*sc,b,sc,C_ACC); textC(W/2,cy+ch-16*sc,"O: إلغاء",sm,C_MUT); return; }
