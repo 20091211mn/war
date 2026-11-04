@@ -29,7 +29,7 @@ int main(int,char**){
   int uid=0; sceUserServiceGetInitialUser(&uid);
   padH=scePadOpen(uid,0,0,NULL);
   static const int RESW=1920,RESH=1080; static Game g; g.r.startThreads(6); g.menu=1; g.init(RESW,RESH); // دقة ثابتة 1080p
-  uint32_t last=SDL_GetTicks(); bool dbg=false; uint32_t prevB=0; float acc=0,fpsT=0,fps=30; int fpsN=0; float smx=0,smy=0; int frame=0; static const
+  uint32_t last=SDL_GetTicks(); bool dbg=false; uint32_t prevB=0; float acc=0,fpsT=0,fps=30; int fpsN=0; float smx=0,smy=0; int frame=0;
   for(;;){
     SDL_Event ev; while(SDL_PollEvent(&ev)){}
     memset(&pd,0,sizeof(pd)); if(padH>=0)scePadReadState(padH,&pd); else padH=scePadOpen(uid,0,0,NULL);
