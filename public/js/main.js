@@ -10,7 +10,7 @@ import { LocalHost, remoteLink } from './net.js';
 import { Snd } from './audio.js';
 import { input, consume, takeLook, initInput, resetInput, isTouchDevice, pollGamepad } from './input.js';
 import { icon, gunIcon } from './icons.js';
-import { drawAvatar, drawViewmodel, Effects, drawGrenade, GUNS } from './models.js';
+import { drawAvatar, drawViewmodel, Effects, drawGrenade, drawC4, GUNS } from './models.js';
 import { drawVehicle, vehicleFx, drawDrop } from './vehview.js';
 import { drawKit, drawZone, drawDrone } from './vis.js';
 import { enhanceSelects } from './ui-select.js';
@@ -43,7 +43,7 @@ function vib(ms) { if (settings.vib && navigator.vibrate) try { navigator.vibrat
 const APP = !!(window.Capacitor && (window.Capacitor.isNativePlatform ? window.Capacitor.isNativePlatform() : true));
 const S = {
   link: null, host: null, mode: '', lanInfo: null, id: 0, hostId: 0, connected: false, phase: 'lobby', cfg: null, players: new Map(), remote: new Map(), maps: [],
-  map: null, inGame: false, paused: false, timeLeft: 0, score: [0, 0], grenades: new Map(), ping: 0, ended: false, entered: false, leaving: false,
+  map: null, inGame: false, paused: false, timeLeft: 0, score: [0, 0], grenades: new Map(), c4: [], ping: 0, ended: false, entered: false, leaving: false,
   vehs: new Map(), drops: new Map(), chat: [], typing: false, joinAddr: '',
   drones: new Map(), kits: new Map(), zones: [], zone: null, uavUntil: [0, 0], match: null,
 };
@@ -476,7 +476,7 @@ function onSnap(m) {
     const id = p[0]; seen.add(id);
     const f = p[6], alive = !!(f & 4);
     if (id === S.id) {
-      if (alive && me.alive) { me.hp = p[7]; me.shield = p[12] || 0; me.grenades = p[9]; if (p[10] === 0 && me.veh >= 0 && nowMs() - me.seatAt > 1500) me.veh = -1; }
+      if (alive && me.alive) { me.hp = p[7]; me.shield = p[12] || 0; me.grenades = p[9]; me.c4Left = p[13] | 0; if (p[10] === 0 && me.veh >= 0 && nowMs() - me.seatAt > 1500) me.veh = -1; }
       continue;
     }
     const r = remoteOf(id);
@@ -494,6 +494,8 @@ function onSnap(m) {
     o.tx = g[1]; o.ty = g[2]; o.tz = g[3];
   }
   for (const id of [...S.grenades.keys()]) if (!gs.has(id)) S.grenades.delete(id);
+  S.c4 = Array.isArray(m.c4) ? m.c4 : [];
+  { const key = (me.c4Left | 0) + ':' + S.c4.filter((c) => c[5] === S.id).length; if (key !== S.c4Key) { S.c4Key = key; if (me.alive) updateAmmoHud(); } document.body.classList.toggle('c4live', me.alive && S.c4.some((c) => c[5] === S.id)); }
   // المركبات
   const vs = new Set();
   for (const a of m.vs || []) {
@@ -592,7 +594,7 @@ function droneStep(dt, now, lx, ly) {
   if (!droneHit(S.map, d.x, d.y, nz) && tether(d.x, nz)) d.z = nz; else d.vz = 0;
   if (now - d.lastSend > 90) { d.lastSend = now; send({ t: 'dp', x: +d.x.toFixed(2), y: +d.y.toFixed(2), z: +d.z.toFixed(2), yaw: +d.yaw.toFixed(3), pitch: +d.pitch.toFixed(3) }); }
   if (consume('firePressed')) { send({ t: 'dboom' }); }
-  consume('jump'); consume('reload'); consume('swap'); consume('gren'); consume('slot'); consume('use'); consume('seat'); consume('view');
+  consume('jump'); consume('reload'); consume('swap'); consume('gren'); consume('c4'); consume('det'); consume('slot'); consume('use'); consume('seat'); consume('view');
   me.vx = me.vz = 0;
   me.kick = Math.max(0, me.kick - dt * 8); me.flash = Math.max(0, me.flash - dt * 14); me.shake = Math.max(0, me.shake - dt * 1.6);
 }
@@ -703,7 +705,7 @@ function renderBoard() { $('board').innerHTML = boardHtml(); }
 function curStats() { return me.st[me.w]; }
 function updateAmmoHud() {
   const st = curStats(); if (!st) return; const am = me.ammo[me.w];
-  $('wname').textContent = st.name; $('mag').textContent = am.mag; $('res').textContent = am.res; $('gcount').innerHTML = icon('gren', 14) + ' ' + me.grenades;
+  $('wname').textContent = st.name; $('mag').textContent = am.mag; $('res').textContent = am.res; $('gcount').innerHTML = icon('gren', 14) + ' ' + me.grenades + ' &nbsp; ' + icon('c4', 14) + ' ' + (me.c4Left | 0); { const cn = $('c4n'); if (cn) cn.textContent = me.c4Left | 0; document.body.classList.toggle('c4live', S.c4.some((c) => c[5] === S.id)); };
 }
 function startReload(now) {
   const st = curStats(), am = me.ammo[me.w];
@@ -854,7 +856,7 @@ function update(dt, now) {
     const resp = (S.cfg ? S.cfg.resp : 3) * 1000;
     $('dtimer').textContent = Math.max(0, Math.ceil((me.deadAt + resp - now) / 1000));
   } else { consume('dslot'); consume('attach'); }
-  if (!active) { me.vx = me.vz = 0; consume('jump'); consume('reload'); consume('swap'); consume('gren'); consume('firePressed'); consume('slot'); consume('use'); consume('seat'); consume('view'); if (!me.alive) { me.camY += (0.25 - me.camY) * Math.min(1, dt * 3); me.pitch += (-0.5 - me.pitch) * Math.min(1, dt * 2); } return; }
+  if (!active) { me.vx = me.vz = 0; consume('jump'); consume('reload'); consume('swap'); consume('gren'); consume('c4'); consume('det'); consume('firePressed'); consume('slot'); consume('use'); consume('seat'); consume('view'); if (!me.alive) { me.camY += (0.25 - me.camY) * Math.min(1, dt * 3); me.pitch += (-0.5 - me.pitch) * Math.min(1, dt * 2); } return; }
   // تبديل السلاح
   let slot = consume('slot'); if (consume('swap')) slot = 1 - me.w;
   if (slot >= 0 && slot !== me.w) { me.w = slot; me.swapAt = now; me.reloading = -1; me.emptyClick = false; if (input.resetAds) input.resetAds(); updateAmmoHud(); }
@@ -915,6 +917,9 @@ function update(dt, now) {
     else if (pressed && me.reloading < 0 && am.mag <= 0) tryFire(now, true);
   }
   if (!wantFire2) { me.emptyClick = false; const d = me.recAcc * Math.min(1, dt * 2.5); me.pitch -= d * 0.5; me.recAcc -= d; }
+  // C4: زرع (X) وتفجير عن بُعد (Z)
+  if (consume('c4') && !isDriver() && me.c4Left > 0 && now > (me.c4At || 0)) { me.c4At = now + 500; me.c4Left--; send({ t: 'c4', d: aimDir(me.yaw, Math.min(me.pitch - 0.45, -0.45)) }); Snd.throwG(); }
+  if (consume('det') && S.c4.some((c) => c[5] === S.id)) { send({ t: 'c4x' }); }
   // قنبلة
   if (consume('gren') && me.grenades > 0 && now > me.nextGren && !isDriver()) {
     me.nextGren = now + 700; me.grenades--; send({ t: 'gren', d: aimDir(me.yaw, me.pitch + 0.1) }); Snd.throwG(); updateAmmoHud();
@@ -1032,6 +1037,7 @@ function render(dt, now) {
     drawAvatar(eng, { x: me.x, y: me.y - (cab ? 0.36 : 0), z: me.z, yaw: me.yaw, pitch: me.pitch, crouch: droning ? me.crouch : !cab, sit: cab, lean: null, team: me.team, moving: false, sprint: false, stats: droning || me.seat === 0 ? null : st, deadT: -1, flash: me.flash, phase: 0 }, now);
   }
   for (const g of S.grenades.values()) drawGrenade(eng, g.x, g.y, g.z);
+  for (const c of S.c4) drawC4(eng, c[1], c[2], c[3], c[4], now);
   fx.update(dt); fx.draw(eng); eng.flush();
   const scoped = me.alive && st && me.adsT > 0.92 && st.zoom >= 3.4 && !chase && !droning;
   if (me.alive && st && !scoped && !chase && !isDriver() && !droning) {

@@ -6,7 +6,7 @@
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
-    "test": "node test/test-maps.js && node test/test-physics.js && node test/test-stairs.js && node test/test-vehicles.js && node test/test-tank.js && node test/test-extras.js && node test/test-server.js",
+    "test": "node test/test-maps.js && node test/test-physics.js && node test/test-stairs.js && node test/test-vehicles.js && node test/test-tank.js && node test/test-c4.js && node test/test-extras.js && node test/test-server.js",
     "build:www": "node tools/build-www.js",
     "build:ps4": "node tools/build-ps4.js"
   },

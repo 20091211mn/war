@@ -367,3 +367,12 @@ body.touch #stat{position:absolute;left:var(--el);bottom:max(4px,var(--sb));top:
 .lo-kind{color:var(--acc);font-size:12px;letter-spacing:.2em;text-transform:uppercase}
 .lo-bars .bar,.lo-bars .b{border-radius:99px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* C4: زرع وتفجير عن بُعد */
+#b-c4{left:max(8px,var(--sl));top:max(188px,calc(var(--st) + 182px))}
+#b-det{left:max(8px,var(--sl));top:max(234px,calc(var(--st) + 228px));display:none;background:rgba(231,76,60,.55);border-color:#ff8a7a}
+body.c4live #b-det{display:flex}
+#b-c4 b{position:absolute;right:2px;bottom:0;font-size:12px;text-shadow:0 1px 2px #000}
+body.invehicle #b-c4,body.invehicle #b-det{display:none}
+body.touch #b-c4{left:calc(var(--el) + var(--bs)*1.7 + 8px);top:calc(max(6px,var(--st)) + var(--bs)*1.44 + 12px)}
+body.touch #b-det{left:calc(var(--el) + var(--bs)*1.7 + 8px);top:calc(max(6px,var(--st)) + var(--bs)*2.16 + 18px)}

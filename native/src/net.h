@@ -17,18 +17,19 @@
 #include <memory>
 #include <chrono>
 
-enum { PORT_GAME=9330, PORT_BEACON=9331, NET_VER=2 };
+enum { PORT_GAME=9330, PORT_BEACON=9331, NET_VER=3 };
 enum { T_HELLO=1, T_WELCOME=2, T_INPUT=3, T_SNAP=4, T_BYE=5, T_BEACON=6 };
 
 #pragma pack(push,1)
 struct NetHello{uint8_t t,ver;};
 struct NetWelcome{uint8_t t,slot,map,total;};
-struct NetInput{uint8_t t,slot;uint16_t seq;float x,y,z,yaw,pitch;uint8_t flags,wpn;float vx,vz,vh,vsp;uint8_t veh;};      // veh: 0 لا شيء ، k+1 = يقود الشاص k ؛ flags: 1 fire,2 crouch,4 reload,8 sprint,16 moving,32 ads
-struct NetEnt{float x,y,z,yaw,pitch,flash,phase,reloadT;int16_t hp;uint8_t flags,wpn,ammo,mags,spawnSeq;uint16_t kills,deaths;}; // flags: 1 alive,2 crouch,4 moving,8 sprint,16 team,32 human,64 prot
+struct NetInput{uint8_t t,slot;uint16_t seq;float x,y,z,yaw,pitch;uint8_t flags,wpn;float vx,vz,vh,vsp;uint8_t veh;uint8_t c4p,c4d;};      // veh: 0 لا شيء ، k+1 = يقود الشاص k ؛ flags: 1 fire,2 crouch,4 reload,8 sprint,16 moving,32 ads
+struct NetEnt{float x,y,z,yaw,pitch,flash,phase,reloadT;int16_t hp;uint8_t flags,wpn,ammo,mags,spawnSeq;uint16_t kills,deaths;uint8_t c4;}; // flags: 1 alive,2 crouch,4 moving,8 sprint,16 team,32 human,64 prot
 struct NetVeh{float x,z,h,speed,steer;int16_t hp;int8_t driver;uint8_t flags;}; // flags: 1 dead,2 burn
+struct NetC4{float x,y,z;uint8_t team,owner;};
 struct NetEvt{uint8_t id,killer,victim,head;};
 struct NetTr{float x0,y0,z0,x1,y1,z1;};
-struct NetSnapHead{uint8_t t,map,matchId,n,over,winner;int16_t s0,s1;uint8_t nEvt,nTr;uint16_t seq;uint8_t nVeh;};
+struct NetSnapHead{uint8_t t,map,matchId,n,over,winner;int16_t s0,s1;uint8_t nEvt,nTr;uint16_t seq;uint8_t nVeh;uint8_t nC4;};
 struct NetBeacon{uint8_t t,map,players,maxp;char name[16];};
 #pragma pack(pop)
 

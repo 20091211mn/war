@@ -1,6 +1,6 @@
 // مميزات إضافية على الخادم: حزم الإسعاف، وضع السيطرة على المنطقة، مكافآت سلسلة القتل
 import { cellOf, cellCenter, nearestFree } from './nav.js';
-import { groundAt, raycastMap } from './physics.js';
+import { groundAt, raycastMap, PLAYER } from './physics.js';
 
 export const KIT_RESPAWN_MS = 25000, KIT_HEAL = 50, ZONE_R = 7, ZONE_ROT_MS = 60000, UAV_MS = 12000, SHIELD = 60;
 export const DRONE = { hp: 40, ms: 25000, cd: 20000, cdLost: 40000, speed: 12, range: 70, spot: 45, r: 0.5, maxY: 30 };
@@ -65,8 +65,31 @@ export const extras = {
     return { kits: (this.kits || []).map(k => [k.id, k.x, k.z]), zones: this.zones || [] };
   },
 
+  // ---------- قنبلة C4 تُفجَّر عن بُعد ----------
+  c4Place(p, m) {
+    if (this.phase !== 'playing' || !p.alive || p.veh >= 0 || !Array.isArray(m.d)) return;
+    const now = this.now(); if (now - (p.c4At || 0) < 500) return;
+    if ((p.c4Left | 0) <= 0 || this.c4.filter(c => c.owner === p.id).length >= 3) return;
+    const l = Math.hypot(m.d[0], m.d[1], m.d[2]); if (!(l > 0.5) || !Number.isFinite(l)) return;
+    const dx = m.d[0] / l, dy = m.d[1] / l, dz = m.d[2] / l, ey = p.y + (p.crouch ? PLAYER.eyec : PLAYER.eye), R = 4.5;
+    let t = raycastMap(this.map, p.x, ey, p.z, dx, dy, dz, R), x, y, z;
+    if (t === Infinity) { // لا سطح أمامك: تسقط على الأرض أمامك
+      if (dy >= -0.05) return; const tt = (ey - 0.05) / -dy; if (tt > R) return; t = tt; }
+    x = p.x + dx * (t - 0.06); y = Math.max(0.05, ey + dy * (t - 0.06)); z = p.z + dz * (t - 0.06);
+    const gy = groundAt(this.map, x, z, y + 0.5); if (Number.isFinite(gy) && y < gy) y = gy + 0.05;
+    p.c4At = now; p.c4Left--; this.c4.push({ id: this.nextC4++, owner: p.id, team: p.team, x, y, z });
+  },
+  c4Det(p) {
+    if (this.phase !== 'playing' || !p.alive) return;
+    const mine = this.c4.filter(c => c.owner === p.id); if (!mine.length) return;
+    this.c4 = this.c4.filter(c => c.owner !== p.id);
+    p.c4Refill = this.now() + 20000;
+    for (const c of mine) this.explode({ x: c.x, y: c.y, z: c.z, owner: p.id, team: p.team }, 8, 210, 380);
+  },
+  c4Clear(p) { if (this.c4 && this.c4.length) this.c4 = this.c4.filter(c => c.owner !== p.id); p.c4Left = 2; },
+
   snapExtras() {
-    const o = { dn: this.droneSnap(), kt: (this.kits || []).map(k => (k.up ? 1 : 0)).join(''), uv: [Math.max(0, this.uav[0] - this.now()) | 0, Math.max(0, this.uav[1] - this.now()) | 0] };
+    const o = { c4: this.c4.map(c => [c.id, Math.round(c.x * 100) / 100, Math.round(c.y * 100) / 100, Math.round(c.z * 100) / 100, c.team, c.owner]), dn: this.droneSnap(), kt: (this.kits || []).map(k => (k.up ? 1 : 0)).join(''), uv: [Math.max(0, this.uav[0] - this.now()) | 0, Math.max(0, this.uav[1] - this.now()) | 0] };
     if (this.cfg.mode === 1 && this.zones.length) { const z = this.zones[this.zoneIdx]; o.zn = [this.zoneIdx, z[0], z[1], ZONE_R, this.zoneState, Math.max(0, Math.ceil((ZONE_ROT_MS - (this.now() - this.zoneAt)) / 1000))]; }
     return o;
   },
@@ -75,6 +98,7 @@ export const extras = {
     this.tickDrones(now);
     for (const k of this.kits) if (!k.up && now >= k.at) { k.up = true; this.bcast({ t: 'kit', id: k.id, up: 1 }); }
     for (const p of this.players.values()) {
+      if (p.alive && (p.c4Left | 0) < 2 && p.c4Refill && now >= p.c4Refill && !this.c4.some(c => c.owner === p.id)) { p.c4Left = 2; p.c4Refill = 0; }
       if (!p.alive || p.veh >= 0) continue;
       if (p.hp < 100) for (const k of this.kits) {
         if (!k.up || Math.abs(p.x - k.x) > 1.3 || Math.abs(p.z - k.z) > 1.3 || Math.abs(p.y) > 1.6) continue;

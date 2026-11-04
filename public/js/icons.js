@@ -7,6 +7,8 @@ const P = {
   crouch: '<path d="M5 4l7 7 7-7M5 10l7 7 7-7"/><path d="M5 21h14"/>',
   reload: '<path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v5h-5"/>',
   swap: '<path d="M4 8h14l-3-3M20 16H6l3 3"/>',
+  c4: '<rect x="4" y="9" width="16" height="9" rx="1.5"/><path d="M8 9V6.5M12 9V6M16 9V6.5"/><circle cx="12" cy="13.5" r="1.6" fill="currentColor"/>',
+  det: '<path d="M13 2L5 14h6l-1 8 9-13h-6z"/>',
   gren: '<circle cx="12" cy="14" r="6.5"/><path d="M9.5 7.5V5h5v2.5M14.5 5l3-2.5"/><path d="M9 14h6" opacity=".5"/>',
   board: '<path d="M5 6h14M5 12h14M5 18h14"/>',
   pause: '<path d="M8 5v14M16 5v14"/>',

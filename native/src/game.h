@@ -16,7 +16,7 @@ inline int g_aclTime=0;
 #define BUILD_ID 0
 #endif
 struct Input{
-  bool tri=false,seat=false;
+  bool tri=false,seat=false,c4=false,det=false;
   float mx=0,my=0;      // حركة: x يمين، y أمام
   float lx=0,ly=0;      // نظر: x يمين، y أعلى (معدّل)
   bool fire=false,ads=false,jump=false,crouch=false,reload=false,sprint=false,swapP=false,swapN=false,grenade=false,drone=false,use=false,start=false,confirm=false,back=false;
@@ -29,8 +29,10 @@ struct Ent{
   float magM=1,relM=1,reveal=0,hp=100,prot=0,respawn=0,phase=0,flash=0,cd=0,reloadT=-1,rkP=0,rkY=0;
   int wpn=0,ammo=0,mags=0,kills=0,deaths=0;
   float think=0,tYaw=0,sx=0,sz=0,stuck=0,turnT=0,turnDir=1,burst=0,react=0,strafe=1,strafeT=0; int target=-1; float lastX=0,lastZ=0,lastDmgT=0; int lastHitBy=-1;
+  int c4Left=2; float c4Refill=0; uint8_t rc4p=0,rc4d=0; bool rc4Init=false;
   char name[16]={0}; bool remote=false,gone=false; uint8_t spawnSeq=0; float tx=0,ty=0,tz=0,tyaw=0; int lastAmmo=0; int lastHp=100; NetInput rin{}; float lastPkt=0; int lastKills=0;
 };
+struct C4s{float x,y,z; int team,owner;};
 struct Tracer{float x0,y0,z0,x1,y1,z1,t;};
 
 struct Game{
@@ -41,7 +43,7 @@ struct Game{
   void sparkAt(float x,float y,float z,float nx,float ny,float nz,int n){ for(int k=0;k<n&&sparks.size()<120;k++)sparks.push_back({x,y,z,-nx*1.5f+(frand()-0.5f)*3.f,-ny*1.5f+frand()*2.5f,-nz*1.5f+(frand()-0.5f)*3.f,0.22f+frand()*0.15f}); }
   int prim=0; Input prev; bool paused=false; float msgT=0; char msg[64]={0}; int shotsFeed[4]={-1,-1,-1,-1}; std::string feed[4]; float feedT[4]={};
   int netGoal=0,netSt=0,netPhase=0; const char*netWhat=""; sockaddr_in pendJoin;
-  struct ACl; ACl* ac=nullptr; void aclStart(uint32_t ip,int port); void aclStop(); void aclUpdate(float dt,const Input&in); void aclShoot(const std::string&dj); void aclReload(); void updateDrone3(float dt,const Input&in,Input&use); void aclSwapSlot(); void aclGrenade(); void aclRender3D(); void aclRenderMenu(); void aclMenuNav(const Input&in);
+  struct ACl; ACl* ac=nullptr; void aclStart(uint32_t ip,int port); void aclStop(); void aclUpdate(float dt,const Input&in); void aclShoot(const std::string&dj); void aclReload(); void updateDrone3(float dt,const Input&in,Input&use); void aclSwapSlot(); void aclGrenade(); void aclC4(bool place,float dx,float dy,float dz); void aclRender3D(); void aclRenderMenu(); void aclMenuNav(const Input&in);
   int menu=1,menuSel=0,menuRow=0,mode=0; // menu: 1 رئيسية ، 2 ردهة الانضمام
   // ---- شبكة ----
   int role=0,meI=0; uint8_t matchId=0,spawnCtr=0,evtId=0,lastEvt=0; std::vector<NetEvt> evq; uint16_t netSeq=0;
@@ -54,7 +56,7 @@ struct Game{
   void addFeed(const std::string&s){for(int i=3;i>0;i--){feed[i]=feed[i-1];feedT[i]=feedT[i-1];}feed[0]=s;feedT[0]=5;}
   void startMatch(int idx){
     mapIdx=idx%MAP_COUNT; w.load(mapIdx); e.assign(1+nBots*2+ (0),Ent()); // لاعب + فريقان
-    int total=1+nBots*2-1; e.assign(total,Ent());
+    int total=1+nBots*2-1; e.assign(total,Ent()); c4s.clear();
     for(int i=0;i<total;i++){Ent&p=e[i];p.bot=i>0;p.team=(i==0)?0:((i&1)?1:0);snprintf(p.name,16,"%s",nm(i).c_str());p.wpn=i==0?prim:rand()%WEAPON_COUNT;}
     if(role==1)for(auto&c:cli)if(c.on&&c.ent>0&&c.ent<total){ e[c.ent].remote=true; e[c.ent].bot=false; }
     dn.on=false; dnCd=0; grs.clear(); vh.clear(); drive=-1; puffs.clear(); if(role<=1)for(int k=0;k<w.m->nv;k++)vh.push_back(makeVeh(k));
@@ -65,6 +67,7 @@ struct Game{
   int cap(const Ent&p)const{ return (int)(WEAPONS[p.wpn].mag*p.magM+0.5f); }
   void giveWeapon(Ent&p,int wi){p.wpn=wi;p.magM=p.relM=1;if(&p==&e[meI]&&role!=3)optZ=0;p.ammo=WEAPONS[wi].mag;p.mags=WEAPONS[wi].mags;p.reloadT=-1;p.cd=0; if(role!=3&&&p==&e[meI])applyWAtt(p); }
   void spawn(Ent&p){
+    if(role!=2&&!e.empty()){ int ix=(int)(&p-&e[0]); if(ix>=0&&ix<(int)e.size())c4Clear(ix); }
     const P2*sp=p.team?w.m->blue:w.m->red; int n=p.team?w.m->nbl:w.m->nr; P2 s=sp[rand()%n];
     // اختر نقطة بعيدة عن الأعداء
     float bestD=-1;for(int k=0;k<4;k++){P2 c=sp[rand()%n];float md=1e9;for(auto&o:e)if(o.alive&&o.team!=p.team){md=std::min(md,(o.b.x-c.x)*(o.b.x-c.x)+(o.b.z-c.z)*(o.b.z-c.z));}if(md>bestD){bestD=md;s=c;}}
@@ -83,7 +86,7 @@ struct Game{
     Ent&v=e[vi]; if(!v.alive||v.prot>0)return;
     v.hp-=dmg; v.lastHitBy=ai; v.lastDmgT=t; if(vi==meI){dmgFlash=0.5f;SFX::play(SFX::HURT,0.9f); if(ai>=0&&ai!=vi){ hitAng=atan2f(-(e[ai].b.x-v.b.x),-(e[ai].b.z-v.b.z))-v.yaw; hitAngT=1.2f; } }
     if(ai==meI){hitMark=0.25f;SFX::play(SFX::HIT,0.7f);}
-    if(v.hp<=0){ v.alive=false;v.deaths++;v.respawn=4;
+    if(v.hp<=0){ v.alive=false;v.deaths++;v.respawn=4; if(role!=2)c4Clear(vi);
       if(vi==meI)streak=0;
       if(ai==meI&&vi!=meI){ SFX::play(SFX::KILL,0.8f); streak++; if(head)say("تصويبة رأس!"); else if(streak==2)say("قتلتان متتاليتان"); else if(streak==3)say("ثلاث قتلات!"); else if(streak==5)say("سلسلة قتل!"); else if(streak==8)say("لا يمكن إيقافك!"); }
       if(ai>=0&&ai!=vi){Ent&k=e[ai];k.kills++;score[k.team]++; char b[64];snprintf(b,64,"%s > %s%s",nm(ai).c_str(),nm(vi).c_str(),head?" HS":"");addFeed(b); evq.push_back({++evtId,(uint8_t)ai,(uint8_t)vi,(uint8_t)head}); if(evq.size()>6)evq.erase(evq.begin());} 
@@ -120,6 +123,24 @@ struct Game{
   }
   void tankAimDir(VH::Veh&v,float yaw,float pitch,float*d){ float cp=cosf(pitch),ddx=-sinf(yaw)*cp,ddy=sinf(pitch),ddz=-cosf(yaw)*cp;
     float t=std::min<float>(raycastMap(w,camX,camY,camZ,ddx,ddy,ddz,160.f),160.f); float px=camX+ddx*t,py=camY+ddy*t,pz=camZ+ddz*t; float ax=px-v.x,ay=py-1.65f,az=pz-v.z,l=sqrtf(ax*ax+ay*ay+az*az)+1e-5f; d[0]=ax/l;d[1]=ay/l;d[2]=az/l; }
+  std::vector<C4s> c4s; uint8_t c4pCnt=0,c4dCnt=0; bool pc4=false,pdet=false;
+  bool c4Place(int i,float dx,float dy,float dz){
+    Ent&p=e[i]; if(!p.alive||p.c4Left<=0)return false; int mine=0; for(auto&c:c4s)if(c.owner==i)mine++; if(mine>=3)return false;
+    float l=sqrtf(dx*dx+dy*dy+dz*dz); if(l<0.5f)return false; dx/=l;dy/=l;dz/=l; float ey=p.b.y+(p.crouch?PK.eyec:PK.eye),R=4.5f;
+    float t=raycastMap(w,p.b.x,ey,p.b.z,dx,dy,dz,R); if(t>=R){ if(dy>=-0.05f)return false; float tt=(ey-0.05f)/-dy; if(tt>R)return false; t=tt; }
+    float x=p.b.x+dx*(t-0.06f),y=std::max<float>(0.05f,ey+dy*(t-0.06f)),z=p.b.z+dz*(t-0.06f);
+    p.c4Left--; c4s.push_back({x,y,z,p.team,i}); if(i==meI)SFX::play(SFX::EMPTY,0.8f); return true; }
+  void blastAt(float x,float y,float z,int owner,int team,float R,float pd,float vd){
+    for(int k=0;k<16;k++)puffs.push_back({x+(frand()-0.5f)*3,y+frand()*1.5f,z+(frand()-0.5f)*3,1.4f+frand()*2.f,1.f+frand()*1.f,1.2f+frand()*1.4f,k<9});
+    sparkAt(x,y,z,0,-1,0,40); { float ddx=x-e[meI].b.x,ddz=z-e[meI].b.z; SFX::play(SFX::EXPLODE,std::max(0.25f,1.f-sqrtf(ddx*ddx+ddz*ddz)/70.f)); }
+    if(role==2)return; // العميل يرى النتيجة من المضيف
+    for(int i=0;i<(int)e.size();i++){ if(!e[i].alive)continue; if(e[i].team==team&&i!=owner)continue; float qx=e[i].b.x-x,qy=e[i].b.y+1.f-y,qz=e[i].b.z-z,d=sqrtf(qx*qx+qy*qy+qz*qz); if(d>R)continue;
+      float tw=raycastMap(w,x,y+0.2f,z,qx/(d+1e-5f),(qy-0.2f)/(d+1e-5f),qz/(d+1e-5f),d); if(tw<d-0.3f)continue; hurt(i,owner,pd*powf(1-d/R,1.2f),false); }
+    for(auto&o:vh){ if(o.dead)continue; float qx=o.x-x,qz=o.z-z,d=std::max<float>(0.f,sqrtf(qx*qx+(y-0.8f)*(y-0.8f)+qz*qz)-1.6f); if(d<R)hurtVeh(o,vd*powf(1-d/R,1.1f),owner); } }
+  void c4Det(int i){ std::vector<C4s> mine; for(size_t k=0;k<c4s.size();){ if(c4s[k].owner==i){ mine.push_back(c4s[k]); c4s.erase(c4s.begin()+k); } else k++; }
+    if(mine.empty())return; e[i].c4Refill=20.f; for(auto&c:mine)blastAt(c.x,c.y,c.z,i,c.team,8.f,210.f,380.f); }
+  void c4Clear(int i){ for(size_t k=0;k<c4s.size();){ if(c4s[k].owner==i)c4s.erase(c4s.begin()+k); else k++; } e[i].c4Left=2; e[i].c4Refill=0; }
+  void c4Tick(float dt){ for(int i=0;i<(int)e.size();i++){ Ent&p=e[i]; if(p.alive&&p.c4Left<2&&p.c4Refill>0){ p.c4Refill-=dt; bool any=false; for(auto&c:c4s)if(c.owner==i)any=true; if(p.c4Refill<=0&&!any){ p.c4Left=2; p.c4Refill=0; } } } }
   void exitVeh(){ gunner=false; if(drive<0)return; VH::Veh&v=vh[drive]; Ent&p=e[meI]; static const float SPS[4][2]={{-1.9f,-0.25f},{1.9f,-0.25f},{0,3.6f},{0,-3.6f}},SPT[4][2]={{2.6f,0},{-2.6f,0},{0,4.2f},{0,-4.2f}}; const float (*SP)[2]=v.type==1?SPT:SPS;
     float bx=v.x,bz=v.z; for(int q=0;q<4;q++){ auto&s=SP[q]; float wx,wz; VH::l2w(v,s[0],s[1],wx,wz); if(!blocked(w,wx,0.05f,wz,PK.h)){ bx=wx;bz=wz;break; } }
     p.b=Body(); p.b.x=bx;p.b.z=bz;p.b.y=0.3f; for(int k=0;k<30;k++){moveBody(w,p.b,0,0,0.04f,false,false);if(p.b.onGround)break;} p.pitch=0; v.driver=-1; drive=-1; }
@@ -251,6 +272,9 @@ struct Game{
     else if((in.swapP&&!prev.swapP)||(in.swapN&&!prev.swapN)){ prim=(prim+(in.swapN&&!prev.swapN?1:WEAPON_COUNT-1))%WEAPON_COUNT; giveWeapon(p,prim); }
     bool trig=in.fire&&!p.sprint; if(!WEAPONS[p.wpn].autof&&prev.fire)trig=false;
     if(role!=2)updateWeapon(meI,dt,trig);
+    { bool pl=in.c4&&!pc4,dtn=in.det&&!pdet; pc4=in.c4; pdet=in.det; if(pl&&p.alive){ float cpt=std::min<float>(p.pitch-0.45f,-0.45f),cp=cosf(cpt),dx=-sinf(p.yaw)*cp,dy=sinf(cpt),dz=-cosf(p.yaw)*cp;
+        if(role<=1)c4Place(meI,dx,dy,dz); else if(role==2)c4pCnt++; else if(role==3&&p.c4Left>0&&c4s.size()<8){ p.c4Left--; aclC4(true,dx,dy,dz); } }
+      if(dtn&&p.alive){ if(role<=1)c4Det(meI); else if(role==2)c4dCnt++; else if(role==3)aclC4(false,0,0,0); } }
   }
   // ======== شبكة ========
   void netClose(){ if(role==2&&sock.ready()){NetHello h{T_BYE,NET_VER};sock.send(hostAddr,&h,sizeof h);} sock.close_(); beaconRx.close_(); beaconTx.close_(); role=0; meI=0; joining=false; for(auto&c:cli)c=Cli(); }
@@ -283,25 +307,26 @@ struct Game{
     return -1;
   }
   void packSnap(){
-    uint8_t buf[1400]; NetSnapHead h; h.t=T_SNAP;h.map=mapIdx;h.matchId=matchId;h.n=(uint8_t)e.size();h.over=over;h.winner=winner;h.s0=score[0];h.s1=score[1];h.seq=++netSeq; h.nVeh=(uint8_t)std::min<size_t>(8,vh.size());
+    uint8_t buf[1400]; NetSnapHead h; h.t=T_SNAP;h.map=mapIdx;h.matchId=matchId;h.n=(uint8_t)e.size();h.over=over;h.winner=winner;h.s0=score[0];h.s1=score[1];h.seq=++netSeq; h.nVeh=(uint8_t)std::min<size_t>(8,vh.size()); h.nC4=(uint8_t)std::min<size_t>(6,c4s.size());
     int ne=(int)e.size(); h.nEvt=(uint8_t)evq.size(); h.nTr=(uint8_t)trOut.size(); int off=sizeof h; memcpy(buf,&h,off);
     for(int i=0;i<ne;i++){ const Ent&p=e[i]; NetEnt n; n.x=p.b.x;n.y=p.b.y;n.z=p.b.z;n.yaw=p.yaw;n.pitch=p.pitch;n.flash=p.flash;n.phase=p.phase;n.reloadT=p.reloadT;n.hp=(int16_t)p.hp;
-      n.flags=(p.alive?1:0)|(p.crouch?2:0)|(p.moving?4:0)|(p.sprint?8:0)|(p.team?16:0)|((p.remote||i==0)?32:0)|(p.prot>0?64:0); n.wpn=p.wpn;n.ammo=p.ammo;n.mags=p.mags;n.spawnSeq=p.spawnSeq;n.kills=p.kills;n.deaths=p.deaths; memcpy(buf+off,&n,sizeof n);off+=sizeof n; }
+      n.flags=(p.alive?1:0)|(p.crouch?2:0)|(p.moving?4:0)|(p.sprint?8:0)|(p.team?16:0)|((p.remote||i==0)?32:0)|(p.prot>0?64:0); n.wpn=p.wpn;n.ammo=p.ammo;n.mags=p.mags;n.spawnSeq=p.spawnSeq;n.kills=p.kills;n.deaths=p.deaths;n.c4=(uint8_t)p.c4Left; memcpy(buf+off,&n,sizeof n);off+=sizeof n; }
     for(auto&v:evq){memcpy(buf+off,&v,sizeof v);off+=sizeof v;}
     for(auto&q:trOut){memcpy(buf+off,&q,sizeof q);off+=sizeof q;} trOut.clear();
     for(int k=0;k<h.nVeh;k++){ const VH::Veh&v=vh[k]; NetVeh n; n.x=v.x;n.z=v.z;n.h=v.h;n.speed=v.speed;n.steer=v.steer;n.hp=(int16_t)v.hp;n.driver=(int8_t)v.driver;n.flags=(v.dead?1:0)|(v.burn?2:0); memcpy(buf+off,&n,sizeof n);off+=sizeof n; }
+    for(int k=0;k<h.nC4;k++){ NetC4 q{c4s[k].x,c4s[k].y,c4s[k].z,(uint8_t)c4s[k].team,(uint8_t)c4s[k].owner}; memcpy(buf+off,&q,sizeof q);off+=sizeof q; }
     for(auto&c:cli)if(c.on)sock.send(c.a,buf,off);
   }
   void applySnap(const Pkt&pk){
     if(pk.n<(int)sizeof(NetSnapHead))return; NetSnapHead h; memcpy(&h,pk.d,sizeof h);
-    int need=sizeof h+h.n*sizeof(NetEnt)+h.nEvt*sizeof(NetEvt)+h.nTr*sizeof(NetTr)+h.nVeh*sizeof(NetVeh); if(pk.n<need||h.n>16||h.n<2)return;
+    int need=sizeof h+h.n*sizeof(NetEnt)+h.nEvt*sizeof(NetEvt)+h.nTr*sizeof(NetTr)+h.nVeh*sizeof(NetVeh)+h.nC4*sizeof(NetC4); if(pk.n<need||h.n>16||h.n<2)return;
     srvSilence=0; if(h.map!=mapIdx||(int)e.size()!=h.n){ mapIdx=h.map%MAP_COUNT; w.load(mapIdx); e.assign(h.n,Ent()); for(int i=0;i<h.n;i++){e[i].bot=false;e[i].alive=false;} }
     if(h.matchId!=matchId){ matchId=h.matchId; tr.clear(); evq.clear(); lastEvt=h.nEvt?lastEvt:lastEvt; }
     over=h.over;winner=h.winner;score[0]=h.s0;score[1]=h.s1; int off=sizeof h;
     for(int i=0;i<h.n;i++){ NetEnt n; memcpy(&n,pk.d+off,sizeof n); off+=sizeof n; Ent&p=e[i];
       p.team=(n.flags&16)?1:0; p.remote=(n.flags&32)&&i!=0; bool al=n.flags&1; p.kills=n.kills;p.deaths=n.deaths; snprintf(p.name,16,"%s",nm(i).c_str());
       if(i==meI){
-        if(n.hp<p.hp&&al)dmgFlash=0.5f; p.hp=n.hp;
+        p.c4Left=n.c4; if(n.hp<p.hp&&al)dmgFlash=0.5f; p.hp=n.hp;
         if(n.spawnSeq!=p.spawnSeq||(al&&!p.alive)){ p.spawnSeq=n.spawnSeq; p.b.x=n.x;p.b.y=n.y;p.b.z=n.z;p.b.vy=0;p.yaw=n.yaw;p.pitch=0;p.crouch=false; prim=n.wpn; p.wpn=n.wpn; }
         p.alive=al; p.prot=(n.flags&64)?1.f:0.f; if(n.wpn==p.wpn){ if(n.ammo<p.ammo&&n.ammo>=0&&p.alive)p.rkP+=WEAPONS[p.wpn].recoilV*1.6f; p.ammo=n.ammo; p.mags=n.mags; p.reloadT=n.reloadT; p.flash=n.flash; }
       } else {
@@ -316,6 +341,9 @@ struct Game{
       bool wasDead=v.dead; v.dead=n.flags&1; v.burn=n.flags&2; v.hp=n.hp; v.tx=n.x;v.tz=n.z;v.th=n.h;
       if(k!=drive){ v.speed=n.speed; v.steer=n.steer; v.driver=n.driver; if(!wasDead&&v.dead){ puffsBoom(v.x,v.z); } if(wasDead&&!v.dead){ v.x=n.x;v.z=n.z;v.h=n.h; } if(v.dead)v.driver=-1; }
       else { if(v.dead){ puffsBoom(v.x,v.z); drive=-1; v.driver=-1; } else if(n.driver>=0&&n.driver!=meI&&(++vConf>8)){ v.driver=n.driver; drive=-1; vConf=0; } else if(n.driver==meI)vConf=0; } }
+    { std::vector<C4s> nc; for(int k=0;k<h.nC4;k++){ NetC4 q; memcpy(&q,pk.d+off,sizeof q); off+=sizeof q; nc.push_back({q.x,q.y,q.z,(int)q.team,(int)q.owner}); }
+      for(auto&o:c4s){ bool f=false; for(auto&q:nc)if(fabsf(q.x-o.x)<0.02f&&fabsf(q.z-o.z)<0.02f)f=true; if(!f&&o.owner>=0&&o.owner<(int)e.size()&&e[o.owner].alive)blastAt(o.x,o.y,o.z,o.owner,o.team,8.f,0,0); }
+      c4s=nc; }
   }
   void netPump(float dt){
     Pkt pk;
@@ -340,7 +368,7 @@ struct Game{
       if(joining){ joinT+=dt; if(joinT>0.4f&&joinT<8.f){ static float ra=0; ra+=dt; if(ra>0.4f){ra=0;NetHello h{T_HELLO,NET_VER};sock.send(hostAddr,&h,sizeof h);} } if(joinT>=8.f){joining=false;sock.close_();say("NO REPLY FROM HOST");} }
       if(role==2){ srvSilence+=dt; if(srvSilence>4.f){ netClose(); menu=1; say("DISCONNECTED"); return; }
         inT+=dt; if(inT>=1.f/30){ inT=0; const Ent&p=e[meI]; NetInput n; n.t=T_INPUT;n.slot=(uint8_t)meI;n.seq=++netSeq;n.x=p.b.x;n.y=p.b.y;n.z=p.b.z;n.yaw=p.yaw;n.pitch=p.pitch;
-          n.flags=(gunner?128:0)|(lastIn.fire?1:0)|(p.crouch?2:0)|(lastIn.reload?4:0)|(p.sprint?8:0)|(p.moving?16:0)|(lastIn.ads?32:0); n.wpn=prim; n.veh=0;n.vx=n.vz=n.vh=n.vsp=0; if(drive>=0&&drive<(int)vh.size()){ const VH::Veh&v=vh[drive]; n.veh=(uint8_t)(drive+1);n.vx=v.x;n.vz=v.z;n.vh=v.h;n.vsp=v.speed; } sock.send(hostAddr,&n,sizeof n); } }
+          n.flags=(gunner?128:0)|(lastIn.fire?1:0)|(p.crouch?2:0)|(lastIn.reload?4:0)|(p.sprint?8:0)|(p.moving?16:0)|(lastIn.ads?32:0); n.wpn=prim; n.veh=0;n.vx=n.vz=n.vh=n.vsp=0;n.c4p=c4pCnt;n.c4d=c4dCnt; if(drive>=0&&drive<(int)vh.size()){ const VH::Veh&v=vh[drive]; n.veh=(uint8_t)(drive+1);n.vx=v.x;n.vz=v.z;n.vh=v.h;n.vsp=v.speed; } sock.send(hostAddr,&n,sizeof n); } }
     }
     if(menu==2&&beaconRx.ready()){ while(beaconRx.recv(pk)){ if(pk.n<(int)sizeof(NetBeacon)||pk.d[0]!=T_BEACON)continue; NetBeacon bc; memcpy(&bc,pk.d,sizeof bc); bool f=false;
         for(auto&h:hosts)if(h.a.sin_addr.s_addr==pk.from.sin_addr.s_addr){h.map=bc.map;h.players=bc.players;h.seen=0;f=true;}
@@ -352,6 +380,7 @@ struct Game{
     Ent&p=e[i]; const NetInput&n=p.rin; if(n.t!=T_INPUT)return;
     for(int k=0;k<(int)vh.size();k++)if(vh[k].driver==i&&n.veh!=k+1)vh[k].driver=-1;
     if(n.veh>0&&n.veh<=(int)vh.size()){ VH::Veh&v=vh[n.veh-1]; if(!v.dead&&(v.driver<0||v.driver==i)&&p.alive){ v.driver=i; v.team=p.team; v.x=n.vx;v.z=n.vz;v.h=n.vh;v.speed=n.vsp; if(v.type==1&&!(n.flags&128)&&(n.flags&1)&&v.cannonT<=0){ float cp=cosf(n.pitch); cannonFx(v,-sinf(n.yaw)*cp,sinf(n.pitch),-cosf(n.yaw)*cp,true,i); } } }
+    if(!p.rc4Init){ p.rc4Init=true; p.rc4p=n.c4p; p.rc4d=n.c4d; } else { if(n.c4p!=p.rc4p){ p.rc4p=n.c4p; float cpt=std::min<float>(n.pitch-0.45f,-0.45f),cp=cosf(cpt); c4Place(i,-sinf(n.yaw)*cp,sinf(cpt),-cosf(n.yaw)*cp); } if(n.c4d!=p.rc4d){ p.rc4d=n.c4d; c4Det(i); } }
     p.b.x=std::max<float>(-w.m->W/2.f,std::min<float>(w.m->W/2.f,n.x)); p.b.y=n.y; p.b.z=std::max<float>(-w.m->D/2.f,std::min<float>(w.m->D/2.f,n.z)); p.yaw=n.yaw;p.pitch=n.pitch;p.crouch=n.flags&2;p.sprint=n.flags&8;p.moving=n.flags&16;
     if(p.moving)p.phase+=dt*8; if(n.wpn<WEAPON_COUNT&&n.wpn!=p.wpn)giveWeapon(p,n.wpn);
     if(n.flags&4)reloadStart(p); updateWeapon(i,dt,(n.flags&1)&&!p.sprint&&(!(n.veh>0&&n.veh<=(int)vh.size())||(n.flags&128)));
@@ -456,6 +485,7 @@ struct Game{
       if(!p.alive){ p.respawn-=dt; if(p.respawn<=0){spawn(p);} continue; }
       if(i==meI)updatePlayer(dt,use); else if(p.remote)updateRemote(i,dt); else updateBot(i,dt);
     }
+    if(role<=1)c4Tick(dt);
     if(role<=2)updateVeh(dt,use);
     prev=in;
   }
@@ -540,6 +570,7 @@ struct Game{
     for(auto&v:vh){ float dx=v.x-c.x,dz=v.z-c.z,dd=sqrtf(dx*dx+dz*dz); if(dd<r.fogF)VH::draw(r,v,dd); }
     for(auto&c:shells)r.obb(c.x,c.y,c.z,0.012f,0.012f,0.03f,t*20+c.x*9,0,0.85f,0.62f,0.15f,false,false);
     for(auto&g:grs)r.obb(g.x,g.y,g.z,0.09f,0.12f,0.09f,t*6,0,0.2f,0.3f,0.2f,false,false);
+    for(auto&c:c4s){ r.obb(c.x,c.y+0.04f,c.z,0.1f,0.04f,0.065f,0,0,0.22f,0.22f,0.2f,true,true); r.obb(c.x,c.y+0.085f,c.z,0.085f,0.008f,0.05f,0,0,0.45f,0.4f,0.3f,true,true); bool on=((int)(t*2.2f))%2==0; float k=on?1.f:0.15f; r.obb(c.x+0.05f,c.y+0.1f,c.z,0.015f,0.015f,0.015f,0,0,c.team?0.1f*k:k,0.1f*k,c.team?k:0.1f*k,false,false); }
     for(auto&q:puffs){ float k=std::min<float>(1.f,q.t); if(q.fire)r.obb(q.x,q.y,q.z,q.sz*.4f,q.sz*.4f,q.sz*.4f,0,0,1.0f,0.55f*k+0.2f,0.1f,false,false); else r.obb(q.x,q.y,q.z,q.sz*.5f,q.sz*.5f,q.sz*.5f,0,0,0.12f+0.1f*k,0.12f+0.1f*k,0.12f+0.1f*k,false,false); }
     for(int i=0;i<(int)e.size();i++){if((i==meI&&!dn.on)||e[i].gone)continue;const Ent&a=e[i];float dx=a.b.x-c.x,dz=a.b.z-c.z; if(dx*dx+dz*dz>r.fogF*r.fogF||(dx*dx+dz*dz<0.5f&&i!=meI))continue; drawAvatar(a,sqrtf(dx*dx+dz*dz));}
     for(auto&q:tr){ float dx=q.x1-q.x0,dy=q.y1-q.y0,dz=q.z1-q.z0,l=sqrtf(dx*dx+dy*dy+dz*dz); if(l<0.1f)continue; float p0=std::min<float>(1.f,std::max<float>(0.f,1.f-q.t/0.09f)); float hd=p0*l,tl=std::max<float>(0.f,hd-std::min<float>(5.f,l*0.7f)); float sg=hd-tl; if(sg<0.05f)continue;
@@ -629,6 +660,7 @@ struct Game{
       snprintf(b,64,"%d",me.ammo); int ax=px+12*sc; text(ax,py+ph/2-7*sc,b,sc*2,me.reloadT>=0?0xFFFFC040:0xFFFFFFFF);
       snprintf(b,64,"/ %d",me.mags*cap(me)); text(ax+tw("00",sc*2)+6*sc,py+ph/2-4*sc,b,sc,0xFF8FA0B4);
       { char gb[24]; snprintf(gb,24,"قنبلة x%d",gren); text(ax,py-12*sc,gb,sc,gren>0?0xFFB8E0A0:0xFF707070); }
+      { char gb[40]; bool mine=false; for(auto&c:c4s)if(c.owner==meI)mine=true; snprintf(gb,40,"C4 x%d%s",me.c4Left,mine?"   لوحة اللمس: تفجير":"   D-pad →"); text(ax,py-36*sc,gb,sc,(me.c4Left>0||mine)?0xFFFFB070:0xFF707070); }
       { char gb[48]; if(dnCd>0)snprintf(gb,48,"مسيّرة: %d ث",(int)ceilf(dnCd)); else snprintf(gb,48,"مسيّرة: D-pad ↓"); text(ax,py-24*sc,gb,sc,dnCd>0?0xFF707070:0xFF9CC8FF); }
       if(me.reloadT>=0)textC(W/2,H/2+20*sc,"جارٍ التعبئة…",sc,0xFFFFC040);
       if(nearVeh)textC(W/2,py-12*sc,"Triangle: ركوب الشاص",sm,0xFFFFD060); }

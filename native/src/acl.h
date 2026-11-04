@@ -29,6 +29,7 @@ void Game::aclStart(uint32_t ip,int port){
 void Game::aclStop(){ if(ac){ ac->ws.close(); if(ac->scan)ac->scan->stop=true; delete ac; ac=nullptr; } role=0; meI=0; e.assign(1,Ent()); menu=1; paused=false; mapIdx=std::min(mapIdx,MAP_COUNT-1); startMatch(menuSel); }
 void Game::aclShoot(const std::string&dj){ if(!ac)return; std::string m="{\"t\":\"shoot\",\"w\":"+std::to_string(ac->slot)+",\"d\":["+dj+"]}"; ac->ws.send(m); }
 void Game::aclReload(){ if(ac)ac->ws.send("{\"t\":\"rl\"}"); }
+void Game::aclC4(bool place,float dx,float dy,float dz){ if(!ac)return; char b[120]; if(place)snprintf(b,120,"{\"t\":\"c4\",\"d\":[%.4f,%.4f,%.4f]}",dx,dy,dz); else snprintf(b,120,"{\"t\":\"c4x\"}"); ac->ws.send(b); }
 void Game::aclGrenade(){ if(!ac||meI>=(int)e.size())return; Ent&p=e[meI]; float cp=cosf(p.pitch); char b[120]; snprintf(b,120,"{\"t\":\"gren\",\"d\":[%.4f,%.4f,%.4f]}",-sinf(p.yaw)*cp,sinf(p.pitch),-cosf(p.yaw)*cp); ac->ws.send(b); }
 void Game::aclSwapSlot(){
   if(!ac||meI>=(int)e.size())return; Ent&p=e[meI]; ac->slotAm[ac->slot][0]=p.ammo; ac->slotAm[ac->slot][1]=p.mags; ac->slot^=1;
@@ -112,10 +113,11 @@ void Game::aclUpdate(float dt,const Input&in){
       g_aclTime=m["tl"].i(); score[0]=m["sc"][0].i(); score[1]=m["sc"][1].i();
       for(size_t i=0;i<m["ps"].size();i++){ const J&q=m["ps"][i]; int id=q[0].i(); int k=entFor(*this,id); Ent&p=e[k]; int f=q[6].i(); bool al=f&4; p.gone=false;
         const ACl::LP*lp=lpOf(*this,id); if(lp&&id!=A.myId){ p.team=lp->tm?1:0; p.wpn=weaponIdx(q[8].i()==1?lp->s:lp->p); }
-        if(id==A.myId){ int hp=q[7].i(); if(hp<p.hp&&al)dmgFlash=0.5f; p.hp=(float)hp; if(!al&&p.alive){ p.alive=false; p.deaths++; p.respawn=3; } if(al&&!p.alive&&A.epoch>0){ p.alive=true; } meI=k; }
+        if(id==A.myId){ if(q.size()>13)p.c4Left=q[13].i(); int hp=q[7].i(); if(hp<p.hp&&al)dmgFlash=0.5f; p.hp=(float)hp; if(!al&&p.alive){ p.alive=false; p.deaths++; p.respawn=3; } if(al&&!p.alive&&A.epoch>0){ p.alive=true; } meI=k; }
         else { bool first=!p.alive&&al; p.alive=al; p.hp=(float)q[7].i(); p.tx=q[1].num();p.ty=q[2].num();p.tz=q[3].num();p.tyaw=q[4].num(); p.pitch=q[5].num(); p.crouch=f&1; p.moving=f&8; p.sprint=f&32; if((f&16)&&p.team!=e[meI<(int)e.size()?meI:0].team)p.reveal=0.45f; p.phase+=p.moving?dt*8:0; if(first){p.b.x=p.tx;p.b.y=p.ty;p.b.z=p.tz;p.yaw=p.tyaw;} }
       }
       A.dr.clear(); for(size_t i=0;i<m["dn"].size();i++){ const J&d=m["dn"][i]; if(d[0].i()==A.myId)continue; A.dr.push_back({(float)d[1].num(),(float)d[2].num(),(float)d[3].num(),(float)d[4].num()}); }
+      c4s.clear(); for(size_t i=0;i<m["c4"].size();i++){ const J&c=m["c4"][i]; c4s.push_back({(float)c[1].num(),(float)c[2].num(),(float)c[3].num(),c[4].i()?1:0,c[5].i()==A.myId?meI:-2}); }
       A.gr.clear(); for(size_t i=0;i<m["gr"].size();i++){ const J&g=m["gr"][i]; A.gr.push_back({(float)g[1].num(),(float)g[2].num(),(float)g[3].num()}); }
       { size_t nv=m["vs"].size(); if(vh.size()!=nv){ vh.clear(); drive=-1; A.seat=-1; for(size_t i=0;i<nv;i++){ const J&v=m["vs"][i]; VH::Veh o; o.x=o.tx=o.sx=(float)v[1].num(); o.z=o.tz=o.sz=(float)v[2].num(); o.h=o.th=o.sh=(float)v[3].num(); o.type=v.size()>14?(v[14].i()?1:0):0; vh.push_back(o); } }
         for(size_t i=0;i<nv&&i<vh.size();i++){ const J&v=m["vs"][i]; VH::Veh&o=vh[i]; bool dd=v[8].i()&2; if(dd&&!o.dead)puffsBoom(o.x,o.z); if(!dd&&o.dead){ o.x=o.tx=(float)v[1].num(); o.z=o.tz=(float)v[2].num(); o.h=o.th=(float)v[3].num(); }

@@ -47,10 +47,10 @@ int main(int,char**){
     in.jump=B(ORBIS_PAD_BUTTON_CROSS); in.crouch=B(ORBIS_PAD_BUTTON_CIRCLE); in.reload=B(ORBIS_PAD_BUTTON_SQUARE);
     in.swapP=B(ORBIS_PAD_BUTTON_L1); in.swapN=B(ORBIS_PAD_BUTTON_R1);
     in.sprint=g.swapSticks?B(ORBIS_PAD_BUTTON_R3):B(ORBIS_PAD_BUTTON_L3); // الضغط على عصا الحركة = ركض
-    in.use=!g.menu&&!g.paused&&B(ORBIS_PAD_BUTTON_LEFT); in.drone=!g.menu&&!g.paused&&B(ORBIS_PAD_BUTTON_DOWN); in.grenade=!g.menu&&!g.paused&&B(ORBIS_PAD_BUTTON_UP); in.tri=B(ORBIS_PAD_BUTTON_TRIANGLE); in.seat=!g.menu&&!g.paused&&B(ORBIS_PAD_BUTTON_R3); in.start=B(ORBIS_PAD_BUTTON_OPTIONS); in.confirm=B(ORBIS_PAD_BUTTON_CROSS); in.back=B(ORBIS_PAD_BUTTON_CIRCLE);
+    in.use=!g.menu&&!g.paused&&B(ORBIS_PAD_BUTTON_LEFT); in.drone=!g.menu&&!g.paused&&B(ORBIS_PAD_BUTTON_DOWN); in.grenade=!g.menu&&!g.paused&&B(ORBIS_PAD_BUTTON_UP); in.tri=B(ORBIS_PAD_BUTTON_TRIANGLE); in.c4=!g.menu&&!g.paused&&B(ORBIS_PAD_BUTTON_RIGHT); in.det=!g.menu&&!g.paused&&B(ORBIS_PAD_BUTTON_TOUCH_PAD); in.seat=!g.menu&&!g.paused&&B(ORBIS_PAD_BUTTON_R3); in.start=B(ORBIS_PAD_BUTTON_OPTIONS); in.confirm=B(ORBIS_PAD_BUTTON_CROSS); in.back=B(ORBIS_PAD_BUTTON_CIRCLE);
     if(g.menu||g.paused){ if(B(ORBIS_PAD_BUTTON_RIGHT))in.mx=1; else if(B(ORBIS_PAD_BUTTON_LEFT))in.mx=-1; if(g.menu)in.my=B(ORBIS_PAD_BUTTON_UP)?1.f:B(ORBIS_PAD_BUTTON_DOWN)?-1.f:0.f;
       if((edge&ORBIS_PAD_BUTTON_R1)&&(g.menu==1||g.paused))g.swapSticks=!g.swapSticks; }
-    if(edge&ORBIS_PAD_BUTTON_TOUCH_PAD)dbg=!dbg;
+    if((edge&ORBIS_PAD_BUTTON_TOUCH_PAD)&&(g.menu||g.paused))dbg=!dbg;
     acc+=dt; int steps=0; while(acc>=1.f/60.f&&steps<4){ g.update(1.f/60.f,in); acc-=1.f/60.f; steps++; } if(steps==4)acc=0;
     if(g.menu)g.renderMenu(); else g.render();
     if(dbg){ char b[96]; snprintf(b,96,"FPS %d RES %d",(int)fps,g.r.W); g.text(40,40,b,2,0xFFFFFF00);

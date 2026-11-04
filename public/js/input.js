@@ -45,6 +45,8 @@ export function initInput(canvas, hooks) {
       case 'KeyF': input.seat = true; break;
       case 'KeyV': input.view = true; break;
       case 'KeyB': input.drone = true; break;
+      case 'KeyH': input.c4 = true; break;
+      case 'KeyZ': input.det = true; break;
       case 'Enter': case 'KeyT': input.chat = true; e.preventDefault(); break;
       case 'KeyR': input.reload = true; break;
       case 'KeyQ': input.swap = true; break;
@@ -146,6 +148,8 @@ export function initInput(canvas, hooks) {
     tap('b-view', () => { input.view = true; });
     tap('b-chat', () => { input.chat = true; });
     tap('b-drone', () => { input.drone = true; });
+    tap('b-c4', () => { input.c4 = true; });
+    tap('b-det', () => { input.det = true; });
     let crouchOn = false;
     tap('b-crouch', () => { crouchOn = !crouchOn; input.crouch = crouchOn; document.getElementById('b-crouch').classList.toggle('on', crouchOn); });
     input.resetCrouch = () => { crouchOn = false; input.crouch = false; document.getElementById('b-crouch').classList.remove('on'); };

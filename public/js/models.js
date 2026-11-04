@@ -303,6 +303,12 @@ export class Effects {
     }
   }
 }
+export function drawC4(eng, x, y, z, team, t) {
+  eng.cubeAt(trs(tmp(), x, y + 0.04, z, 0, 0, 0.2, 0.06, 0.13), 0.22, 0.22, 0.2, false);
+  eng.cubeAt(trs(tmp(), x, y + 0.075, z, 0, 0, 0.17, 0.012, 0.1), 0.45, 0.4, 0.3, false);
+  const on = (Math.floor(t / 450) % 2) === 0, k = on ? 1 : 0.15;
+  eng.cubeAt(trs(tmp(), x + 0.06, y + 0.09, z, 0, 0, 0.03, 0.03, 0.03), team === 0 ? k : 0.1 * k, 0.1 * k, team === 1 ? k : 0.1 * k, true);
+}
 export function drawGrenade(eng, x, y, z) {
   eng.sphereAt(trs(tmp(), x, y, z, 0, 0, 0.16, 0.2, 0.16), 0.2, 0.3, 0.18, false);
 }

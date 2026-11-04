@@ -27,7 +27,7 @@ export class Game {
     this.kits = []; this.zones = []; this.uav = [0, 0]; this.zoneIdx = 1; this.zoneAt = 0; this.zoneTick = 0; this.zoneState = 3;
     this.vehs = []; this.drops = []; this.nextDrop = 1;
     this.map = null; this.nav = null;
-    this.grenades = []; this.nextGren = 1;
+    this.grenades = []; this.nextGren = 1; this.c4 = []; this.nextC4 = 1;
     this.score = [0, 0];
     this.startAt = 0; this.endAt = 0; this.hostId = 0;
     this.lastLobby = 0; this.lastSec = 0;
@@ -78,7 +78,7 @@ export class Game {
   disconnect(p) {
     if (!p || !this.players.has(p.id)) return;
     if (p.veh >= 0) this.dropSeat(p);
-    this.players.delete(p.id);
+    this.c4Clear(p); this.players.delete(p.id);
     p.conn = null;
     this.sys(p.name + ' غادر');
     if (this.hostId === p.id) { const h = this.humans()[0]; this.hostId = h ? h.id : 0; }
@@ -89,7 +89,7 @@ export class Game {
 
   reset() {
     for (const [id, q] of [...this.players]) if (q.bot) this.players.delete(id);
-    this.phase = 'lobby'; this.map = null; this.nav = null; this.grenades = []; this.score = [0, 0]; this.vehs = []; this.drops = []; this.kits = []; this.zones = []; this.uav = [0, 0];
+    this.phase = 'lobby'; this.map = null; this.nav = null; this.grenades = []; this.c4 = []; this.score = [0, 0]; this.vehs = []; this.drops = []; this.kits = []; this.zones = []; this.uav = [0, 0];
     for (const q of this.players.values()) { q.alive = false; q.kills = 0; q.deaths = 0; q.veh = -1; }
   }
 
@@ -225,6 +225,8 @@ export class Game {
         break;
       }
       case 'cannon': this.onCannon(p, m); break;
+      case 'c4': this.c4Place(p, m); break;
+      case 'c4x': this.c4Det(p); break;
       case 'rl': this.bcastExcept(p, { t: 'rl', id: p.id }); break;
       case 'gren': {
         if (this.phase !== 'playing' || !p.alive || p.grenades <= 0 || !Array.isArray(m.d) || (p.veh >= 0 && p.seat === 0)) break;
@@ -248,7 +250,7 @@ export class Game {
   startMatch() {
     if (this.phase !== 'lobby') return;
     this.map = buildMap(this.cfg.map); this.nav = buildNav(this.map);
-    this.score = [0, 0]; this.grenades = []; this.drops = []; this.startAt = this.now();
+    this.score = [0, 0]; this.grenades = []; this.c4 = []; this.drops = []; this.startAt = this.now();
     this.vehs = this.cfg.veh ? this.map.vehicles.map((sp, i) => this.mkVeh(sp, i)) : [];
     this.linkVehs(); this.initExtras();
     for (const q of this.players.values()) { q.kills = 0; q.streak = 0; q.shield = 0; q.deaths = 0; q.alive = false; q.veh = -1; }
@@ -306,7 +308,7 @@ export class Game {
     p.x = x; p.y = 0; p.z = z; p.vy = 0; p.onGround = true;
     p.yaw = p.team === 0 ? -Math.PI / 2 : Math.PI / 2; p.pitch = 0;
     p.hp = 100; p.alive = true; p.veh = -1; p.seat = 0; p.lastHurt = 0; p.am = null; p.crouch = false; p.ads = false; p.moving = false; p.sprint = false; p.w = 0;
-    p.grenades = 2; p.prot = this.now() + PROT_MS; p.epoch++;
+    p.grenades = 2; this.c4Clear(p); p.prot = this.now() + PROT_MS; p.epoch++;
     p.st = [computeStats(p.lo.p, p.lo.a[0]), computeStats(p.lo.s, p.lo.a[1])];
     p.credit = [1, 1]; p.lastT = [this.now(), this.now()];
     p.target = 0; p.path = null; p.goal = null; p.vis = false; p.burst = 0;
@@ -375,7 +377,7 @@ export class Game {
   kill(v, a, wid, head) {
     v.hp = 0; v.alive = false; v.deaths++; v.respawnAt = this.now() + this.cfg.resp * 1000;
     if (a !== v && a.team !== v.team) { a.kills++; this.score[a.team]++; }
-    this.onKillExtras(v, a);
+    this.onKillExtras(v, a); this.c4Clear(v);
     this.dropAmmo(v);
     if (v.veh >= 0) this.dropSeat(v);
     this.bcast({ t: 'kill', k: a.id, v: v.id, w: wid, h: head ? 1 : 0 });
@@ -420,8 +422,7 @@ export class Game {
     this.grenades = keep;
   }
 
-  explode(g) {
-    const R = 7;
+  explode(g, R = 7, pd = 140, vd = 260) {
     this.bcast({ t: 'boom', x: r2(g.x), y: r2(g.y), z: r2(g.z) });
     const owner = this.players.get(g.owner);
     for (const q of [...this.players.values()]) {
@@ -431,13 +432,13 @@ export class Game {
       if (d > R) continue;
       const t = raycastMap(this.map, g.x, g.y + 0.2, g.z, (q.x - g.x) / (d || 1), (cy - g.y - 0.2) / (d || 1), (q.z - g.z) / (d || 1), d);
       if (t !== Infinity && t < d - 0.3) continue;
-      const dmg = 140 * Math.pow(1 - d / R, 1.2);
+      const dmg = pd * Math.pow(1 - d / R, 1.2);
       this.hurt(q, dmg, owner || q, false, 'gren', g.x, g.z);
     }
     for (const v of this.vehs) {
       if (v.dead) continue;
       const d = Math.max(0, Math.hypot(v.x - g.x, g.y - 0.8, v.z - g.z) - 1.6);
-      if (d < R) this.hurtVeh(v, 260 * Math.pow(1 - d / R, 1.1), owner);
+      if (d < R) this.hurtVeh(v, vd * Math.pow(1 - d / R, 1.1), owner);
     }
   }
 
@@ -765,7 +766,7 @@ export class Game {
     const now = this.now(), ps = [];
     for (const p of this.players.values()) {
       const f = (p.crouch ? 1 : 0) | (p.ads ? 2 : 0) | (p.alive ? 4 : 0) | (p.moving ? 8 : 0) | (now < p.reveal ? 16 : 0) | (p.sprint ? 32 : 0);
-      ps.push([p.id, r2(p.x), r2(p.y), r2(p.z), r3(p.yaw), r3(p.pitch), f, Math.round(p.hp), p.w, p.grenades, p.veh + 1, p.seat, Math.round(p.shield || 0)]);
+      ps.push([p.id, r2(p.x), r2(p.y), r2(p.z), r3(p.yaw), r3(p.pitch), f, Math.round(p.hp), p.w, p.grenades, p.veh + 1, p.seat, Math.round(p.shield || 0), p.c4Left | 0]);
     }
     this.bcast({ t: 'snap', tl: this.timeLeft(), sc: this.score, ps, gr: this.grenades.map(g => [g.id, r2(g.x), r2(g.y), r2(g.z)]),
       vs: this.vehs.map(v => [v.id, r2(v.x), r2(v.z), r3(v.h), r2(v.speed), r2(v.steer), v.tires, Math.round(v.hp), (v.burn ? 1 : 0) | (v.dead ? 2 : 0), ...v.seats, v.type | 0]),
