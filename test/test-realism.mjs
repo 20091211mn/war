@@ -1,7 +1,7 @@
 // واقعية: نبض القلب، قمع النيران، اهتزاز التصويب، ثقوب الرصاص — بلا أخطاء
 import { createServer } from '../server/server.js';
 import { chromium } from 'playwright';
-const srv = await createServer(0, '127.0.0.1');
+const srv = await createServer(0, '127.0.0.1', { web: true });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] });
 const page = await (await browser.newContext({ viewport: { width: 900, height: 500 } })).newPage(); const errs = []; page.on('pageerror', e => errs.push(e.message));
 await page.goto(`http://127.0.0.1:${srv.port}/`);

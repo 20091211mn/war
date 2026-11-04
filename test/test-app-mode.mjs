@@ -2,7 +2,7 @@
 import { createServer } from '../server/server.js';
 import { chromium } from 'playwright';
 import fs from 'node:fs';
-const srv = await createServer(3000, '0.0.0.0');
+const srv = await createServer(3000, '0.0.0.0', { web: true });
 const out = process.env.SHOTS || '/tmp/claude-0/shots'; fs.mkdirSync(out, { recursive: true });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const ctx = await browser.newContext({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
@@ -24,7 +24,7 @@ page.on('pageerror', (e) => errs.push(e.message)); page.on('console', (m) => m.t
 let fails = 0; const ok = (c, m) => { console.log((c ? '  ✓ ' : '  ✗ ') + m); if (!c) fails++; };
 await page.goto('http://127.0.0.1:3000/');
 await page.waitForSelector('#menu:not(.hidden)'); ok(true, 'القائمة الرئيسية تظهر أولًا (بدون شاشة إدخال موقع)');
-ok(!(await page.isVisible('#btnPage')), 'لا يوجد زر «خادم الصفحة» داخل التطبيق');
+ok((await page.$('#btnPage')) === null, 'لا يوجد زر «خادم الصفحة» داخل التطبيق');
 ok(await page.isVisible('#btnSolo') && await page.isVisible('#btnHost') && await page.isVisible('#btnJoin'), 'خيارات: منفرد / استضافة / انضمام');
 await page.screenshot({ path: `${out}/menu-app.png` });
 

@@ -172,6 +172,7 @@ body.touch #deadpanel{bottom:6px;padding:6px 10px;gap:4px}body.touch #deadpanel 
 #b-chat{left:max(8px,var(--sl));top:max(96px,calc(var(--st) + 90px))}
 #b-use,#b-seat,#b-view{display:none}body.invehicle #b-seat,body.invehicle #b-view{display:flex}body.canuse #b-use,body.invehicle #b-use{display:flex}
 body.driving #b-fire,body.driving #b-fire2,body.driving #b-ads,body.driving #b-reload,body.driving #b-swap,body.driving #b-gren,body.driving #b-crouch{display:none}
+body.tankdrv #b-fire,body.tankdrv #b-fire2{display:flex}
 body.driving #b-jump{background:rgba(231,76,60,.5)}
 select{max-width:100%}
 .card>*{flex-shrink:0}#srvlist{display:flex;flex-direction:column;gap:6px;max-height:34vh;overflow:auto}.srv{flex-shrink:0}

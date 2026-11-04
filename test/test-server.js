@@ -8,7 +8,7 @@ const ok = (c, m) => { if (!c) { console.log('  ✗ ' + m); fails++; } else cons
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const errs = []; const oe = console.error; console.error = (...a) => { errs.push(a.join(' ')); oe(...a); };
 
-const srv = await createServer(0, '127.0.0.1');
+const srv = await createServer(0, '127.0.0.1', { web: true });
 const url = `ws://127.0.0.1:${srv.port}`;
 
 function client(name) {

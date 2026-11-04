@@ -224,6 +224,7 @@ struct Game{
     updateWeapon(i,dt,trig); if(p.ammo<=cap(p)/6&&!trig)reloadStart(p);
   }
   // ---- اللاعب ----
+  int mySeat()const; bool passenger()const{ return role==3&&drive>=0&&mySeat()>0; }
   void updatePlayer(float dt,const Input&in){
     Ent&p=e[meI]; adsHeld=in.ads;
     float zoom=in.ads?zoomOf(p):1.f; float sens=1.f/ (in.ads?std::max<float>(1.f,zoom*0.8f):1.f);
@@ -231,6 +232,10 @@ struct Game{
     p.pitch=std::max<float>(-1.45f,std::min<float>(1.45f,p.pitch));
     if(drive>=0){ // أثناء القيادة: العصا اليمنى للكاميرا فقط ، وتعود خلف الشاص تلقائياً
       if(fabsf(in.lx)+fabsf(in.ly)<0.05f){ lookIdle+=dt; if(lookIdle>1.0f){ float dy=vh[drive].h-p.yaw; while(dy>3.14159f)dy-=6.28318f; while(dy<-3.14159f)dy+=6.28318f; p.yaw+=dy*std::min<float>(1.f,dt*1.6f); } } else lookIdle=0;
+      if(passenger()){ // راكب في صندوق/مقعد الشاص: حرية النظر والتصويب والإطلاق من مقعده
+        p.pitch=std::max<float>(-1.2f,std::min<float>(1.2f,p.pitch)); p.crouch=true; p.sprint=false; p.moving=false; lookIdle=0;
+        if(in.reload)reloadStart(p); if(in.swapP&&!prev.swapP)aclSwapSlot();
+        bool trg=in.fire; if(!WEAPONS[p.wpn].autof&&prev.fire)trg=false; updateWeapon(meI,dt,trg); return; }
       p.pitch=std::max<float>(-0.7f,std::min<float>(0.5f,p.pitch)); p.crouch=false; p.sprint=false; p.moving=false; adsHeld=false; return; }
     bool wantCrouch=in.crouch; if(!wantCrouch&&p.crouch&&blocked(w,p.b.x,p.b.y,p.b.z,PK.h))wantCrouch=true; p.crouch=wantCrouch;
     float mx=in.mx,mz=in.my; float ml=hypotf(mx,mz); if(ml>1){mx/=ml;mz/=ml;}
@@ -520,7 +525,7 @@ struct Game{
     Ent&me=e[meI]; float eyeH=me.alive?(me.b.y+(me.crouch?PK.eyec:PK.eye)):me.b.y+0.6f;
     float fov=1.3f; if(adsHeld&&me.alive){fov=1.3f/zoomOf(me);}
     Cam c{me.b.x,eyeH,me.b.z,me.yaw,me.pitch,fov}; { }
-    if(drive>=0&&me.alive){ const VH::Veh&v=vh[drive]; float cp=cosf(me.pitch),fxw=-sinf(me.yaw)*cp,fyw=sinf(me.pitch),fzw=-cosf(me.yaw)*cp; float cx0=v.x,cy0=v.type==1?2.3f:2.2f,cz0=v.z; float D=v.type==1?11.f:8.f; float tw2=raycastMap(w,cx0,cy0,cz0,-fxw,-fyw,-fzw,D); D=std::min<float>(D,tw2-0.3f); D=std::max<float>(v.type==1?6.5f:1.5f,D); c.x=cx0-fxw*D; c.y=std::max<float>(0.5f,cy0-fyw*D); c.z=cz0-fzw*D; camX=c.x;camY=c.y;camZ=c.z; }
+    if(drive>=0&&me.alive&&!passenger()){ const VH::Veh&v=vh[drive]; float cp=cosf(me.pitch),fxw=-sinf(me.yaw)*cp,fyw=sinf(me.pitch),fzw=-cosf(me.yaw)*cp; float cx0=v.x,cy0=v.type==1?2.3f:2.2f,cz0=v.z; float D=v.type==1?11.f:8.f; float tw2=raycastMap(w,cx0,cy0,cz0,-fxw,-fyw,-fzw,D); D=std::min<float>(D,tw2-0.3f); D=std::max<float>(v.type==1?6.5f:1.5f,D); c.x=cx0-fxw*D; c.y=std::max<float>(0.5f,cy0-fyw*D); c.z=cz0-fzw*D; camX=c.x;camY=c.y;camZ=c.z; }
     if(dn.on&&me.alive)c=Cam{dn.x,dn.y,dn.z,dn.yaw,dn.pitch,1.3f};
     r.setCam(c); r.world(w);
     for(auto&v:vh){ float dx=v.x-c.x,dz=v.z-c.z,dd=sqrtf(dx*dx+dz*dz); if(dd<r.fogF)VH::draw(r,v,dd); }
@@ -535,7 +540,7 @@ struct Game{
     for(auto&k:sparks){ float a=std::min<float>(1.f,k.t*5.f); r.obb(k.x,k.y,k.z,0.025f,0.025f,0.025f,0,0,1.f,0.7f*a+0.2f,0.2f,false,false); }
     if(role==3)aclRender3D();
     // مجسّم السلاح (نفس قطع نسخة أندرويد)
-    if(me.alive&&drive<0&&!dn.on&&!(adsHeld&&zoomOf(me)>=2.f)){ r.flush(); r.zBias=1000.f; const GunDef&g=GUNDEFS[me.wpn]; float k=adsHeld?1.f:0.f; float top=g.sy;
+    if(me.alive&&(drive<0||passenger())&&!dn.on&&!(adsHeld&&zoomOf(me)>=2.f)){ r.flush(); r.zBias=1000.f; const GunDef&g=GUNDEFS[me.wpn]; float k=adsHeld?1.f:0.f; float top=g.sy;
       static float bob=0; bob+=me.moving?(me.sprint?0.17f:0.11f):0; float bx=sinf(bob)*0.008f*(me.moving?1:0),by=fabsf(cosf(bob))*0.008f*(me.moving?1:0);
       float x=0.17f*(1-k)+0*k+bx,y=-0.17f*(1-k)+(-top-0.002f)*k+by,z=-0.33f*(1-k)-0.36f*k; float kick=me.flash>0?0.045f:0.f; z+=kick; float rx=kick*1.2f,ry=0.07f*(1-k); y+=sinf(t*1.7f)*0.0025f*(1-k*0.7f); x+=sinf(t*0.9f)*0.0015f;
       if(me.reloadT>=0){float sn=sinf(me.reloadT/WEAPONS[me.wpn].reload*3.14159f);y-=sn*0.13f;rx-=sn*0.5f;x+=sn*0.03f;}
@@ -623,7 +628,17 @@ struct Game{
     if(fpsShow>0){ snprintf(b,64,"%d fps  %dx%d",(int)fpsShow,W,H); text(4*sc,H-10*sc,b,std::max(1,sc-1),0xFF607080); }
     if(role)text(4*sc,H-20*sc,role==1?"LAN HOST":role==2?"LAN CLIENT":"ANDROID LAN",std::max(1,sc-1),0xFF80E0FF);
     if(over){ rect(0,0,W,H,0xFF000000,0.55f); textC(W/2,H/2-20*sc,winner==0?"RED TEAM WINS":"BLUE TEAM WINS",sc*3,winner==0?0xFFFF6060:0xFF6090FF); textC(W/2,H/2+10*sc,role==2?"WAITING FOR HOST":"X = PLAY AGAIN",sc*2,0xFFFFFFFF); }
-    if(paused){ rect(0,0,W,H,0xFF000000,0.6f); textC(W/2,H/2-12*sc,"إيقاف مؤقت",sc*3,0xFFFFFFFF); textC(W/2,H/2+14*sc,"OPTIONS: متابعة    O: القائمة",sc*2,0xFFB0B0B0); if(role!=3){ static const char*OA[5]={"حديدي","نقطة حمراء","2x","4x","8x"},*MA[3]={"بدون","كاتم","مخمّد"},*UA[3]={"بدون","مقبض","ليزر"},*GA[3]={"عادي","ممتد","سريع"}; GAtt&a=wAtt[me.wpn&15]; char ab[96]; snprintf(ab,96,"%s:  %s  |  %s  |  %s  |  %s",WEAPONS[me.wpn].name,OA[a.optic],MA[a.muz],UA[a.under],GA[a.mag]); textC(W/2,H/2+74*sc,ab,sc,0xFFFFD060); textC(W/2,H/2+88*sc,"△ منظار   □ فوهة   L1 مقبض   R2 مخزن",sc,0xFF8FA0B4); } char sb[40];snprintf(sb,40,"الحساسية  < %.1f >",sens);textC(W/2,H/2+34*sc,sb,sc*2,0xFFFFFFFF); {char sw[40];snprintf(sw,40,"R1: العصي — %s",swapSticks?"يسار=نظر":"يسار=حركة");textC(W/2,H/2+54*sc,sw,sc,0xFF80E0FF);} }
+    if(paused){ rect(0,0,W,H,0xFF000000,0.62f);
+      int cw=W*52/100,ch=H*72/100,cx=(W-cw)/2,cy=(H-ch)/2; card(cx,cy,cw,ch,sc); rect(cx+8*sc,cy,cw/2-8*sc,2*sc,0xFFE23B3B); rect(cx+cw/2,cy,cw/2-8*sc,2*sc,0xFF3B82F6);
+      textC(W/2,cy+8*sc,"إيقاف مؤقت",sc*3,C_TXT); textC(W/2,cy+36*sc,"OPTIONS: متابعة      O: القائمة الرئيسية",std::max(1,sc-1),C_MUT);
+      char sb[48]; snprintf(sb,48,"الحساسية   < %.1f >",sens); rrect(cx+16*sc,cy+52*sc,cw-32*sc,16*sc,6*sc,C_BTN); textC(W/2,cy+56*sc,sb,sc,C_TXT);
+      snprintf(sb,48,"R1: العصي — %s",swapSticks?"يسار = نظر":"يسار = حركة"); rrect(cx+16*sc,cy+70*sc,cw-32*sc,16*sc,6*sc,C_BTN); textC(W/2,cy+74*sc,sb,sc,0xFF80E0FF);
+      if(role!=3){ static const char*OA[5]={"حديدي","نقطة حمراء","2x","4x","8x"},*MA[3]={"بدون","كاتم","مخمّد"},*UA[3]={"بدون","مقبض","ليزر"},*GA[3]={"عادي","ممتد","سريع"}; GAtt&a=wAtt[me.wpn&15];
+        int by=cy+94*sc; rrect(cx+16*sc,by,cw-32*sc,ch-94*sc-12*sc,8*sc,0xFF0B0F14,0.75f); textC(W/2,by+4*sc,WEAPONS[me.wpn].name,sc*2,C_ACC);
+        const char*lb[4]={"مثلث: منظار","مربع: فوهة","L1: مقبض","R2: مخزن"},*vl[4]={OA[a.optic],MA[a.muz],UA[a.under],GA[a.mag]}; int chw=(cw-32*sc-30*sc)/4;
+        for(int i=0;i<4;i++){ int x=cx+24*sc+i*(chw+6*sc),y=by+26*sc; rrect(x,y,chw,26*sc,6*sc,C_BTN); rrect(x,y,3*sc,26*sc,2*sc,i%2?0xFF3B82F6:0xFFE23B3B); textC(x+chw/2,y+3*sc,lb[i],std::max(1,sc-1),C_MUT); textC(x+chw/2,y+14*sc,vl[i],sc,C_TXT); }
+        const WeaponDef&d=WEAPONS[me.wpn]; struct B{const char*n;float v;} bars[3]={{"الضرر",std::min(1.f,d.dmg/110.f)},{"معدل النار",std::min(1.f,d.rpm/1000.f)},{"المدى",std::min(1.f,d.r1/120.f)}};
+        for(int i=0;i<3;i++){ int y=by+60*sc+i*9*sc; text(cx+24*sc,y,bars[i].n,std::max(1,sc-1),C_MUT); int bx=cx+cw/3,bw=cw/2; rect(bx,y+2*sc,bw,3*sc,0xFF243040); rect(bx,y+2*sc,(int)(bw*bars[i].v),3*sc,i==0?0xFFE23B3B:i==1?C_ACC:0xFF3B82F6); } } }
   }
   // ---- عناصر واجهة بنمط نسخة أندرويد ----
   static constexpr uint32_t C_PANEL=0xFF141B24,C_LINE=0xFF243040,C_BTN=0xFF1B2430,C_BTNH=0xFF2A3A50,C_TXT=0xFFE8EEF6,C_MUT=0xFF8FA0B4,C_ACC=0xFFFFB020;

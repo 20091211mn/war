@@ -182,6 +182,7 @@ void Game::aclUpdate(float dt,const Input&in){
   // عودة المباراة: المضيف يضغط X ... (الخادم يتولى الإعادة)
   prev=in;
 }
+int Game::mySeat()const{ return ac?ac->seat:-1; }
 void Game::aclRenderMenu(){
   if(!ac)return; ACl&A=*ac; int W=r.W,H=r.H,sc=std::max(1,H/270),sm=std::max(1,sc-1); char b[96];
   int cw=W*66/100,ch=H*84/100,cx=(W-cw)/2,cy=(H-ch)/2; card(cx,cy,cw,ch,sc);

@@ -264,18 +264,7 @@ public class LanHostPlugin extends Plugin {
             out.write(b); out.flush();
             return;
         }
-        if (path.equals("/")) path = "/index.html";
-        if (path.contains("..") || path.contains("\\") || path.contains("//")) { simple(out, 403, "Forbidden"); return; }
-        byte[] data;
-        try (InputStream is = getContext().getAssets().open("public" + path)) {
-            ByteArrayOutputStream bo = new ByteArrayOutputStream();
-            byte[] buf = new byte[8192]; int n;
-            while ((n = is.read(buf)) > 0) bo.write(buf, 0, n);
-            data = bo.toByteArray();
-        } catch (IOException e) { simple(out, 404, "Not Found"); return; }
-        out.write(("HTTP/1.1 200 OK\r\n" + cors + "Content-Type: " + mime(path) + "\r\nContent-Length: " + data.length + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
-        if (!method.equals("HEAD")) out.write(data);
-        out.flush();
+        simple(out, 404, "Not Found"); // لا نقدّم صفحة ويب: اللعبة داخل التطبيق فقط
     }
 
     private static void simple(OutputStream out, int code, String text) throws IOException {

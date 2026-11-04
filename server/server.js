@@ -24,7 +24,8 @@ export function lanAddresses() {
   return out;
 }
 
-export function createServer(port = PORT, host = '0.0.0.0') {
+// الخادم لا يقدّم صفحة ويب أبدًا: اللعبة تعمل داخل التطبيق فقط. opts.web خاص بالاختبارات الآلية (يخدم الملفات للمتصفح الآلي).
+export function createServer(port = PORT, host = '0.0.0.0', opts = {}) {
   const game = new Game();
   const server = http.createServer((req, res) => {
     let url;
@@ -34,6 +35,7 @@ export function createServer(port = PORT, host = '0.0.0.0') {
       res.end(JSON.stringify({ ips: lanAddresses(), port, players: game.humans().length, phase: game.phase }));
       return;
     }
+    if (!opts.web) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Warzone LAN server — استخدم تطبيق Warzone للانضمام'); return; }
     if (url === '/') url = '/index.html';
     let base = ROUTES['/'], rel = url;
     if (url.startsWith('/shared/')) { base = ROUTES['/shared/']; rel = url.slice('/shared/'.length); }

@@ -28,7 +28,7 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('wz_' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem('wz_' + k, JSON.stringify(v)); } catch { /* */ } },
 };
-const settings = { name: store.get('name', ''), quality: store.get('quality', (navigator.hardwareConcurrency || 4) <= 4 || /Android|iPhone|iPad/i.test(navigator.userAgent) ? 0.6 : 0.8), sens: store.get('sens', 5), vol: store.get('vol', 0.7), fov: store.get('fov', 76), xcol: store.get('xcol', '#ffffff'), showfps: store.get('showfps', 1), fpscap: store.get('fpscap', 0), vib: store.get('vib', 1), lo: sanitizeLoadout(store.get('lo', null)) };
+const settings = { name: store.get('name', ''), quality: store.get('quality', (navigator.hardwareConcurrency || 4) <= 4 || /Android|iPhone|iPad/i.test(navigator.userAgent) ? 0.6 : 0.8), sens: store.get('sens', 5), vol: store.get('vol', 0.7), fov: store.get('fov', 76), xcol: store.get('xcol', '#ffffff'), dynres: store.get('dynres', 1), showfps: store.get('showfps', 1), fpscap: store.get('fpscap', 0), vib: store.get('vib', 1), lo: sanitizeLoadout(store.get('lo', null)) };
 
 // ---------- الحالة ----------
 const prof = Object.assign({ xp: 0, kills: 0, deaths: 0, heads: 0, matches: 0, wins: 0 }, store.get('prof', {}));
@@ -84,7 +84,7 @@ function stopHost() { if (S.host) { const h = S.host; S.host = null; h.stop().ca
 function cleanupGameUI() {
   S.inGame = false; S.ended = false; S.paused = false; me.alive = false; me.veh = -1; S.vehs.clear(); S.drops.clear();
   for (const id of ['hud', 'touch', 'scope', 'board', 'deadmsg', 'deadpanel', 'vhud', 'chatbar']) $(id).classList.add('hidden');
-  document.body.classList.remove('invehicle', 'driving', 'canuse');
+  document.body.classList.remove('invehicle', 'driving', 'canuse', 'tankdrv');
   Snd.engineOff();
   try { document.exitPointerLock && document.exitPointerLock(); } catch { /* */ }
   resetInput();
@@ -334,7 +334,7 @@ function pickDeadWeapon(i) {
 
 // ---------- القائمة ----------
 let setReturn = 'menu';
-function openSettings(from) { setReturn = from; $('fov').value = settings.fov; $('fovv').textContent = settings.fov; $('xcol').value = settings.xcol; $('showfps').value = String(settings.showfps); $('fpscap').value = String(settings.fpscap); $('vib').value = String(settings.vib); show('settings'); }
+function openSettings(from) { setReturn = from; $('fov').value = settings.fov; $('fovv').textContent = settings.fov; $('xcol').value = settings.xcol; $('showfps').value = String(settings.showfps); $('dynres').value = String(settings.dynres); $('fpscap').value = String(settings.fpscap); $('vib').value = String(settings.vib); show('settings'); }
 function applySettings() {
   document.documentElement.style.setProperty('--xc', settings.xcol);
   input.sensMouse = 0.0007 * (settings.sens + 1) * 0.8 + 0.0008;
@@ -349,7 +349,6 @@ function bindUI() {
   $('btnSolo').onclick = startSolo;
   $('btnHost').onclick = startHost;
   $('btnJoin').onclick = () => { show('join'); bindJoin(); $('btnScan').click(); };
-  $('btnPage').onclick = joinPage;
   $('btnJoinBack').onclick = () => { if (scanCtl) scanCtl.stop = true; show('menu'); };
   $('btnLeave').onclick = leaveSession;
   document.querySelectorAll('#lobby button[data-team]').forEach((b) => { b.onclick = () => { Snd.click(); send({ t: 'team', v: Number(b.dataset.team) }); }; });
@@ -367,6 +366,7 @@ function bindUI() {
   $('btnSetBack').onclick = () => show(setReturn);
   $('fov').oninput = (e) => { settings.fov = Number(e.target.value); $('fovv').textContent = settings.fov; store.set('fov', settings.fov); };
   $('xcol').onchange = (e) => { settings.xcol = e.target.value; store.set('xcol', settings.xcol); applySettings(); };
+  $('dynres').onchange = (e) => { settings.dynres = Number(e.target.value); store.set('dynres', settings.dynres); if (!settings.dynres && eng) eng.resize(settings.quality); };
   $('showfps').onchange = (e) => { settings.showfps = Number(e.target.value); store.set('showfps', settings.showfps); };
   $('fpscap').onchange = (e) => { settings.fpscap = Number(e.target.value); store.set('fpscap', settings.fpscap); };
   $('vib').onchange = (e) => { settings.vib = Number(e.target.value); store.set('vib', settings.vib); };
@@ -382,7 +382,6 @@ function bindUI() {
   $('lobbySend').onclick = lobbySend; $('lobbyIn').onkeydown = (e) => { if (e.key === 'Enter') lobbySend(); };
   $('chatSend').onclick = () => closeChat(true);
   $('chatIn').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); closeChat(true); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeChat(false); } };
-  if (!APP && location.host) $('btnPage').classList.remove('hidden');
   if (!APP) { $('btnHost').classList.add('hidden'); } else { $('menuHint').textContent = 'اللعب المنفرد يعمل بدون إنترنت. الشبكة المحلية اختيارية (استضافة أو انضمام).'; }
 }
 function openDeadAtt() { if (me.alive || !S.inGame) return; loReturn = 'dead'; renderLoadout(); show('loadout'); try { document.exitPointerLock && document.exitPointerLock(); } catch { /* */ } }
@@ -794,7 +793,7 @@ function onCannonShot(m) {
   fx.tracer(m.o, m.e, false, true);
   for (let i = 0; i < 6; i++) fx.smoke(m.o[0] + (Math.random() - 0.5) * 0.6, m.o[1] + (Math.random() - 0.3) * 0.5, m.o[2] + (Math.random() - 0.5) * 0.6, [0.55, 0.55, 0.5]);
   fx.spark(m.o[0], m.o[1], m.o[2], [1, 0.8, 0.3], 14, 6);
-  const d = Math.hypot(m.o[0] - me.x, m.o[2] - me.z); Snd.boom(clamp(1 - d / 140, 0.1, 1) * 0.7, panOf({ x: m.o[0], z: m.o[2] }), clamp(d / 140, 0, 1));
+  const d = Math.hypot(m.o[0] - me.x, m.o[2] - me.z); Snd.cannon(clamp(1 - d / 140, 0.1, 1), panOf({ x: m.o[0], z: m.o[2] }), clamp(d / 140, 0, 1));
   if (me.veh === m.v) me.shake = Math.max(me.shake, 0.9); else if (d < 40) me.shake = Math.max(me.shake, 0.4 * (1 - d / 40));
 }
 // أقرب مركبة يمكن ركوبها (نفس منطق الخادم)
@@ -968,7 +967,7 @@ function updateRemotes(dt, now) {
   for (const v of S.vehs.values()) { if ((v.flags & 2) || !v.seats[0]) continue; const d = Math.hypot(v.x - me.x, v.z - me.z); if (d < bd) { bd = d; best = v; } }
   if (best && bd < 70) {
     const own = me.veh === best.id, rpm = clamp(Math.abs(best.speed) / vp(best).maxFwd, 0, 1);
-    Snd.engine(rpm, own ? 0.9 : Math.pow(1 - bd / 70, 2), own ? 0 : panOf(best));
+    Snd.engine(rpm, own ? 0.9 : Math.pow(1 - bd / 70, 2), own ? 0 : panOf(best), best.type === 1);
   } else Snd.engineOff();
 }
 function leanFor(v, seat, yaw, active) {
@@ -1083,7 +1082,7 @@ function hudSlow(now, st, chase) {
   } else $('cross').style.display = 'none';
   // المركبة: لوحة القيادة والتلميحات
   const near = me.alive ? nearVehicle() : null, myV = me.alive && me.veh >= 0 ? S.vehs.get(me.veh) : null;
-  document.body.classList.toggle('invehicle', !!myV); document.body.classList.toggle('driving', !!myV && me.seat === 0); document.body.classList.toggle('canuse', !!near);
+  document.body.classList.toggle('invehicle', !!myV); document.body.classList.toggle('driving', !!myV && me.seat === 0); document.body.classList.toggle('tankdrv', !!myV && me.seat === 0 && myV.type === 1); document.body.classList.toggle('canuse', !!near);
   $('vhud').classList.toggle('hidden', !myV);
   if (myV) {
     $('vspd').textContent = Math.round(Math.abs(myV.speed) * 3.6);
@@ -1156,6 +1155,12 @@ function frame(ts) {
   lastRender = ts;
   const dt = Math.min(0.05, (ts - lastT) / 1000 || 0.016); lastT = ts;
   emaDt = emaDt * 0.95 + dt * 0.05;
+  // دقة ديناميكية: تُخفَّض الدقة تلقائيًا عند هبوط الإطارات وتعود عند توفر الأداء (الحد الأقصى = جودة الرسم المختارة)
+  if (settings.dynres && S.inGame && ts - (frame.dr || 0) > 1200) {
+    frame.dr = ts; const target = settings.fpscap > 0 ? Math.min(settings.fpscap, 60) : 60, cur = eng.scale || settings.quality;
+    let nx = cur; if (emaDt > 1 / (target * 0.8)) nx = Math.max(0.4, cur - 0.07); else if (emaDt < 1 / (target * 1.15) && cur < settings.quality) nx = Math.min(settings.quality, cur + 0.04);
+    if (Math.abs(nx - cur) > 0.001) { eng.resize(nx); }
+  }
   if (!S.inGame) return;
   const now = nowMs();
   if (now - lastPing > 2000) { lastPing = now; send({ t: 'ping', c: now }); }
@@ -1175,6 +1180,6 @@ function boot() {
   show('menu');
   requestAnimationFrame(frame);
   try { if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(() => {}); } catch { /* */ }
-  window.__wz = { S, me, LV, eng, startSolo, joinTo, send, input };
+  window.__wz = { S, me, LV, eng, startSolo, joinTo, send, input, joinPage }; // joinPage: للاختبارات الآلية فقط (لا واجهة له)
 }
 boot();

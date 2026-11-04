@@ -9,7 +9,6 @@
 <meta name="apple-mobile-web-app-title" content="Warzone">
 <meta name="theme-color" content="#0b0f14">
 <title>Warzone</title>
-<link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-192.png">
 <link rel="stylesheet" href="style.css">
@@ -98,7 +97,6 @@
     <button id="btnHost" class="big"><i data-ic="wifi" data-s="18"></i> استضف لعبة شبكة محلية</button>
     <button id="btnJoin" class="big"><i data-ic="scan" data-s="18"></i> انضم إلى لعبة شبكة محلية</button>
     <button id="btnMenuSet" class="big">⚙ الإعدادات</button>
-    <button id="btnPage" class="big hidden">انضم إلى الخادم الذي فتحت منه الصفحة</button>
     <p id="menuMsg" class="msg"></p>
     <p id="envInfo" class="msg" style="opacity:.55;font-size:12px"></p>
     <p class="hint" id="menuHint">اللعب المنفرد يعمل بدون إنترنت أو شبكة. الشبكة المحلية اختيارية.</p>
@@ -173,6 +171,7 @@
     <label>مجال الرؤية <b id="fovv">76</b><input type="range" id="fov" min="60" max="100" step="1" value="76"></label>
     <label>لون التصويب<select id="xcol"><option value="#ffffff">أبيض</option><option value="#6dff8a">أخضر</option><option value="#ffd23b">أصفر</option><option value="#4de1ff">سماوي</option><option value="#ff5a5a">أحمر</option></select></label>
     <label>حد الإطارات<select id="fpscap"><option value="0">بلا حد (أعلى معدل للشاشة)</option><option value="120">120</option><option value="90">90</option><option value="60">60</option><option value="30">30</option></select></label>
+    <label>دقة ديناميكية (تحافظ على الإطارات)<select id="dynres"><option value="1">مفعّلة</option><option value="0">متوقفة</option></select></label>
     <label>عرض معدل الإطارات<select id="showfps"><option value="1">نعم</option><option value="0">لا</option></select></label>
     <label>الاهتزاز (الهاتف)<select id="vib"><option value="1">نعم</option><option value="0">لا</option></select></label>
     <button id="btnSetBack" class="primary big">رجوع</button>

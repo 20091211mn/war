@@ -2,7 +2,7 @@
 import { createServer } from '../server/server.js';
 import { chromium } from 'playwright';
 import fs from 'node:fs';
-const srv = await createServer(0, '127.0.0.1');
+const srv = await createServer(0, '127.0.0.1', { web: true });
 const url = `http://127.0.0.1:${srv.port}/`;
 const out = process.env.SHOTS || '/tmp/claude-0/shots'; fs.mkdirSync(out, { recursive: true });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] });
@@ -103,8 +103,8 @@ await page.context().close(); await new Promise(r => setTimeout(r, 300));
 
 console.log('4) الانضمام لخادم عبر الشبكة + دردشة بين لاعبين + صلاحيات المضيف');
 const a = await mk(false), b = await mk(false);
-await a.fill('#name', 'أ'); await a.click('#btnPage'); await a.waitForSelector('#lobby:not(.hidden)');
-await b.fill('#name', 'ب'); await b.click('#btnPage'); await b.waitForSelector('#lobby:not(.hidden)');
+await a.fill('#name', 'أ'); await a.evaluate(() => window.__wz.joinPage()); await a.waitForSelector('#lobby:not(.hidden)');
+await b.fill('#name', 'ب'); await b.evaluate(() => window.__wz.joinPage()); await b.waitForSelector('#lobby:not(.hidden)');
 await a.waitForTimeout(400);
 ok(await b.isDisabled('#cfgMap'), 'غير المضيف لا يغيّر الإعدادات');
 ok(!(await a.isDisabled('#cfgMap')), 'المضيف يغيّر الإعدادات');

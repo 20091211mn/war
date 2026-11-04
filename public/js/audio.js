@@ -136,7 +136,7 @@ export const Snd = {
   },
   throwG() { if (!ctx || !enabled) return; const t = ctx.currentTime, o = this._out(0, 0.4, 0, 0.05); this._noise(o, t, 0.3, 'bandpass', 500, 1800, 0.9, 0.6, 0.05); this._noise(o, t + 0.02, 0.03, 'bandpass', 2500, 2000, 4, 0.5); },
   // محرك المركبة: صوت مستمر واحد (أقرب مركبة). rpm 0..1
-  engine(rpm, vol, pan = 0) {
+  engine(rpm, vol, pan = 0, heavy = false) {
     if (!ctx || !enabled) return;
     if (!this._eng) {
       const g = ctx.createGain(); g.gain.value = 0;
@@ -151,13 +151,21 @@ export const Snd = {
       o1.start(); o2.start(); lfo.start(); n.start();
       this._eng = { g, lp, o1, o2, ng, lfo };
     }
-    const e = this._eng, t = ctx.currentTime, f = 38 + rpm * 70;
+    const e = this._eng, t = ctx.currentTime, f = heavy ? 26 + rpm * 38 : 38 + rpm * 70;
     e.o1.frequency.setTargetAtTime(f, t, 0.08); e.o2.frequency.setTargetAtTime(f * 0.5, t, 0.08);
     e.lfo.frequency.setTargetAtTime(7 + rpm * 20, t, 0.1);
-    e.lp.frequency.setTargetAtTime(380 + rpm * 1300, t, 0.1);
-    e.ng.gain.setTargetAtTime(0.03 + rpm * 0.08, t, 0.1);
+    e.lp.frequency.setTargetAtTime(heavy ? 260 + rpm * 700 : 380 + rpm * 1300, t, 0.1);
+    e.ng.gain.setTargetAtTime(heavy ? 0.07 + rpm * 0.14 : 0.03 + rpm * 0.08, t, 0.1); // جنازير: ضجيج أعلى
     e.g.gain.setTargetAtTime(vol * (0.28 + rpm * 0.3), t, 0.1);
     if (this._engPan) this._engPan.pan.setTargetAtTime(Math.max(-1, Math.min(1, pan)), t, 0.1);
+  },
+  // مدفع الدبابة: فرقعة حادة + دويّ منخفض طويل + ارتداد
+  cannon(vol = 1, pan = 0, dist = 0) {
+    if (!ctx || !enabled || vol <= 0.02) return; const t = ctx.currentTime, o = this._out(pan, vol * 1.3, dist, 0.7);
+    this._noise(o, t, 0.06, 'highpass', 2500, 1200, 0.9, 1.4);
+    this._noise(o, t, 0.9, 'lowpass', 900, 70, 0.6, 1.5, 0.002);
+    this._tone(o, t, 0.8, 80, 28, 1.9); this._tone(o, t + 0.05, 0.5, 52, 22, 1.2);
+    this._noise(o, t + 0.12, 1.2, 'bandpass', 260, 60, 0.5, 0.7, 0.1);
   },
   drone(vol, pan = 0) {
     if (!ctx || !enabled) return;
