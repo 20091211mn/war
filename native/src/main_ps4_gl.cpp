@@ -39,6 +39,8 @@ static float stickN(uint8_t v){return ((int)v-128)/127.f;}
 #define WZ_LOGFILE "/data/wz_gl_log2.txt"
 #elif WZ_VARIANT==3
 #define WZ_LOGFILE "/data/wz_gl_log3.txt"
+#elif WZ_VARIANT==4
+#define WZ_LOGFILE "/data/wz_gl_log4.txt"
 #else
 #define WZ_LOGFILE "/data/wz_gl_log.txt"
 #endif
@@ -48,6 +50,7 @@ struct NikShader{ char*ident; unsigned char hash[16]; uint64_t len; unsigned cha
 extern "C" NikShader scePrecompiledShaderEntries[];
 static EGLDisplay gD=EGL_NO_DISPLAY; static EGLSurface gS=EGL_NO_SURFACE; static EGLContext gC=EGL_NO_CONTEXT;
 static GLuint gTex=0,gProg=0; static GLint uMV=-1,uPR=-1,uTS=-1,uSam=-1,uOp=-1,aV=-1;
+static int gDepthBits=0;
 static int gShN=0; // عدد الشيدرات الجاهزة في النظام (تشخيص: لنعرف هل يتوفّر شيدر ثلاثي الأبعاد بألوان رؤوس)
 static void dumpShaders(){ FILE*fp=fopen("/data/wz_shaders.txt","w"); int n=0; for(NikShader*e=scePrecompiledShaderEntries;e->ident;++e){ n++; if(fp)fprintf(fp,"%s %llu\n",e->ident,(unsigned long long)e->len); } if(fp)fclose(fp); gShN=n; wzlog("precompiled shaders: %d (list in /data/wz_shaders.txt)",n); }
 static bool fetchSh(const char*n,unsigned char*&p,uint64_t&l){ for(NikShader*e=scePrecompiledShaderEntries;e->ident;++e) if(!strcmp(n,e->ident)){p=e->code;l=e->len;return true;} return false; }
@@ -65,14 +68,21 @@ static bool glInit(){
   c.dbgPosCmd_0x40=OUT_W; c.dbgPosCmd_0x44=OUT_H; c.dbgPosCmd_0x48=0; c.dbgPosCmd_0x4C=0; c.unk_0x5C=2;
   if(!scePigletSetConfigurationVSH(&c)){wzlog("piglet config fail");return false;}
   wzlog("piglet config set"); OrbisPglWindow w={0,(khronos_uint32_t)OUT_W,(khronos_uint32_t)OUT_H};
-  const EGLint at[]={EGL_RED_SIZE,8,EGL_GREEN_SIZE,8,EGL_BLUE_SIZE,8,EGL_ALPHA_SIZE,8,EGL_DEPTH_SIZE,0,EGL_STENCIL_SIZE,0,EGL_SAMPLE_BUFFERS,0,EGL_SAMPLES,0,EGL_RENDERABLE_TYPE,EGL_OPENGL_ES2_BIT,EGL_SURFACE_TYPE,EGL_WINDOW_BIT,EGL_NONE};
+  EGLint at[]={EGL_RED_SIZE,8,EGL_GREEN_SIZE,8,EGL_BLUE_SIZE,8,EGL_ALPHA_SIZE,8,EGL_DEPTH_SIZE,0,EGL_STENCIL_SIZE,0,EGL_SAMPLE_BUFFERS,0,EGL_SAMPLES,0,EGL_RENDERABLE_TYPE,EGL_OPENGL_ES2_BIT,EGL_SURFACE_TYPE,EGL_WINDOW_BIT,EGL_NONE};
   const EGLint ca[]={EGL_CONTEXT_CLIENT_VERSION,2,EGL_NONE}; const EGLint wa[]={EGL_RENDER_BUFFER,EGL_BACK_BUFFER,EGL_NONE};
   EGLConfig cfg; EGLint nc=0,maj=0,mi=0;
   gD=eglGetDisplay(EGL_DEFAULT_DISPLAY); if(gD==EGL_NO_DISPLAY){wzlog("no display");return false;}
   if(!eglInitialize(gD,&maj,&mi)){wzlog("egl init fail 0x%x",eglGetError());return false;}
   wzlog("egl init %d.%d",maj,mi); eglBindAPI(EGL_OPENGL_ES_API); eglSwapInterval(gD,0);
-  if(!eglChooseConfig(gD,at,&cfg,1,&nc)||nc<1){wzlog("choose cfg fail");return false;}
-  wzlog("config chosen"); gS=eglCreateWindowSurface(gD,cfg,&w,wa); if(gS==EGL_NO_SURFACE){wzlog("surface fail 0x%x",eglGetError());return false;}
+#if WZ_VARIANT==4
+  const int dl[3]={24,16,0};
+#else
+  const int dl[1]={0};
+#endif
+  for(size_t di=0;di<sizeof(dl)/sizeof(dl[0]);di++){ at[9]=dl[di]; nc=0; if(!eglChooseConfig(gD,at,&cfg,1,&nc)||nc<1){wzlog("choose cfg fail depth %d",dl[di]);continue;}
+    gS=eglCreateWindowSurface(gD,cfg,&w,wa); if(gS==EGL_NO_SURFACE){wzlog("surface fail depth %d 0x%x",dl[di],eglGetError());continue;}
+    EGLint gotD=-1; eglGetConfigAttrib(gD,cfg,EGL_DEPTH_SIZE,&gotD); gDepthBits=gotD; wzlog("config chosen: requested depth %d got %d",dl[di],(int)gotD); break; }
+  if(gS==EGL_NO_SURFACE){wzlog("no usable config/surface");return false;}
   wzlog("surface created"); gC=eglCreateContext(gD,cfg,EGL_NO_CONTEXT,ca); if(gC==EGL_NO_CONTEXT){wzlog("ctx fail 0x%x",eglGetError());return false;}
   wzlog("context created"); if(!eglMakeCurrent(gD,gS,gS,gC)){wzlog("makecurrent fail 0x%x",eglGetError());return false;}
   wzlog("GL %s | %s",(const char*)glGetString(GL_VERSION),(const char*)glGetString(GL_RENDERER));
@@ -95,8 +105,8 @@ static bool glInit(){
   wzlog("probe done");
   return true;
 }
-static void glPresent(const uint32_t*up){
-  glViewport(0,0,OUT_W,OUT_H); glClearColor(0.05f,0.2f,0.6f,1.f); glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT); glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+static void glPresent(const uint32_t*up,bool overlay=false){
+  glViewport(0,0,OUT_W,OUT_H); if(!overlay){ glClearColor(0.05f,0.2f,0.6f,1.f); glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT); } glDisable(GL_DEPTH_TEST); glEnable(GL_BLEND); if(overlay)glBlendFunc(GL_ONE,GL_ONE_MINUS_SRC_ALPHA); else glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
   glBindTexture(GL_TEXTURE_2D,gTex); glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,WZ_IW,WZ_IH,0,GL_RGBA,GL_UNSIGNED_BYTE,up);
   static const GLfloat v[]={0,1,0,1, 1,0,1,0, 0,0,0,0, 0,1,0,1, 1,1,1,1, 1,0,1,0};
   GLfloat id[16]={1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
@@ -108,6 +118,49 @@ static void glPresent(const uint32_t*up){
   static int pf=0; if(++pf<=2)wzlog("draw issued err=0x%x",(unsigned)glGetError());
   if(pf<=2)wzlog("calling swap"); EGLBoolean sr=eglSwapBuffers(gD,gS); if(pf<=2)wzlog("swap ret=%d err=0x%x",(int)sr,(unsigned)eglGetError());
 }
+
+// ===== نسخة 4: المشهد ثلاثي الأبعاد يُرسم على الـGPU (Piglet) بشيدر trilithium (نسيج فقط) ؛ اللون = نسيج لوحة 6-6-6 ؛ الواجهة (HUD) طبقة شفافة من المعالج فوقه =====
+static void m4mul(const float*a,const float*b,float*o);
+#if WZ_VARIANT==4
+static GLuint gpPg=0,gpPal=0,gpSky=0; static GLint gpVP=-1,gpM=-1,gpSam=-1,gpaP=-1,gpaT=-1; static const int SKW=96,SKH=54;
+static bool gpuInit(){
+  unsigned char*vp,*fp; uint64_t vl,fl; if(!fetchSh("trilithium/vpBasic.vert",vp,vl)||!fetchSh("trilithium/fpTexture.frag",fp,fl)){wzlog("gpu: trilithium shaders missing");return false;}
+  GLuint vs=glCreateShader(GL_VERTEX_SHADER),fs=glCreateShader(GL_FRAGMENT_SHADER); gpPg=glCreateProgram(); glShaderBinary(1,&vs,0,vp,vl); glShaderBinary(1,&fs,0,fp,fl); glAttachShader(gpPg,vs); glAttachShader(gpPg,fs); glLinkProgram(gpPg);
+  GLint ok=0; glGetProgramiv(gpPg,GL_LINK_STATUS,&ok); GLint nu=0; glGetProgramiv(gpPg,GL_ACTIVE_UNIFORMS,&nu); wzlog("gpu: link ok=%d err=0x%x uniforms=%d",(int)ok,(unsigned)glGetError(),(int)nu);
+  for(int i=0;i<nu&&i<16;i++){ char nm[64]; GLsizei l=0; GLint sz=0; GLenum ty=0; glGetActiveUniform(gpPg,i,64,&l,&sz,&ty,nm); GLint loc=glGetUniformLocation(gpPg,nm); wzlog("gpu: uniform %s type=0x%x size=%d loc=%d",nm,(unsigned)ty,(int)sz,(int)loc); if(ty==0x8B5E)gpSam=loc; }
+  gpVP=glGetUniformLocation(gpPg,"uVPMatrix"); gpM=glGetUniformLocation(gpPg,"uMMatrix"); gpaP=glGetAttribLocation(gpPg,"aPosition"); gpaT=glGetAttribLocation(gpPg,"aTextureCoord");
+  wzlog("gpu: VP%d M%d sampler%d aP%d aT%d",(int)gpVP,(int)gpM,(int)gpSam,(int)gpaP,(int)gpaT); if(gpVP<0||gpaP<0||gpaT<0)return false;
+  static std::vector<uint32_t> pal(512*512); for(int i=0;i<512*512;i++){ int r6=(i>>12)&63,g6=(i>>6)&63,b6=i&63; pal[i]=0xFF000000u|((uint32_t)(b6*255/63)<<16)|((uint32_t)(g6*255/63)<<8)|(uint32_t)(r6*255/63); }
+  glGenTextures(1,&gpPal); glBindTexture(GL_TEXTURE_2D,gpPal); glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,512,512,0,GL_RGBA,GL_UNSIGNED_BYTE,pal.data());
+  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+  glGenTextures(1,&gpSky); glBindTexture(GL_TEXTURE_2D,gpSky); glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,SKW,SKH,0,GL_RGBA,GL_UNSIGNED_BYTE,NULL);
+  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+  wzlog("gpu: init done err=0x%x depthBits=%d",(unsigned)glGetError(),gDepthBits); return true;
+}
+static void gpuDraw(const std::vector<float>&v,const float*vp){
+  static const float ID[16]={1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1}; glUniformMatrix4fv(gpVP,1,GL_FALSE,vp); if(gpM>=0)glUniformMatrix4fv(gpM,1,GL_FALSE,ID);
+  size_t nv=v.size()/5; for(size_t o=0;o<nv;o+=60000){ size_t c=std::min<size_t>(60000,nv-o); c-=c%3; if(!c)break; glVertexAttribPointer(gpaP,3,GL_FLOAT,GL_FALSE,20,&v[o*5]); glVertexAttribPointer(gpaT,2,GL_FLOAT,GL_FALSE,20,&v[o*5+3]); glDrawArrays(GL_TRIANGLES,0,(GLsizei)c); } }
+static void gpuVP(const Renderer&r,float n,float f,float*o){ float P[16]={0},V[16]={0}; P[0]=2.f*r.focal/r.W; P[5]=2.f*r.focal/r.H; P[10]=(f+n)/(n-f); P[11]=-1; P[14]=2*f*n/(n-f);
+  V[0]=r.rx;V[4]=0;V[8]=r.rz;V[12]=-(r.rx*r.cam.x+r.rz*r.cam.z); V[1]=r.ux;V[5]=r.uy;V[9]=r.uz;V[13]=-(r.ux*r.cam.x+r.uy*r.cam.y+r.uz*r.cam.z); V[2]=-r.fx;V[6]=-r.fy;V[10]=-r.fz;V[14]=r.fx*r.cam.x+r.fy*r.cam.y+r.fz*r.cam.z; V[15]=1; m4mul(P,V,o); }
+static void gpuFrame(Game&g,int frame){
+  Renderer&r=g.r; for(int i=0;i<8;i++)glDisableVertexAttribArray(i); glViewport(0,0,OUT_W,OUT_H); glDisable(GL_BLEND); glDisable(GL_CULL_FACE); glDepthMask(GL_TRUE); glClearColor(0.45f,0.55f,0.75f,1.f); glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+  glUseProgram(gpPg); glActiveTexture(GL_TEXTURE0); if(gpSam>=0)glUniform1i(gpSam,0); glEnableVertexAttribArray(gpaP); glEnableVertexAttribArray(gpaT);
+  size_t nw=r.gv[0].size()/15,nvm=r.gv[1].size()/15;
+  if(r.m&&r.W>0){ // السماء: نسيج صغير بتدرّج السماء الحقيقي (skyAt) على مستطيل كامل الشاشة
+    static uint8_t sk[SKW*SKH*4]; float th=tanf(r.cam.fov*0.5f),asp=(float)r.W/r.H; auto c8=[](float v){int i=(int)(v*255.f+0.5f);return (uint8_t)(i<0?0:i>255?255:i);};
+    for(int j=0;j<SKH;j++)for(int i=0;i<SKW;i++){ float R,G,B,s; r.skyAt(((i+0.5f)/SKW*2.f-1.f)*th*asp,(1.f-(j+0.5f)/SKH*2.f)*th,R,G,B,s); uint8_t*q=&sk[(j*SKW+i)*4]; q[0]=c8(R);q[1]=c8(G);q[2]=c8(B);q[3]=255; }
+    glBindTexture(GL_TEXTURE_2D,gpSky); glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,SKW,SKH,0,GL_RGBA,GL_UNSIGNED_BYTE,sk);
+    static const float ID[16]={1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1}; static const float Q[]={-1,-1,0.f,0,1, 1,-1,0.f,1,1, 1,1,0.f,1,0, -1,-1,0.f,0,1, 1,1,0.f,1,0, -1,1,0.f,0,0};
+    glDisable(GL_DEPTH_TEST); std::vector<float> qv(Q,Q+30); gpuDraw(qv,ID); }
+  glBindTexture(GL_TEXTURE_2D,gpPal);
+  if(gDepthBits>0){ glEnable(GL_DEPTH_TEST); glDepthFunc(GL_LEQUAL); } else glDisable(GL_DEPTH_TEST);
+  float vp[16];
+  if(nw){ gpuVP(r,0.15f,std::max(r.fogF*1.5f,160.f),vp); gpuDraw(r.gv[0],vp); }
+  if(nvm){ if(gDepthBits>0)glClear(GL_DEPTH_BUFFER_BIT); gpuVP(r,0.04f,12.f,vp); gpuDraw(r.gv[1],vp); }
+  if(frame<=3||frame%300==0)wzlog("gpuFrame %d world tris %d viewmodel tris %d err=0x%x",frame,(int)nw,(int)nvm,(unsigned)glGetError());
+  for(int i=0;i<8;i++)glDisableVertexAttribArray(i); r.gv[0].clear(); r.gv[1].clear();
+}
+#endif
 
 // ===== اختبار ثلاثي الأبعاد على الـGPU: مكعب يدور بشيدر khronos/earth الجاهز (إضاءة + نسيج) — للتأكد من العرض والـ3D بدون يد/لعبة =====
 static void m4mul(const float*a,const float*b,float*o){ float r[16]; for(int c=0;c<4;c++)for(int rI=0;rI<4;rI++){ float v=0; for(int k=0;k<4;k++)v+=a[k*4+rI]*b[c*4+k]; r[c*4+rI]=v; } memcpy(o,r,sizeof(r)); }
@@ -142,6 +195,13 @@ int main(int,char**){
     int uid3=0; wzlog("v3: calling GetInitialUser"); int g3=sceUserServiceGetInitialUser(&uid3); wzlog("v3: GetInitialUser ret=0x%x uid=%d",(unsigned)g3,uid3);
     wzlog("v3: calling scePadInit"); int p3=scePadInit(); wzlog("v3: scePadInit ret=0x%x",(unsigned)p3); padH=scePadOpen(uid3,0,0,NULL); wzlog("v3: scePadOpen=%d",padH); cubeLoop(true); }
 #endif
+#if WZ_VARIANT==4
+  int uid=0; { wzlog("variant 4: GPU-rendered scene (privileged)"); OrbisUserServiceInitializeParams up4; up4.priority=ORBIS_KERNEL_PRIO_FIFO_LOWEST;
+    int m1=sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_USER_SERVICE); int m2=sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_PAD); wzlog("v4: internal modules ret=0x%x 0x%x",(unsigned)m1,(unsigned)m2);
+    int u4=sceUserServiceInitialize(&up4); wzlog("v4: userservice init ret=0x%x",(unsigned)u4); int g4=sceUserServiceGetInitialUser(&uid); wzlog("v4: GetInitialUser ret=0x%x uid=%d",(unsigned)g4,uid);
+    int p4=scePadInit(); wzlog("v4: scePadInit ret=0x%x",(unsigned)p4); padH=scePadOpen(uid,0,0,NULL); wzlog("v4: scePadOpen=%d",padH);
+    if(!gpuInit()){ wzlog("gpuInit FAILED"); for(;;)sceKernelUsleep(100000); } }
+#else
 #ifdef WZ_SKIP_USINIT
   wzlog("skip sceUserServiceInitialize (Piglet/privileged may have done it)");
 #else
@@ -154,7 +214,12 @@ int main(int,char**){
 #endif
   wzlog("calling scePadInit"); int pr=scePadInit(); wzlog("scePadInit ret=0x%x",(unsigned)pr);
   padH=scePadOpen(uid,0,0,NULL); wzlog("pad open %d",padH);
-  static Game g; wzlog("game constructed"); g.r.startThreads(WZ_THREADS); wzlog("threads started"); g.menu=1; g.init(WZ_IW,WZ_IH); wzlog("game init"); static std::vector<uint32_t> upb(WZ_IW*WZ_IH); wzlog("upload buf ok");
+#endif
+  static Game g; wzlog("game constructed"); g.r.startThreads(WZ_THREADS); wzlog("threads started"); g.menu=1; g.init(WZ_IW,WZ_IH);
+#if WZ_VARIANT==4
+  g.r.gpu=true;
+#endif
+ wzlog("game init"); static std::vector<uint32_t> upb(WZ_IW*WZ_IH); wzlog("upload buf ok");
   wzlog("entering loop");
   uint32_t last=ticks(); bool dbg=false; uint32_t prevB=0; float acc=0,fpsT=0,fps=30; int fpsN=0; float smx=0,smy=0; int frame=0;
   for(;;){
@@ -178,15 +243,21 @@ int main(int,char**){
     if(g.menu||g.paused){ if(B(ORBIS_PAD_BUTTON_RIGHT))in.mx=1; else if(B(ORBIS_PAD_BUTTON_LEFT))in.mx=-1; if(g.menu)in.my=B(ORBIS_PAD_BUTTON_UP)?1.f:B(ORBIS_PAD_BUTTON_DOWN)?-1.f:0.f;
       if((edge&ORBIS_PAD_BUTTON_R1)&&(g.menu==1||g.paused))g.swapSticks=!g.swapSticks; }
     if(edge&ORBIS_PAD_BUTTON_TOUCH_PAD)dbg=!dbg;
+#if WZ_VARIANT==4
+    memset(g.r.fb.data(),0,g.r.fb.size()*4); // طبقة HUD شفافة
+#endif
     acc+=dt; int steps=0; while(acc>=1.f/60.f&&steps<4){ g.update(1.f/60.f,in); acc-=1.f/60.f; steps++; } if(steps==4)acc=0;
     if(frame==1)wzlog("f1 updated"); if(g.menu)g.renderMenu(); else g.render(); if(frame==1)wzlog("f1 rendered");
     if(dbg){ char b[96]; snprintf(b,96,"FPS %d RES %d SHADERS %d",(int)fps,g.r.W,gShN); g.text(40,40,b,2,0xFFFFFF00);
       { int pg=(frame/120)%std::max(1,(gShN+11)/12),k=0; for(NikShader*e=scePrecompiledShaderEntries;e->ident;++e,++k){ if(k<pg*12||k>=pg*12+12)continue; snprintf(b,96,"%d %.40s",k,e->ident); g.text(40,110+(k-pg*12)*16,b,1,0xFF66FFCC); } }
       snprintf(b,96,"LS %d %d RS %d %d L2 %d R2 %d",pd.leftStick.x,pd.leftStick.y,pd.rightStick.x,pd.rightStick.y,pd.analogButtons.l2,pd.analogButtons.r2); g.text(40,60,b,2,0xFFFFFF00);
       snprintf(b,96,"BTN %05X PAD %d",(unsigned)pd.buttons,padH); g.text(40,80,b,2,0xFFFFFF00); }
-    g.r.flush(); { const uint32_t*fbp=g.r.fb.data(); uint32_t*ub=upb.data(); int n=WZ_IW*WZ_IH; std::atomic<int> nx(0); g.r.pool.exec([&]{ for(;;){ int i0=nx.fetch_add(65536); if(i0>=n)break; int i1=std::min(n,i0+65536); for(int i=i0;i<i1;i++){ uint32_t p=fbp[i]; ub[i]=(p&0x0000FF00u)|((p>>16)&0xFFu)|((p&0xFFu)<<16)|0xFF000000u; } } }); }
+    g.r.flush(); { const uint32_t*fbp=g.r.fb.data(); uint32_t*ub=upb.data(); int n=WZ_IW*WZ_IH; std::atomic<int> nx(0); g.r.pool.exec([&]{ for(;;){ int i0=nx.fetch_add(65536); if(i0>=n)break; int i1=std::min(n,i0+65536); for(int i=i0;i<i1;i++){ uint32_t p=fbp[i]; ub[i]=(p&0xFF00FF00u)|((p>>16)&0xFFu)|((p&0xFFu)<<16)|(WZ_VARIANT==4?0u:0xFF000000u); } } }); }
     if(frame==1)wzlog("f1 converted");
     static std::vector<uint32_t> tst; if(tst.empty()){ static const uint32_t cb[8]={0xFF0000FFu,0xFF00FF00u,0xFFFF0000u,0xFFFFFFFFu,0xFF00FFFFu,0xFFFF00FFu,0xFFFFFF00u,0xFF808080u}; tst.resize(WZ_IW*WZ_IH); for(int y=0;y<WZ_IH;y++)for(int x=0;x<WZ_IW;x++)tst[y*WZ_IW+x]=(y<WZ_IH/8)?(0xFF000000u|(uint32_t)(x*255/WZ_IW)*0x010101u):cb[x*8/WZ_IW]; }
+#if WZ_VARIANT==4
+    gpuFrame(g,frame); glPresent(upb.data(),true); if(frame<=3||frame%600==0)wzlog("frame %d presented fps=%d",frame,(int)fps); { uint32_t el=ticks()-now; if(el<16)sceKernelUsleep((16-el)*1000); } continue;
+#endif
     bool testMode=(frame<=180); if(frame==1)wzlog("test pattern ON"); if(frame==181)wzlog("test pattern OFF -> game");
     glPresent(testMode?tst.data():upb.data()); if(frame<=3||frame==60||(frame>180&&frame<=184)||frame%600==0)wzlog("frame %d presented fps=%d",frame,(int)fps);
     { uint32_t el=ticks()-now; if(el<33)sceKernelUsleep((33-el)*1000); } // سقف 30fps

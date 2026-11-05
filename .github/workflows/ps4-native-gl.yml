@@ -44,15 +44,15 @@ jobs:
           LX=$(find /tmp/oo -name link.x | head -1)
           echo "OO_PS4_TOOLCHAIN=$(dirname "$LX")" >> "$GITHUB_ENV"
           chmod -R +x "$(dirname "$LX")/bin" || true
-      - name: Build experimental GPU PKGs (v1 privileged cube test, v2 normal eboot, v3 privileged + user service + pad)
+      - name: Build experimental GPU PKGs (v1 privileged cube test, v2 normal eboot, v3 privileged + user service + pad, v4 GPU-rendered game scene)
         run: |
           S="$OO_PS4_TOOLCHAIN/samples"; BUILD=${{ github.run_number }}; VER=$(printf "01.%02d" $((BUILD % 100)))
           if [ ! -d "$S/piglet" ]; then
             git clone -q --depth 1 https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain /tmp/oo-src
             cp -r /tmp/oo-src/samples/piglet "$S/piglet"
           fi
-          for V in 1 2 3; do
-            N=wzGL$V; TH=1; XF="-DWZ_SKIP_USINIT -DWZ_IW=960 -DWZ_IH=540"; if [ "$V" = "2" ]; then TH=6; XF=""; fi; if [ "$V" = "3" ]; then XF="-DWZ_IW=960 -DWZ_IH=540"; fi
+          for V in 1 2 3 4; do
+            N=wzGL$V; TH=1; XF="-DWZ_SKIP_USINIT -DWZ_IW=960 -DWZ_IH=540"; if [ "$V" = "2" ]; then TH=6; XF=""; fi; if [ "$V" = "3" ]; then XF="-DWZ_IW=960 -DWZ_IH=540"; fi; if [ "$V" = "4" ]; then XF="-DWZ_IW=1920 -DWZ_IH=1080"; fi
             rm -rf "$S/$N"; cp -r "$S/piglet" "$S/$N"
             rm -rf "$S/$N/piglet"; mkdir -p "$S/$N/$N" "$S/$N/gen"
             cp native/src/*.h "$S/$N/$N/"; cp native/src/main_ps4_gl.cpp "$S/$N/$N/main.cpp"

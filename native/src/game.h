@@ -650,8 +650,8 @@ struct Game{
   void px(int x,int y,uint32_t c){ if(x>=0&&y>=0&&x<r.W&&y<r.H)r.fb[y*r.W+x]=c; }
   void blendSpan(int y,int x0,int x1,uint32_t c,float a){ if(y<0||y>=r.H)return; x0=std::max(0,x0); x1=std::min(r.W,x1); if(x1<=x0||a<=0)return; uint32_t*row=&r.fb[(size_t)y*r.W];
     if(a>=0.999f){ std::fill(row+x0,row+x1,c|0xFF000000u); return; }
-    uint32_t ia=(uint32_t)(a*256.f+0.5f),na=256-ia,crb=(c&0xFF00FFu)*ia,cg=(c&0x00FF00u)*ia;
-    for(int i=x0;i<x1;i++){ uint32_t o=row[i]; uint32_t rb=(((o&0xFF00FFu)*na+crb)>>8)&0xFF00FFu; uint32_t g=(((o&0x00FF00u)*na+cg)>>8)&0x00FF00u; row[i]=0xFF000000u|rb|g; } }
+    uint32_t ia=(uint32_t)(a*256.f+0.5f),na=256-ia,crb=(c&0xFF00FFu)*ia,cg=(c&0x00FF00u)*ia,ca=255u*ia;
+    for(int i=x0;i<x1;i++){ uint32_t o=row[i]; uint32_t rb=(((o&0xFF00FFu)*na+crb)>>8)&0xFF00FFu; uint32_t g=(((o&0x00FF00u)*na+cg)>>8)&0x00FF00u; uint32_t aa=((((o>>24)*na)+ca)>>8)&0xFFu; row[i]=(aa<<24)|rb|g; } } // ألفا مُتراكمة (تُستعمل في وضع GPU؛ في الـCPU تبقى 255)
   void rect(int x,int y,int w2,int h2,uint32_t c,float a=1){ r.flush(); for(int j=std::max(0,y);j<std::min(r.H,y+h2);j++)blendSpan(j,x,x+w2,c,a); }
   // خط حقيقي: sc*9 = حجم الخط بالبكسل ؛ يدعم العربية
   static int fontEm(int sc){ return std::max(8,sc*9); }
@@ -664,7 +664,7 @@ struct Game{
           for(int j=0;j<dh;j++){ int py=dy+j; if(py<0||py>=r.H)continue; float fy=(j+0.5f)/k-0.5f; int y0=(int)floorf(fy); float ty=fy-y0; int y1=std::min(g->h-1,y0+1); y0=std::max(0,y0);
             for(int i=0;i<dw;i++){ int px=dx+i; if(px<0||px>=r.W)continue; float fx=(i+0.5f)/k-0.5f; int x0=(int)floorf(fx); float tx=fx-x0; int x1=std::min(g->w-1,x0+1); x0=std::max(0,x0);
               float a=(src[y0*g->w+x0]*(1-tx)+src[y0*g->w+x1]*tx)*(1-ty)+(src[y1*g->w+x0]*(1-tx)+src[y1*g->w+x1]*tx)*ty; a/=255.f; if(a<0.04f)continue;
-              uint32_t o=r.fb[py*r.W+px]; auto m=[&](int sh){int A=(o>>sh)&255,B=(col>>sh)&255;return (uint32_t)(A+(B-A)*a)<<sh;}; r.fb[py*r.W+px]=0xFF000000u|m(16)|m(8)|m(0); } } }
+              uint32_t o=r.fb[py*r.W+px]; auto m=[&](int sh){int A=(o>>sh)&255,B=(col>>sh)&255;return (uint32_t)(A+(B-A)*a)<<sh;}; { int oa=(o>>24)&255; r.fb[py*r.W+px]=((uint32_t)(oa+(255-oa)*a)<<24)|m(16)|m(8)|m(0); } } } }
         cx+=(int)(g->adv16/16.0f*k+0.5f); } line.clear(); };
     for(;*p;p++){ if(*p=='\n'){ flush(); ly+=em*3/2; } else line+=*p; } flush(); }
   void textC(int cx,int y,const char*s,int sc,uint32_t col){text(cx-tw(s,sc)/2,y,s,sc,col);}
