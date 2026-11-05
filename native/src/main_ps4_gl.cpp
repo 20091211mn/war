@@ -49,6 +49,11 @@ static GLuint gTex=0,gProg=0; static GLint uMV=-1,uPR=-1,uTS=-1,uSam=-1,uOp=-1,a
 static int gShN=0; // عدد الشيدرات الجاهزة في النظام (تشخيص: لنعرف هل يتوفّر شيدر ثلاثي الأبعاد بألوان رؤوس)
 static void dumpShaders(){ FILE*fp=fopen("/data/wz_shaders.txt","w"); int n=0; for(NikShader*e=scePrecompiledShaderEntries;e->ident;++e){ n++; if(fp)fprintf(fp,"%s %llu\n",e->ident,(unsigned long long)e->len); } if(fp)fclose(fp); gShN=n; wzlog("precompiled shaders: %d (list in /data/wz_shaders.txt)",n); }
 static bool fetchSh(const char*n,unsigned char*&p,uint64_t&l){ for(NikShader*e=scePrecompiledShaderEntries;e->ident;++e) if(!strcmp(n,e->ident)){p=e->code;l=e->len;return true;} return false; }
+static void probeProg(const char*vn,const char*fn){ unsigned char*vp,*fp; uint64_t vl,fl; if(!fetchSh(vn,vp,vl)||!fetchSh(fn,fp,fl)){wzlog("probe %s+%s: missing",vn,fn);return;}
+  wzlog("probe %s + %s: linking",vn,fn); GLuint vs=glCreateShader(GL_VERTEX_SHADER),fs=glCreateShader(GL_FRAGMENT_SHADER),pg=glCreateProgram(); glShaderBinary(1,&vs,0,vp,vl); glShaderBinary(1,&fs,0,fp,fl); glAttachShader(pg,vs); glAttachShader(pg,fs); glLinkProgram(pg);
+  GLint na=0,nu=0; glGetProgramiv(pg,GL_ACTIVE_ATTRIBUTES,&na); glGetProgramiv(pg,GL_ACTIVE_UNIFORMS,&nu); wzlog("  err=0x%x attrs=%d uniforms=%d",(unsigned)glGetError(),na,nu);
+  for(int i=0;i<na&&i<16;i++){ char nm[64]; GLsizei l=0; GLint sz=0; GLenum ty=0; glGetActiveAttrib(pg,i,64,&l,&sz,&ty,nm); wzlog("  attr %d: %s type=0x%x size=%d loc=%d",i,nm,(unsigned)ty,sz,glGetAttribLocation(pg,nm)); }
+  for(int i=0;i<nu&&i<16;i++){ char nm[64]; GLsizei l=0; GLint sz=0; GLenum ty=0; glGetActiveUniform(pg,i,64,&l,&sz,&ty,nm); wzlog("  uniform %d: %s type=0x%x size=%d",i,nm,(unsigned)ty,sz); } }
 static bool glInit(){
   wzlog("glInit begin"); int mret=0; const char*rw=sceKernelGetFsSandboxRandomWord(); wzlog("sandbox word: %s",rw?rw:"(null)"); std::string pre=std::string("/")+(rw?rw:"")+"/common/lib/";
   wzlog("loading piglet: %s",(pre+"libScePigletv2VSH.sprx").c_str()); int pg=(int)sceKernelLoadStartModule((pre+"libScePigletv2VSH.sprx").c_str(),0,NULL,0,NULL,&mret); if(pg<0){wzlog("piglet load fail 0x%x",pg);return false;}
@@ -84,6 +89,8 @@ static bool glInit(){
   uSam=glGetUniformLocation(gProg,"s_sampler"); uOp=glGetUniformLocation(gProg,"u_opacity"); aV=glGetAttribLocation(gProg,"a_vertex");
   if(uMV<0||uPR<0||uTS<0||uSam<0||uOp<0||aV<0){wzlog("uniform lookup fail");return false;}
   wzlog("piglet ok");
+  probeProg("swordfish/vpBasic.vert","swordfish/fpSolidColor.frag"); probeProg("swordfish/vpBasic.vert","swordfish/fpAlphaColor.frag"); probeProg("trilithium/vpBasic.vert","trilithium/fpTexture.frag"); probeProg("khronos/earth.vert","khronos/earth.frag"); probeProg("polymer/orbis_highlight.vert","polymer/orbis_highlight.frag");
+  wzlog("probe done");
   return true;
 }
 static void glPresent(const uint32_t*up){
@@ -109,7 +116,11 @@ int main(int,char**){
 #else
   OrbisUserServiceInitializeParams up; up.priority=ORBIS_KERNEL_PRIO_FIFO_LOWEST; wzlog("calling userservice init"); int ur=sceUserServiceInitialize(&up); wzlog("userservice init ret=0x%x",(unsigned)ur);
 #endif
+#ifdef WZ_SKIP_USINIT
+  int uid=0xFF; wzlog("privileged: skip GetInitialUser (it crashed: CE-34878-0), use SYSTEM user id 0xFF");
+#else
   int uid=0; wzlog("calling get initial user"); int gr=sceUserServiceGetInitialUser(&uid); wzlog("get initial user ret=0x%x uid=%d",(unsigned)gr,uid);
+#endif
   wzlog("calling scePadInit"); int pr=scePadInit(); wzlog("scePadInit ret=0x%x",(unsigned)pr);
   padH=scePadOpen(uid,0,0,NULL); wzlog("pad open %d",padH);
   static Game g; wzlog("game constructed"); g.r.startThreads(WZ_THREADS); wzlog("threads started"); g.menu=1; g.init(WZ_IW,WZ_IH); wzlog("game init"); static std::vector<uint32_t> upb(WZ_IW*WZ_IH); wzlog("upload buf ok");
