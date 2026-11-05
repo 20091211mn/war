@@ -354,7 +354,7 @@ export class Game {
       }
       ends.push([r2(ox + dx * best), r2(oy + dy * best), r2(oz + dz * best), hitP ? 1 : (hitV || hitD) ? 2 : 0]);
     }
-    if (!s.muted) p.reveal = now + 1500;
+    if (!s.muted) p.reveal = now + 5000; // يظهر على الرادار 5 ث بعد الإطلاق (أقل من 10 ث)
     this.bcastExcept(p, { t: 'shot', id: p.id, w: s.id, o: [r2(ox), r2(oy), r2(oz)], e: ends, s: s.muted ? 1 : 0 });
     for (const [q, e] of dmg) this.hurt(q, e.d, p, e.h, s.id, p.x, p.z);
     for (const [v, list] of vd) for (const [part, d] of list) this.shootVeh(v, part, d, p);
@@ -483,12 +483,12 @@ export class Game {
   useVeh(p) {
     if (this.phase !== 'playing' || !p.alive) return;
     if (p.veh >= 0) { this.exitVeh(p); return; }
-    let best = null, bd = 2.3;
+    let best = null, bd = 2.8;
     for (const v of this.vehs) {
       if (v.dead) continue;
       const [lx, lz] = w2l(v, p.x, p.z);
       const P = vp(v), d = Math.hypot(Math.max(0, Math.abs(lx) - P.hw), Math.max(0, Math.abs(lz) - P.hl));
-      if (d < bd && p.y < 1.5 && (v.team < 0 || v.team === p.team)) { bd = d; best = { v, lx, lz }; }
+      if (d < bd && p.y < 2.3 && (v.team < 0 || v.team === p.team)) { bd = d; best = { v, lx, lz }; }
     }
     if (!best) return;
     const { v, lx, lz } = best;

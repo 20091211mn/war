@@ -111,7 +111,7 @@ void Game::aclUpdate(float dt,const Input&in){
       else { p.wpn=weaponIdx(m["p"].str("carbine")); } }
     else if(t=="snap"&&A.inMatch){
       g_aclTime=m["tl"].i(); score[0]=m["sc"][0].i(); score[1]=m["sc"][1].i();
-      for(size_t i=0;i<m["ps"].size();i++){ const J&q=m["ps"][i]; int id=q[0].i(); int k=entFor(*this,id); Ent&p=e[k]; int f=q[6].i(); bool al=f&4; p.gone=false;
+      for(size_t i=0;i<m["ps"].size();i++){ const J&q=m["ps"][i]; int id=q[0].i(); int k=entFor(*this,id); Ent&p=e[k]; int f=q[6].i(); bool al=f&4; p.gone=false; if(f&16)p.revealT=5.f;
         const ACl::LP*lp=lpOf(*this,id); if(lp&&id!=A.myId){ p.team=lp->tm?1:0; p.wpn=weaponIdx(q[8].i()==1?lp->s:lp->p); }
         if(id==A.myId){ if(q.size()>13)p.c4Left=q[13].i(); int hp=q[7].i(); if(hp<p.hp&&al)dmgFlash=0.5f; p.hp=(float)hp; if(!al&&p.alive){ p.alive=false; p.deaths++; p.respawn=3; } if(al&&!p.alive&&A.epoch>0){ p.alive=true; } meI=k; }
         else { bool first=!p.alive&&al; p.alive=al; p.hp=(float)q[7].i(); p.tx=q[1].num();p.ty=q[2].num();p.tz=q[3].num();p.tyaw=q[4].num(); p.pitch=q[5].num(); p.crouch=f&1; p.moving=f&8; p.sprint=f&32; if((f&16)&&p.team!=e[meI<(int)e.size()?meI:0].team)p.reveal=0.45f; p.phase+=p.moving?dt*8:0; if(first){p.b.x=p.tx;p.b.y=p.ty;p.b.z=p.tz;p.yaw=p.tyaw;} }
@@ -165,7 +165,7 @@ void Game::aclUpdate(float dt,const Input&in){
   for(int i=0;i<(int)e.size();i++){ Ent&p=e[i]; if(i==meI){ if(p.alive&&!over)updatePlayer(dt,use); continue; } if(p.gone)continue;
     float k=std::min<float>(1.f,dt*16.f); p.b.x+=(p.tx-p.b.x)*k;p.b.y+=(p.ty-p.b.y)*k;p.b.z+=(p.tz-p.b.z)*k; float dy=p.tyaw-p.yaw; while(dy>3.14159f)dy-=6.28318f; while(dy<-3.14159f)dy+=6.28318f; p.yaw+=dy*k; if(p.flash>0)p.flash-=dt; if(p.moving)p.phase+=dt*7; }
   // ---- الشاص (ملتزم ببروتوكول الخادم: use / v / seat / exit) ----
-  { nearVeh=false; if(me.alive&&drive<0&&dn.on==false){ for(auto&v:vh){ if(v.dead)continue; float lx,lz; VH::w2l(v,me.b.x,me.b.z,lx,lz); float dd=hypotf(std::max<float>(0.f,fabsf(lx)-VH::vp(v).hw),std::max<float>(0.f,fabsf(lz)-VH::vp(v).hl)); if(dd<2.3f&&me.b.y<1.5f)nearVeh=true; } }
+  { nearVeh=false; if(me.alive&&drive<0&&dn.on==false){ for(auto&v:vh){ if(v.dead)continue; float lx,lz; VH::w2l(v,me.b.x,me.b.z,lx,lz); float dd=hypotf(std::max<float>(0.f,fabsf(lx)-VH::vp(v).hw),std::max<float>(0.f,fabsf(lz)-VH::vp(v).hl)); if(dd<2.8f&&me.b.y<2.3f)nearVeh=true; } }
     bool u=(in.use||(in.tri&&(nearVeh||drive>=0)))&&!paused; if(u&&!A.pu&&me.alive&&!over)A.ws.send("{\"t\":\"use\"}"); A.pu=u;
     updateDrone3(dt,in,use); if(dn.on)A.stT=0.05f;
     if(in.grenade&&!A.pg&&glCnt>0&&me.alive&&drive<0&&!dn.on){ glCnt--; aclGrenade(); } A.pg=in.grenade;

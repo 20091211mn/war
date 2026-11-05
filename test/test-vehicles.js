@@ -43,6 +43,8 @@ ok(last(A, 'seat') && last(A, 'seat').s === 0, 'وصلت رسالة seat');
 // الراكب الثاني من نفس الفريق
 const Q = C.p; Q.x = v.x + 2.2; Q.z = v.z + 1.5; Q.y = 0; send(C, { t: 'use' });
 ok(Q.veh === v.id && Q.seat >= 1, `زميل ركب (مقعد ${Q.seat})`);
+// الراكب يطلق النار من مقعده (رشاش الصندوق)
+{ const before = A.log.filter(m => m.t === 'shot').length; Q.credit = [2, 2]; send(C, { t: 'shoot', w: 0, d: [[0, 0.05, -1]] }); ok(A.log.filter(m => m.t === 'shot').length > before, 'راكب الصندوق يُطلق النار ويراها الآخرون'); }
 // خصم لا يستطيع الركوب
 const E = B.p; E.x = v.x - 2.2; E.z = v.z - 1; E.y = 0; send(B, { t: 'use' });
 ok(E.veh === -1, 'الخصم لا يركب مركبة فريق آخر');
