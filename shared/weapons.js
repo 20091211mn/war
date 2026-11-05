@@ -48,6 +48,9 @@ export const WEAPONS = {
   magnum: { name: 'ماغنوم .357', type: 'secondary', kind: 'magnum', dmg: 58, head: 2.0, rpm: 150, auto: false, pellets: 1,
     mag: 6, mags: 5, reload: 2.7, hip: 0.040, ads: 0.0040, recoilV: 0.0300, recoilH: 0.0050,
     range: [25, 65], minMul: 0.6, move: 1.05, zoom: 1.2, optics: ['iron', 'red'] },
+  rpg: { name: 'قاذف RPG-7', type: 'primary', kind: 'launcher', explosive: true, dmg: 140, head: 1.0, rpm: 20, auto: false, pellets: 1,
+    mag: 1, mags: 4, reload: 3.8, hip: 0.030, ads: 0.0030, recoilV: 0.050, recoilH: 0.010,
+    range: [250, 300], minMul: 1.0, move: 0.84, zoom: 1.5, optics: ['iron'] },
 };
 export const PRIMARIES = Object.keys(WEAPONS).filter(k => WEAPONS[k].type === 'primary');
 export const SECONDARIES = Object.keys(WEAPONS).filter(k => WEAPONS[k].type === 'secondary');
@@ -72,7 +75,7 @@ export function computeStats(id, att) {
     id, name: w.name, type: w.type, kind: w.kind, dmg: w.dmg, head: w.head, rpm: w.rpm, auto: w.auto,
     pellets: w.pellets, mag: w.mag, reload: w.reload, hip: w.hip, ads: w.ads,
     recoilV: w.recoilV, recoilH: w.recoilH, range: [w.range[0], w.range[1]], minMul: w.minMul,
-    move: w.move, zoom: w.zoom, muted: false, comp: false, att: a,
+    move: w.move, zoom: w.zoom, explosive: !!w.explosive, muted: false, comp: false, att: a,
   };
   const oz = OPTICS[a.optic].zoom;
   s.zoom = oz > 0 ? oz : w.zoom;

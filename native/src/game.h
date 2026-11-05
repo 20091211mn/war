@@ -8,6 +8,7 @@
 #include "sfx.h"
 #include "reload.h"
 #include "awm_data.h"
+#include "gunmodels.h"
 #include "ws.h"
 #include <string>
 #include <cstdlib>
@@ -176,6 +177,11 @@ struct Game{
     }
     for(auto&q:puffs){ q.t-=dt; q.y+=q.vy*dt; q.sz+=dt*0.8f; } puffs.erase(std::remove_if(puffs.begin(),puffs.end(),[](Puff&q){return q.t<=0;}),puffs.end());
   }
+  static bool isExpl(int w){ return !strcmp(WEAPONS[w].id,"rpg"); }
+  void explosionAt(float gx,float gy,float gz,int by,float R,float pd,float vd){
+    for(int i=0;i<(int)e.size();i++){ if(!e[i].alive)continue; if(i!=by&&e[i].team==e[by].team)continue; float ex=e[i].b.x-gx,ey=e[i].b.y+0.9f-gy,ez=e[i].b.z-gz,dd=sqrtf(ex*ex+ey*ey+ez*ez); if(dd<R)hurt(i,by,pd*powf(1.f-dd/R,1.2f),false); }
+    for(auto&v:vh){ if(v.dead)continue; float ex=v.x-gx,ez=v.z-gz,dd=std::max(0.f,sqrtf(ex*ex+ez*ez)-1.6f); if(dd<R)hurtVeh(v,vd*powf(1.f-dd/R,1.1f),by); }
+    puffsBoom(gx,gz); for(int j=0;j<10;j++)puffs.push_back({gx+(frand()-0.5f)*2,gy+frand()*1.2f,gz+(frand()-0.5f)*2,1.2f+frand()*1.5f,0.7f+frand()*0.5f,0.9f+frand()*0.9f,j<5}); }
   void fire(int i){
     Ent&p=e[i]; const WeaponDef&d=WEAPONS[p.wpn]; if(!(i==meI&&role!=3&&wAtt[p.wpn&15].muz==1))p.revealT=5.f; // يظهر على رادار الخصم 5 ث بعد كل طلقة (إلا بالكاتم)
     float aDm=1.f,aHip=1.f,aRv=1.f,aRh=1.f,aVol=1.f; // تأثير الملحقات (كما في النسخة الأندرويد/الويب): كاتم/معوّض فوهة، مقبض، ليزر
@@ -197,8 +203,9 @@ struct Game{
       for(int j=0;j<(int)e.size();j++){ if(j==i||!e[j].alive||e[j].team==p.team)continue;
         RayHit h=rayPlayer(e[j].b.x,e[j].b.y,e[j].b.z,e[j].crouch,p.b.x,eyeY,p.b.z,dx,dy,dz,best); if(h.ok&&h.t<best){best=h.t;hv=j;hh=h.head;} }
       { VH::Veh*vhit=nullptr;int vpart=0; for(auto&v:vh){ if(v.dead)continue; if(v.driver>=0&&v.driver!=i&&e[v.driver].team==p.team)continue; int pt2; float tv=VH::rayVeh(v,p.b.x,eyeY,p.b.z,dx,dy,dz,best,pt2); if(tv<best){best=tv;vhit=&v;vpart=pt2;hv=-1;} }
-        if(vhit)damageVeh(*vhit,vpart,dmgAt(d,best)*aDm,i); }
-      if(hv>=0)hurt(hv,i,dmgAt(d,best)*aDm*(hh?d.head:1.f),hh);
+        if(vhit&&!isExpl(p.wpn))damageVeh(*vhit,vpart,dmgAt(d,best)*aDm,i); }
+      if(hv>=0&&!isExpl(p.wpn))hurt(hv,i,dmgAt(d,best)*aDm*(hh?d.head:1.f),hh);
+      if(isExpl(p.wpn)&&role!=2){ explosionAt(p.b.x+dx*best,eyeY+dy*best,p.b.z+dz*best,i,6.5f,d.dmg,340.f); }
       if(best<d.r1*1.39f)sparkAt(p.b.x+dx*best,eyeY+dy*best,p.b.z+dz*best,dx,dy,dz,hv>=0?0:5); if(tr.size()<64)tr.push_back({p.b.x+dx*0.5f,eyeY-0.12f,p.b.z+dz*0.5f,p.b.x+dx*best,eyeY+dy*best,p.b.z+dz*best,0.09f}); if(role==1&&trOut.size()<8)trOut.push_back({p.b.x+dx*0.5f,eyeY-0.12f,p.b.z+dz*0.5f,p.b.x+dx*best,eyeY+dy*best,p.b.z+dz*best});
     }
     if(role==3&&i==meI&&!dj.empty())aclShoot(dj);
@@ -495,20 +502,28 @@ struct Game{
   static void gcol(char c,float*o){ static const float T[7][3]={{.14f,.14f,.16f},{.34f,.35f,.38f},{.05f,.05f,.06f},{.42f,.27f,.13f},{.5f,.45f,.32f},{.9f,.5f,.1f},{.86f,.68f,.55f}}; int k=c=='d'?0:c=='g'?1:c=='b'?2:c=='w'?3:c=='t'?4:c=='o'?5:6; o[0]=T[k][0];o[1]=T[k][1];o[2]=T[k][2]; }
   // يرسم سلاحاً (من بيانات أندرويد) عند أصل عالمي مع دوران yaw/pitch
   struct GAtt{int optic=0,muz=0,under=0,mag=0;}; GAtt myAtt; GAtt wAtt[16];
-  static int optList(int w,int*o){ static const int L[8][4]={{0,1,2,3},{0,1,2,-1},{0,1,-1,-1},{3,4,-1,-1},{0,1,2,3},{1,2,3,4},{0,1,-1,-1},{0,1,-1,-1}}; int n=0; for(int i=0;i<4;i++)if(L[w&7][i]>=0)o[n++]=L[w&7][i]; return n; }
+  static int optList(int w,int*o){ static const int L[9][4]={{0,1,2,3},{0,1,2,-1},{0,1,-1,-1},{3,4,-1,-1},{0,1,2,3},{1,2,3,4},{0,1,-1,-1},{0,1,-1,-1},{0,-1,-1,-1}}; if(w<0||w>8)w=0; int n=0; for(int i=0;i<4;i++)if(L[w][i]>=0)o[n++]=L[w][i]; return n; }
   void applyWAtt(Ent&p){ if(role==3||p.wpn<0||p.wpn>=16)return; GAtt&a=wAtt[p.wpn]; if(&p==&e[meI]){ static const float Z[5]={0,1.5f,2.2f,3.6f,6.f}; optZ=Z[a.optic]; } p.magM=a.mag==1?1.5f:1.f; p.relM=a.mag==1?1.12f:a.mag==2?0.72f:1.f; if(p.ammo>cap(p))p.ammo=cap(p); }
   void cycleAtt(int what){ Ent&p=e[meI]; GAtt&a=wAtt[p.wpn&15]; if(what==0){ int o[4]; int n=optList(p.wpn,o); int k=0; for(int i=0;i<n;i++)if(o[i]==a.optic)k=i; a.optic=o[(k+1)%n]; } else if(what==1)a.muz=(a.muz+1)%3; else if(what==2)a.under=(a.under+1)%3; else a.mag=(a.mag+1)%3; applyWAtt(p); } // optic: 0 حديدي 1 نقطة 2 x2 3 x4 4 x8
   const RPose*rlp=nullptr; // حركة التعبئة الحالية للمجسّم الأول فقط
-  // موديل AWM (مثلثات بألوان رؤوس مولَّدة من awm.glb): مجموعات 0 أمامي 1 مخزن 2 ترباس 3 كعب
-  struct AwmV{float x,y,z,nx,ny,nz,r,g,b;}; std::vector<AwmV> awmV; std::vector<float> awmW; std::vector<char> awmDone;
-  void awmInit(){ if(!awmV.empty())return; awmV.resize(AWMD::NV); for(int i=0;i<AWMD::NV;i++){ AwmV&v=awmV[i]; v.x=AWMD::LO[0]+(AWMD::pos[i*3]+32768)/65535.f*AWMD::RNG[0]; v.y=AWMD::LO[1]+(AWMD::pos[i*3+1]+32768)/65535.f*AWMD::RNG[1]; v.z=AWMD::LO[2]+(AWMD::pos[i*3+2]+32768)/65535.f*AWMD::RNG[2]; v.nx=AWMD::nor[i*3]/127.f; v.ny=AWMD::nor[i*3+1]/127.f; v.nz=AWMD::nor[i*3+2]/127.f; v.r=AWMD::col[i*3]/255.f; v.g=AWMD::col[i*3+1]/255.f; v.b=AWMD::col[i*3+2]/255.f; } }
-  void drawAwmGroup(int grp,float ox,float oy,float oz,float yaw,float pitch,float roll,float dz,float k,bool lit,const float*tint){
-    awmInit(); int off=0; for(int i=0;i<grp;i++)off+=AWMD::GRP[i]; int cnt=AWMD::GRP[grp]; if(cnt<=0)return;
-    std::vector<float>&W=awmW; W.resize((size_t)AWMD::NV*6); std::vector<char>&done=awmDone; done.assign(AWMD::NV,0);
+  // موديلات الأسلحة الحقيقية (مثلثات بألوان رؤوس مولَّدة من GLB): مجموعات 0 أمامي 1 مخزن 2 متحرك 3 كعب
+  struct GMod{int nv;const int*grp;const float*lo;const float*rng;const int16_t*pos;const int8_t*nor;const uint8_t*col;const uint16_t*idx;};
+  static const GMod* gmodOf(int wi){
+    static const GMod AW={AWMD::NV,AWMD::GRP,AWMD::LO,AWMD::RNG,AWMD::pos,AWMD::nor,AWMD::col,AWMD::idx};
+    static const GMod RI={GMD::rifle_NV,GMD::rifle_GRP,GMD::rifle_LO,GMD::rifle_RNG,GMD::rifle_pos,GMD::rifle_nor,GMD::rifle_col,GMD::rifle_idx};
+    static const GMod DM={GMD::dmr_NV,GMD::dmr_GRP,GMD::dmr_LO,GMD::dmr_RNG,GMD::dmr_pos,GMD::dmr_nor,GMD::dmr_col,GMD::dmr_idx};
+    static const GMod LA={GMD::launcher_NV,GMD::launcher_GRP,GMD::launcher_LO,GMD::launcher_RNG,GMD::launcher_pos,GMD::launcher_nor,GMD::launcher_col,GMD::launcher_idx};
+    switch(wi){ case 0:return &RI; case 3:return &AW; case 5:return &DM; case 8:return &LA; default:return nullptr; } }
+  struct AwmV{float x,y,z,nx,ny,nz,r,g,b;}; std::vector<AwmV> gmV[9]; std::vector<float> awmW; std::vector<char> awmDone;
+  void drawAwmGroup(int wi,int grp,float ox,float oy,float oz,float yaw,float pitch,float roll,float dz,float k,bool lit,const float*tint){
+    const GMod*M=gmodOf(wi); if(!M)return; std::vector<AwmV>&awmV=gmV[wi%9];
+    if(awmV.empty()){ awmV.resize(M->nv); for(int i=0;i<M->nv;i++){ AwmV&v=awmV[i]; v.x=M->lo[0]+(M->pos[i*3]+32768)/65535.f*M->rng[0]; v.y=M->lo[1]+(M->pos[i*3+1]+32768)/65535.f*M->rng[1]; v.z=M->lo[2]+(M->pos[i*3+2]+32768)/65535.f*M->rng[2]; v.nx=M->nor[i*3]/127.f; v.ny=M->nor[i*3+1]/127.f; v.nz=M->nor[i*3+2]/127.f; v.r=M->col[i*3]/255.f; v.g=M->col[i*3+1]/255.f; v.b=M->col[i*3+2]/255.f; } }
+    int off=0; for(int i=0;i<grp;i++)off+=M->grp[i]; int cnt=M->grp[grp]; if(cnt<=0)return;
+    std::vector<float>&W=awmW; W.resize((size_t)M->nv*6); std::vector<char>&done=awmDone; done.assign(M->nv,0);
     float rc=cosf(roll),rs=sinf(roll);
     auto xf=[&](int vi){ if(done[vi])return; done[vi]=1; const AwmV&v=awmV[vi]; float lx=v.x,ly=v.y; if(roll!=0){float t=lx*rc-ly*rs;ly=lx*rs+ly*rc;lx=t;} float o[3]; Renderer::rot(yaw,pitch,lx,ly,v.z+dz,o); float nx=v.nx,ny=v.ny; if(roll!=0){float t=nx*rc-ny*rs;ny=nx*rs+ny*rc;nx=t;} float n[3]; Renderer::rot(yaw,pitch,nx,ny,v.nz,n);
       float*w=&W[(size_t)vi*6]; w[0]=ox+o[0];w[1]=oy+o[1];w[2]=oz+o[2];w[3]=n[0];w[4]=n[1];w[5]=n[2]; };
-    for(int t=0;t<cnt;t+=3){ int a=AWMD::idx[off+t],b=AWMD::idx[off+t+1],c=AWMD::idx[off+t+2]; xf(a);xf(b);xf(c); const float*A=&W[(size_t)a*6],*B=&W[(size_t)b*6],*C=&W[(size_t)c*6];
+    for(int t=0;t<cnt;t+=3){ int a=M->idx[off+t],b=M->idx[off+t+1],c=M->idx[off+t+2]; xf(a);xf(b);xf(c); const float*A=&W[(size_t)a*6],*B=&W[(size_t)b*6],*C=&W[(size_t)c*6];
       float nx=A[3]+B[3]+C[3],ny=A[4]+B[4]+C[4],nz=A[5]+B[5]+C[5]; float cx=(A[0]+B[0]+C[0])*(1.f/3),cy=(A[1]+B[1]+C[1])*(1.f/3),cz=(A[2]+B[2]+C[2])*(1.f/3);
       if((r.cam.x-cx)*nx+(r.cam.y-cy)*ny+(r.cam.z-cz)*nz<=0)continue;
       float il=1.f/std::max(1e-5f,sqrtf(nx*nx+ny*ny+nz*nz)); float l=lit?std::min<float>(1.25f,r.lightOf(nx*il,ny*il,nz*il)):1.f; l*=k;
@@ -517,8 +532,8 @@ struct Game{
   void drawGunAt(float ox,float oy,float oz,float yaw,float pitch,int wi,float flash,bool lit,float k,const GAtt*at=nullptr,bool hideOptic=false){
     const GunDef&g=GUNDEFS[wi]; GAtt a=at?*at:GAtt(); if(hideOptic)a.optic=0; const RPose*R=rlp; float rl=R?R->rz:0.f; r.obbRoll=rl; // أثناء التصويب عبر المنظار: لا نرسم جسم المنظار كي لا يحجب الرؤية
     auto part=[&](float x,float y,float z,float sx,float sy,float sz,const float*c){float o[3];{float xx=x,yy=y; if(rl!=0){float c_=cosf(rl),s_=sinf(rl); xx=x*c_-y*s_; yy=x*s_+y*c_;} Renderer::rot(yaw,pitch,xx,yy,z,o);}r.obb(ox+o[0],oy+o[1],oz+o[2],sx*.5f,sy*.5f,sz*.5f,yaw,pitch,c[0]*k,c[1]*k,c[2]*k,true,lit);};
-    const bool awm=(wi==3);
-    if(awm){ static const float one[3]={1,1,1}, fast[3]={1.5f,0.95f,0.5f}; drawAwmGroup(0,ox,oy,oz,yaw,pitch,rl,0,k,lit,one); if(!(R&&R->hideRear))drawAwmGroup(3,ox,oy,oz,yaw,pitch,rl,0,k,lit,one); drawAwmGroup(2,ox,oy,oz,yaw,pitch,rl,R?R->bolt:0.f,k,lit,one); if(!(R&&R->hideMag))drawAwmGroup(1,ox,oy,oz,yaw,pitch,rl,0,k,lit,a.mag==2?fast:one); }
+    const bool awm=gmodOf(wi)!=nullptr;
+    if(awm){ static const float one[3]={1,1,1}, fast[3]={1.5f,0.95f,0.5f}; drawAwmGroup(wi,0,ox,oy,oz,yaw,pitch,rl,0,k,lit,one); if(!(R&&R->hideRear))drawAwmGroup(wi,3,ox,oy,oz,yaw,pitch,rl,0,k,lit,one); drawAwmGroup(wi,2,ox,oy,oz,yaw,pitch,rl,R?R->bolt:0.f,k,lit,one); if(!(R&&R->hideMag))drawAwmGroup(wi,1,ox,oy,oz,yaw,pitch,rl,0,k,lit,a.mag==2?fast:one); }
     if(!awm)for(int i=0;i<g.np;i++){float c[3];gcol(g.p[i].c,c); if(R&&R->hideRear&&i!=0&&g.p[i].z-g.p[i].sz*0.5f>0.1f)continue; float dz=(R&&(i==R->shiftIdx||i==R->shiftIdx2))?R->shiftV:0.f; part(g.p[i].x,g.p[i].y,g.p[i].z+dz,g.p[i].sx,g.p[i].sy,g.p[i].sz,c);}
     float cb[3],cd[3]; gcol('b',cb); gcol('d',cd);
     if(!awm&&g.hasMag&&!(R&&R->hideMag)){ float kk=a.mag==1?1.4f:1.f; float c[3]; if(a.mag==2){c[0]=0.9f;c[1]=0.5f;c[2]=0.1f;} else gcol('b',c); part(g.mag[0],g.mag[1]-(kk-1)*g.mag[4]*0.5f,g.mag[2],g.mag[3],g.mag[4]*kk,g.mag[5],c); }

@@ -280,7 +280,7 @@ function closeChat(sendIt) {
 // ---------- تجهيز العتاد ----------
 let loReturn = 'lobby';
 let loSlot = 0;
-const KIND_AR = { rifle: 'بندقية هجومية', smg: 'رشاش خفيف', shotgun: 'شوتغن', sniper: 'قناصة', lmg: 'رشاش ثقيل', dmr: 'دقيقة', pistol: 'مسدس', magnum: 'مسدس ثقيل' };
+const KIND_AR = { rifle: 'بندقية هجومية', smg: 'رشاش خفيف', shotgun: 'شوتغن', sniper: 'قناصة', lmg: 'رشاش ثقيل', dmr: 'دقيقة', pistol: 'مسدس', magnum: 'مسدس ثقيل', launcher: 'قاذف صواريخ' };
 function renderLoadout() {
   const slot = loSlot, ids = slot === 0 ? PRIMARIES : SECONDARIES, id = slot === 0 ? settings.lo.p : settings.lo.s, W = WEAPONS[id];
   const tabs = $('loTabs'); tabs.innerHTML = '';
@@ -533,7 +533,7 @@ function onShot(m) {
     if (e[3] === 1) fx.spark(e[0], e[1], e[2], [0.8, 0.1, 0.1], 4, 3); else if (e[3] === 2) fx.spark(e[0], e[1], e[2], [1, 0.85, 0.4], 5, 3.5); else fx.spark(e[0], e[1], e[2], [0.8, 0.75, 0.6], 3, 2.5);
   }
   const d = Math.hypot(m.o[0] - me.x, m.o[2] - me.z), st = WEAPONS[m.w];
-  if (r && d < 30 && !m.s && st && st.kind !== 'sniper') fx.shell(m.o[0], m.o[1] - 0.1, m.o[2], r.yaw || 0, st.kind === 'shotgun' || st.kind === 'lmg');
+  if (r && d < 30 && !m.s && st && st.kind !== 'sniper' && st.kind !== 'launcher') fx.shell(m.o[0], m.o[1] - 0.1, m.o[2], r.yaw || 0, st.kind === 'shotgun' || st.kind === 'lmg');
   Snd.shot(st ? st.kind : 'rifle', clamp(1 - d / (m.s ? 40 : 110), 0, 1) * 0.9, panOf({ x: m.o[0], z: m.o[2] }), !!m.s, clamp(d / 110, 0, 1));
 }
 // قمع النيران: رصاصة عدو تمرّ قرب الرأس => تشويش حواف + طقطقة + اهتزاز
@@ -761,7 +761,7 @@ function tryFire(now, pressed) {
     if (best < maxT) fx.spark(e[0], e[1], e[2], hit === 1 ? [0.8, 0.1, 0.1] : hit === 2 ? [1, 0.85, 0.4] : [0.85, 0.8, 0.65], hit ? 4 : 3, 2.5);
   }
   Snd.shot(st.kind, 0.75, 0, st.muted);
-  if (!st.muted && st.kind !== 'sniper') fx.shell(me.x + Math.cos(me.yaw) * 0.3, me.y + 1.3, me.z - Math.sin(me.yaw) * 0.3, me.yaw, st.kind === 'shotgun' || st.kind === 'lmg');
+  if (!st.muted && st.kind !== 'sniper' && st.kind !== 'launcher') fx.shell(me.x + Math.cos(me.yaw) * 0.3, me.y + 1.3, me.z - Math.sin(me.yaw) * 0.3, me.yaw, st.kind === 'shotgun' || st.kind === 'lmg');
   me.flash = 1; me.kick = 1;
   const rv = st.recoilV * (0.8 + Math.random() * 0.4) * (me.adsT > 0.5 ? 0.78 : 1) * (me.crouch && !inV ? 0.85 : 1);
   me.pitch = clamp(me.pitch + rv, -1.5, 1.5); me.recAcc += rv;

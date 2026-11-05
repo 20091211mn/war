@@ -354,6 +354,10 @@ export class Game {
       }
       ends.push([r2(ox + dx * best), r2(oy + dy * best), r2(oz + dz * best), hitP ? 1 : (hitV || hitD) ? 2 : 0]);
     }
+    if (s.explosive && ends.length) { // قاذف: انفجار عند نقطة الاصطدام بدل الضرر المباشر
+      dmg.clear(); vd.clear(); dd.clear();
+      const e = ends[0]; this.explode({ x: e[0], y: e[1], z: e[2], owner: p.id, team: p.team }, 6.5, s.dmg, 340, s.id);
+    }
     if (!s.muted) p.reveal = now + 5000; // يظهر على الرادار 5 ث بعد الإطلاق (أقل من 10 ث)
     this.bcastExcept(p, { t: 'shot', id: p.id, w: s.id, o: [r2(ox), r2(oy), r2(oz)], e: ends, s: s.muted ? 1 : 0 });
     for (const [q, e] of dmg) this.hurt(q, e.d, p, e.h, s.id, p.x, p.z);
@@ -422,7 +426,7 @@ export class Game {
     this.grenades = keep;
   }
 
-  explode(g, R = 7, pd = 140, vd = 260) {
+  explode(g, R = 7, pd = 140, vd = 260, wid = 'gren') {
     this.bcast({ t: 'boom', x: r2(g.x), y: r2(g.y), z: r2(g.z) });
     const owner = this.players.get(g.owner);
     for (const q of [...this.players.values()]) {
@@ -433,7 +437,7 @@ export class Game {
       const t = raycastMap(this.map, g.x, g.y + 0.2, g.z, (q.x - g.x) / (d || 1), (cy - g.y - 0.2) / (d || 1), (q.z - g.z) / (d || 1), d);
       if (t !== Infinity && t < d - 0.3) continue;
       const dmg = pd * Math.pow(1 - d / R, 1.2);
-      this.hurt(q, dmg, owner || q, false, 'gren', g.x, g.z);
+      this.hurt(q, dmg, owner || q, false, wid, g.x, g.z);
     }
     for (const v of this.vehs) {
       if (v.dead) continue;

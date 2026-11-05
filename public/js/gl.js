@@ -1,4 +1,5 @@
 import { AWM } from './awm-data.js';
+import { GM } from './gunmodels.js';
 // محرك عرض WebGL صغير (بدون مكتبات): مجسّمات ملوّنة مضاءة + ضباب + سماء
 const VS = `
 attribute vec3 aPos; attribute vec3 aNor; attribute vec3 aCol;
@@ -200,7 +201,8 @@ export class Engine {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     this.cube = this._mesh(cubeData()); this.sphere = this._mesh(sphereData()); this.cyl = this._mesh(cylData()); this.tube = this._mesh(tubeData());
     this.map = null; this.awm = null;
-    try { this.awm = this._groups(AWM); } catch (e) { this.awm = null; }
+    this.models = {};
+    try { this.awm = this._groups(AWM); this.models.sniper = this.awm; for (const k in GM) this.models[k] = this._groups(GM[k]); } catch (e) { this.awm = null; this.models = {}; }
     this.ext = null; this.lists = new Map();
     try { this.ext = gl.getExtension('ANGLE_instanced_arrays'); if (this.ext) this._initInst(); } catch (e) { this.ext = null; }
     this.VP = mat(); this.VPvm = mat(); this.proj = mat(); this.projVm = mat(); this.V = mat();
@@ -221,7 +223,7 @@ export class Engine {
     this.LI = L; this.instBuf = gl.createBuffer();
     this.fs = { vp: null, cam: [0, 0, 0], fog: [40, 120] };
     this.meshIds = new Map([[this.cube, 0], [this.sphere, 1], [this.cyl, 2], [this.tube, 3]]);
-    if (this.awm) this.awm.forEach((m, i) => this.meshIds.set(m, 4 + i));
+    let nid = 4; for (const k in this.models) this.models[k].forEach((m) => this.meshIds.set(m, nid++));
   }
   _program(vs, fs) {
     const gl = this.gl;
@@ -352,7 +354,7 @@ export class Engine {
   // opts: unlit, alpha, add
   draw(mesh, m, r, g, b, unlit = false, alpha = 1, add = false) {
     if (this.ext) { // تجميع: يُرسم عند flush()
-      const kind = add ? 2 : alpha < 1 ? 1 : 0, key = kind * 8 + this.meshIds.get(mesh);
+      const kind = add ? 2 : alpha < 1 ? 1 : 0, key = kind * 64 + this.meshIds.get(mesh);
       let l = this.lists.get(key);
       if (!l) { l = { mesh, kind, data: new Float32Array(20 * 256), n: 0 }; this.lists.set(key, l); }
       if ((l.n + 1) * 20 > l.data.length) { const nd = new Float32Array(l.data.length * 2); nd.set(l.data); l.data = nd; }
@@ -419,6 +421,7 @@ export class Engine {
     this.cur = null;
   }
   awmAt(group, m, r, g, b, unlit, alpha, add) { if (this.awm) this.draw(this.awm[group], m, r, g, b, unlit, alpha, add); }
+  modelAt(name, group, m, r, g, b, unlit) { const L = this.models[name]; if (L && L[group] && L[group].count) this.draw(L[group], m, r, g, b, unlit, 1, false); }
   cubeAt(m, r, g, b, unlit, alpha, add) { this.draw(this.cube, m, r, g, b, unlit, alpha, add); }
   cylAt(m, r, g, b, unlit, alpha, add) { this.draw(this.cyl, m, r, g, b, unlit, alpha, add); }
   tubeAt(m, r, g, b, unlit, alpha, add) { this.draw(this.tube, m, r, g, b, unlit, alpha, add); }

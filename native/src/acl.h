@@ -13,9 +13,9 @@ struct Game::ACl{
 static int weaponIdx(const std::string&id){ for(int i=0;i<WEAPON_COUNT;i++)if(id==WEAPONS[i].id)return i; return 0; }
 static std::string cleanName(const std::string&n,int id,bool bot){ bool ok=!n.empty(); for(unsigned char c:n)if(c<32||c>126)ok=false; if(ok)return n.substr(0,12); char b[16]; snprintf(b,16,"%s%d",bot?"BOT":"P",id); return b; }
 
-static const char*OPT_ID[8][5]={{"iron","red","x2","x4",0},{"iron","red","x2",0,0},{"iron","red",0,0,0},{"x4","x8",0,0,0},{"iron","red","x2","x4",0},{"red","x2","x4","x8",0},{"iron","red",0,0,0},{"iron","red",0,0,0}};
+static const char*OPT_ID[9][5]={{"iron","red","x2","x4",0},{"iron","red","x2",0,0},{"iron","red",0,0,0},{"x4","x8",0,0,0},{"iron","red","x2","x4",0},{"red","x2","x4","x8",0},{"iron","red",0,0,0},{"iron","red",0,0,0},{"iron",0,0,0,0}};
 static const char*OPT_AR[5]={"حديدي","نقطة حمراء","2x","4x","8x"}; static const char*MUZ_ID[3]={"none","supp","comp"},*MUZ_AR[3]={"بدون","كاتم","مخمّد"}; static const char*UND_ID[3]={"none","grip","laser"},*UND_AR[3]={"بدون","مقبض","ليزر"}; static const char*MAG_ID[3]={"std","ext","fast"},*MAG_AR[3]={"عادي","ممتد","سريع"};
-static int wIdx(const std::string&id){ static const char*N[8]={"carbine","smg","shotgun","sniper","lmg","dmr","pistol","magnum"}; for(int i=0;i<8;i++)if(id==N[i])return i; return 0; }
+static int wIdx(const std::string&id){ static const char*N[9]={"carbine","smg","shotgun","sniper","lmg","dmr","pistol","magnum","rpg"}; for(int i=0;i<9;i++)if(id==N[i])return i; return 0; }
 static int nOpt(int w){ int n=0; while(n<5&&OPT_ID[w][n])n++; return n; }
 static std::string optName(int w,int k){ const char*id=OPT_ID[w][k]; return id; }
 static const char*optAr(int w,int k){ const char*id=OPT_ID[w][k]; if(!strcmp(id,"iron"))return OPT_AR[0]; if(!strcmp(id,"red"))return OPT_AR[1]; if(!strcmp(id,"x2"))return OPT_AR[2]; if(!strcmp(id,"x4"))return OPT_AR[3]; return OPT_AR[4]; }

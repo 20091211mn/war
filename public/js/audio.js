@@ -96,6 +96,7 @@ export const Snd = {
     src.buffer = buf; src.playbackRate.value = rate; src.connect(out); src.start(when);
   },
   shot(kind, vol = 1, pan = 0, muted = false, dist = 0) {
+    if (kind === 'launcher') kind = 'sniper';
     if (!ctx || !enabled || vol <= 0.01) return;
     const t = ctx.currentTime + 0.001;
     // [مدة الذيل, تردد الجسم, جهارة, تردد الدويّ, ذيل صدى, طقطقة]
