@@ -46,6 +46,8 @@ struct NikShader{ char*ident; unsigned char hash[16]; uint64_t len; unsigned cha
 extern "C" NikShader scePrecompiledShaderEntries[];
 static EGLDisplay gD=EGL_NO_DISPLAY; static EGLSurface gS=EGL_NO_SURFACE; static EGLContext gC=EGL_NO_CONTEXT;
 static GLuint gTex=0,gProg=0; static GLint uMV=-1,uPR=-1,uTS=-1,uSam=-1,uOp=-1,aV=-1;
+static int gShN=0; // عدد الشيدرات الجاهزة في النظام (تشخيص: لنعرف هل يتوفّر شيدر ثلاثي الأبعاد بألوان رؤوس)
+static void dumpShaders(){ FILE*fp=fopen("/data/wz_shaders.txt","w"); int n=0; for(NikShader*e=scePrecompiledShaderEntries;e->ident;++e){ n++; if(fp)fprintf(fp,"%s %llu\n",e->ident,(unsigned long long)e->len); } if(fp)fclose(fp); gShN=n; wzlog("precompiled shaders: %d (list in /data/wz_shaders.txt)",n); }
 static bool fetchSh(const char*n,unsigned char*&p,uint64_t&l){ for(NikShader*e=scePrecompiledShaderEntries;e->ident;++e) if(!strcmp(n,e->ident)){p=e->code;l=e->len;return true;} return false; }
 static bool glInit(){
   wzlog("glInit begin"); int mret=0; const char*rw=sceKernelGetFsSandboxRandomWord(); wzlog("sandbox word: %s",rw?rw:"(null)"); std::string pre=std::string("/")+(rw?rw:"")+"/common/lib/";
@@ -74,6 +76,7 @@ static bool glInit(){
   glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
   if(glGetError()){wzlog("tex fail");return false;}
   wzlog("texture ok"); unsigned char*vp,*fp; uint64_t vl,fl; if(!fetchSh("texmap/v_2.vert",vp,vl)||!fetchSh("texmap/f_2.frag",fp,fl)){wzlog("shader entries missing");return false;}
+  dumpShaders();
   wzlog("shader entries found %llu/%llu",(unsigned long long)vl,(unsigned long long)fl); GLuint fs=glCreateShader(GL_FRAGMENT_SHADER),vs=glCreateShader(GL_VERTEX_SHADER); gProg=glCreateProgram();
   glShaderBinary(1,&vs,0,vp,vl); glShaderBinary(1,&fs,0,fp,fl); glAttachShader(gProg,vs); glAttachShader(gProg,fs); glLinkProgram(gProg);
   if(glGetError()){wzlog("shader link fail");return false;}
@@ -135,7 +138,8 @@ int main(int,char**){
     if(edge&ORBIS_PAD_BUTTON_TOUCH_PAD)dbg=!dbg;
     acc+=dt; int steps=0; while(acc>=1.f/60.f&&steps<4){ g.update(1.f/60.f,in); acc-=1.f/60.f; steps++; } if(steps==4)acc=0;
     if(frame==1)wzlog("f1 updated"); if(g.menu)g.renderMenu(); else g.render(); if(frame==1)wzlog("f1 rendered");
-    if(dbg){ char b[96]; snprintf(b,96,"FPS %d RES %d",(int)fps,g.r.W); g.text(40,40,b,2,0xFFFFFF00);
+    if(dbg){ char b[96]; snprintf(b,96,"FPS %d RES %d SHADERS %d",(int)fps,g.r.W,gShN); g.text(40,40,b,2,0xFFFFFF00);
+      { int pg=(frame/120)%std::max(1,(gShN+11)/12),k=0; for(NikShader*e=scePrecompiledShaderEntries;e->ident;++e,++k){ if(k<pg*12||k>=pg*12+12)continue; snprintf(b,96,"%d %.40s",k,e->ident); g.text(40,110+(k-pg*12)*16,b,1,0xFF66FFCC); } }
       snprintf(b,96,"LS %d %d RS %d %d L2 %d R2 %d",pd.leftStick.x,pd.leftStick.y,pd.rightStick.x,pd.rightStick.y,pd.analogButtons.l2,pd.analogButtons.r2); g.text(40,60,b,2,0xFFFFFF00);
       snprintf(b,96,"BTN %05X PAD %d",(unsigned)pd.buttons,padH); g.text(40,80,b,2,0xFFFFFF00); }
     g.r.flush(); { const uint32_t*fbp=g.r.fb.data(); uint32_t*ub=upb.data(); int n=WZ_IW*WZ_IH; std::atomic<int> nx(0); g.r.pool.exec([&]{ for(;;){ int i0=nx.fetch_add(65536); if(i0>=n)break; int i1=std::min(n,i0+65536); for(int i=i0;i<i1;i++){ uint32_t p=fbp[i]; ub[i]=(p&0x0000FF00u)|((p>>16)&0xFFu)|((p&0xFFu)<<16)|0xFF000000u; } } }); }
