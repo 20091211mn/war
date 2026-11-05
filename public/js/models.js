@@ -283,6 +283,13 @@ export function drawViewmodel(eng, vm) {
   eng.endViewmodel();
 }
 
+// قذيفة RPG أثناء الطيران: رأس حربي من موديل القاذف (المجموعة 1) باتجاه الحركة
+export function drawRocket(eng, x, y, z, dx, dy, dz) {
+  const m = basis(tmp(), x - dx * 0.475, y - dy * 0.475, z - dz * 0.475, -dx, -dy, -dz, 1, 1, 1);
+  if (eng.models && eng.models.launcher) eng.modelAt('launcher', 1, m, 1, 1, 1, false);
+  else eng.cubeAt(basis(tmp(), x, y, z, dx, dy, dz, 0.09, 0.09, 0.4), 0.3, 0.35, 0.2, false);
+}
+
 // ---- المؤثرات ----
 const CAP_LITE = { parts: 36, decals: 36, smokes: 16, tracers: 12, shells: 10 }, CAP_FULL = { parts: 70, decals: 90, smokes: 40, tracers: 24, shells: 30 };
 export class Effects {

@@ -9,6 +9,7 @@ import { buildNav, findPath, cellOf, cellCenter, nearestFree } from './nav.js';
 export const MAX_HUMANS = 16;
 const SCORE_LIMITS = [10, 20, 30, 50, 100];
 const TIME_LIMITS = [180, 300, 600, 900];
+const ROCKET_V = 115; // سرعة قذيفة RPG (م/ث)
 const PROT_MS = 2000, END_MS = 12000, VEH_RESPAWN_MS = 30000, DROP_LIFE_MS = 40000;
 const RESP_OPTS = [1, 3, 5, 8, 10];
 const BOT_WEAPONS = ['carbine', 'smg', 'lmg', 'dmr', 'shotgun'];
@@ -27,7 +28,7 @@ export class Game {
     this.kits = []; this.zones = []; this.uav = [0, 0]; this.zoneIdx = 1; this.zoneAt = 0; this.zoneTick = 0; this.zoneState = 3;
     this.vehs = []; this.drops = []; this.nextDrop = 1;
     this.map = null; this.nav = null;
-    this.grenades = []; this.nextGren = 1; this.c4 = []; this.nextC4 = 1;
+    this.grenades = []; this.rockets = []; this.nextRk = 1; this.nextGren = 1; this.c4 = []; this.nextC4 = 1;
     this.score = [0, 0];
     this.startAt = 0; this.endAt = 0; this.hostId = 0;
     this.lastLobby = 0; this.lastSec = 0;
@@ -89,7 +90,7 @@ export class Game {
 
   reset() {
     for (const [id, q] of [...this.players]) if (q.bot) this.players.delete(id);
-    this.phase = 'lobby'; this.map = null; this.nav = null; this.grenades = []; this.c4 = []; this.score = [0, 0]; this.vehs = []; this.drops = []; this.kits = []; this.zones = []; this.uav = [0, 0];
+    this.phase = 'lobby'; this.map = null; this.nav = null; this.grenades = []; this.rockets = []; this.c4 = []; this.score = [0, 0]; this.vehs = []; this.drops = []; this.kits = []; this.zones = []; this.uav = [0, 0];
     for (const q of this.players.values()) { q.alive = false; q.kills = 0; q.deaths = 0; q.veh = -1; }
   }
 
@@ -250,7 +251,7 @@ export class Game {
   startMatch() {
     if (this.phase !== 'lobby') return;
     this.map = buildMap(this.cfg.map); this.nav = buildNav(this.map);
-    this.score = [0, 0]; this.grenades = []; this.c4 = []; this.drops = []; this.startAt = this.now();
+    this.score = [0, 0]; this.grenades = []; this.rockets = []; this.c4 = []; this.drops = []; this.startAt = this.now();
     this.vehs = this.cfg.veh ? this.map.vehicles.map((sp, i) => this.mkVeh(sp, i)) : [];
     this.linkVehs(); this.initExtras();
     for (const q of this.players.values()) { q.kills = 0; q.streak = 0; q.shield = 0; q.deaths = 0; q.alive = false; q.veh = -1; }
@@ -356,7 +357,10 @@ export class Game {
     }
     if (s.explosive && ends.length) { // قاذف: انفجار عند نقطة الاصطدام بدل الضرر المباشر
       dmg.clear(); vd.clear(); dd.clear();
-      const e = ends[0]; this.explode({ x: e[0], y: e[1], z: e[2], owner: p.id, team: p.team }, 6.5, s.dmg, 340, s.id);
+      const e = ends[0], mo = [ox + dirs[0][0] * 0.9, oy - 0.15 + dirs[0][1] * 0.9, oz + dirs[0][2] * 0.9];
+      const len = Math.hypot(e[0] - mo[0], e[1] - mo[1], e[2] - mo[2]), id = this.nextRk++;
+      this.rockets.push({ id, ex: e[0], ey: e[1], ez: e[2], owner: p.id, team: p.team, wid: s.id, dmg: s.dmg, t: len / ROCKET_V });  // قذيفة تطير بسرعة محدودة ثم تنفجر عند الاصطدام
+      this.bcast({ t: 'rocket', id, o: [r2(mo[0]), r2(mo[1]), r2(mo[2])], e: [e[0], e[1], e[2]], v: ROCKET_V, ow: p.id });
     }
     if (!s.muted) p.reveal = now + 5000; // يظهر على الرادار 5 ث بعد الإطلاق (أقل من 10 ث)
     this.bcastExcept(p, { t: 'shot', id: p.id, w: s.id, o: [r2(ox), r2(oy), r2(oz)], e: ends, s: s.muted ? 1 : 0 });
@@ -401,6 +405,15 @@ export class Game {
     this.bcast({ t: 'end', win, sc: this.score });
   }
 
+  simRockets(dt) {
+    if (!this.rockets.length) return;
+    const keep = [];
+    for (const r of this.rockets) {
+      r.t -= dt;
+      if (r.t <= 0) this.explode({ x: r.ex, y: r.ey, z: r.ez, owner: r.owner, team: r.team }, 6.5, r.dmg, 340, r.wid); else keep.push(r);
+    }
+    this.rockets = keep;
+  }
   // ---------- القنابل ----------
   simGrenades(dt) {
     const map = this.map, rr = 0.12;
@@ -762,7 +775,7 @@ export class Game {
     this.tickVehs(dt, now);
     this.tickExtras(now);
     this.tickDrops(now);
-    this.simGrenades(dt);
+    this.simGrenades(dt); this.simRockets(dt);
     this.sendSnap();
   }
 

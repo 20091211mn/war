@@ -40,7 +40,7 @@ struct Game{
   World w; Renderer r; std::vector<Ent> e; std::vector<Tracer> tr;
   int mapIdx=0,scoreLim=30,score[2]={0,0},nBots=6,diff=0; float sens=1.0f; bool swapTrig=false,swapL=false,swapSticks=false; float t=0,hitMark=0,dmgFlash=0; bool over=false; int winner=0; int streak=0,glCnt=2; float hitAng=0,hitAngT=0;
   float fpsShow=0; std::vector<VH::Veh> vh; int drive=-1; float lookIdle=0; bool nearVeh=false; struct Puff{float x,y,z,vy,t,sz;bool fire;}; std::vector<Puff> puffs; struct Drn{bool on=false;float x=0,y=0,z=0,yaw=0,pitch=0,vx=0,vy=0,vz=0,t=0;} dn; float dnCd=0,dnSpot=0; bool pdn=false,pfireD=false;
-  struct Shell{float x,y,z,vx,vy,vz,t;}; std::vector<Shell> shells; struct Gr{float x,y,z,vx,vy,vz,t;}; std::vector<Gr> grs; int gren=2; bool pg=false; struct Spark{float x,y,z,vx,vy,vz,t;}; std::vector<Spark> sparks;
+  struct Shell{float x,y,z,vx,vy,vz,t;}; std::vector<Shell> shells; struct Gr{float x,y,z,vx,vy,vz,t;}; std::vector<Gr> grs; struct Rk{float ox,oy,oz,dx,dy,dz,len,t,by;}; std::vector<Rk> rks; int gren=2; bool pg=false; struct Spark{float x,y,z,vx,vy,vz,t;}; std::vector<Spark> sparks;
   void sparkAt(float x,float y,float z,float nx,float ny,float nz,int n){ for(int k=0;k<n&&sparks.size()<120;k++)sparks.push_back({x,y,z,-nx*1.5f+(frand()-0.5f)*3.f,-ny*1.5f+frand()*2.5f,-nz*1.5f+(frand()-0.5f)*3.f,0.22f+frand()*0.15f}); }
   int prim=0; Input prev; bool paused=false; float msgT=0; char msg[64]={0}; int shotsFeed[4]={-1,-1,-1,-1}; std::string feed[4]; float feedT[4]={};
   int netGoal=0,netSt=0,netPhase=0; const char*netWhat=""; sockaddr_in pendJoin;
@@ -60,7 +60,7 @@ struct Game{
     int total=1+nBots*2-1; e.assign(total,Ent()); c4s.clear();
     for(int i=0;i<total;i++){Ent&p=e[i];p.bot=i>0;p.team=(i==0)?0:((i&1)?1:0);snprintf(p.name,16,"%s",nm(i).c_str());p.wpn=i==0?prim:rand()%WEAPON_COUNT;}
     if(role==1)for(auto&c:cli)if(c.on&&c.ent>0&&c.ent<total){ e[c.ent].remote=true; e[c.ent].bot=false; }
-    dn.on=false; dnCd=0; grs.clear(); vh.clear(); drive=-1; puffs.clear(); if(role<=1)for(int k=0;k<w.m->nv;k++)vh.push_back(makeVeh(k));
+    dn.on=false; dnCd=0; grs.clear(); rks.clear(); vh.clear(); drive=-1; puffs.clear(); if(role<=1)for(int k=0;k<w.m->nv;k++)vh.push_back(makeVeh(k));
     matchId++; evq.clear(); score[0]=score[1]=0;over=false;t=0;tr.clear();
     for(auto&p:e)spawn(p);
   }
@@ -204,7 +204,7 @@ struct Game{
       { VH::Veh*vhit=nullptr;int vpart=0; for(auto&v:vh){ if(v.dead)continue; if(v.driver>=0&&v.driver!=i&&e[v.driver].team==p.team)continue; int pt2; float tv=VH::rayVeh(v,p.b.x,eyeY,p.b.z,dx,dy,dz,best,pt2); if(tv<best){best=tv;vhit=&v;vpart=pt2;hv=-1;} }
         if(vhit&&!isExpl(p.wpn))damageVeh(*vhit,vpart,dmgAt(d,best)*aDm,i); }
       if(hv>=0&&!isExpl(p.wpn))hurt(hv,i,dmgAt(d,best)*aDm*(hh?d.head:1.f),hh);
-      if(isExpl(p.wpn)&&role!=2){ explosionAt(p.b.x+dx*best,eyeY+dy*best,p.b.z+dz*best,i,6.5f,d.dmg,340.f); }
+      if(isExpl(p.wpn)&&role!=2&&rks.size()<8){ rks.push_back({p.b.x+dx*0.9f,eyeY-0.15f+dy*0.9f,p.b.z+dz*0.9f,dx,dy,dz,std::max(0.5f,best-0.9f),0.f,(float)i}); } // قذيفة تطير 115 م/ث ثم تنفجر
       if(best<d.r1*1.39f)sparkAt(p.b.x+dx*best,eyeY+dy*best,p.b.z+dz*best,dx,dy,dz,hv>=0?0:5); if(tr.size()<64)tr.push_back({p.b.x+dx*0.5f,eyeY-0.12f,p.b.z+dz*0.5f,p.b.x+dx*best,eyeY+dy*best,p.b.z+dz*best,0.09f}); if(role==1&&trOut.size()<8)trOut.push_back({p.b.x+dx*0.5f,eyeY-0.12f,p.b.z+dz*0.5f,p.b.x+dx*best,eyeY+dy*best,p.b.z+dz*best});
     }
     if(role==3&&i==meI&&!dj.empty())aclShoot(dj);
@@ -431,6 +431,7 @@ struct Game{
       grs.push_back({me.b.x,me.b.y+1.5f,me.b.z,-sinf(me.yaw)*cp*17.f,sinf(me.pitch+0.25f)*17.f+2.f,-cosf(me.yaw)*cp*17.f,2.2f}); SFX::play(SFX::EMPTY,0.6f); }
     pg=in.grenade;
     for(size_t k=0;k<shells.size();){ Shell&c=shells[k]; c.t-=dt; if(c.y>0.03f){ c.vy-=18.f*dt; c.x+=c.vx*dt;c.y+=c.vy*dt;c.z+=c.vz*dt; if(c.y<0.03f){c.y=0.03f;c.vx=c.vz=0;} } if(c.t<=0)shells.erase(shells.begin()+k); else k++; }
+    for(size_t k=0;k<rks.size();){ Rk&q=rks[k]; q.t+=dt*115.f; if(q.t>=q.len){ float gx=q.ox+q.dx*q.len,gy=q.oy+q.dy*q.len,gz=q.oz+q.dz*q.len; explosionAt(gx,gy,gz,(int)q.by,6.5f,WEAPONS[8].dmg,340.f); rks.erase(rks.begin()+k); continue; } if(frand()<0.7f)puffs.push_back({q.ox+q.dx*(q.t-0.6f),q.oy+q.dy*(q.t-0.6f),q.oz+q.dz*(q.t-0.6f),0.5f+frand()*0.5f,0.5f+frand()*0.3f,0.5f+frand()*0.4f,false}); k++; }
     for(size_t k=0;k<grs.size();){ Gr&g=grs[k]; g.t-=dt; g.vy-=22.f*dt;
       float dx=g.vx*dt,dy=g.vy*dt,dz=g.vz*dt,L=sqrtf(dx*dx+dy*dy+dz*dz);
       if(L>1e-5f){ float h=raycastMap(w,g.x,g.y,g.z,dx/L,dy/L,dz/L,L+0.15f);
@@ -612,6 +613,7 @@ struct Game{
     for(auto&v:vh){ float dx=v.x-c.x,dz=v.z-c.z,dd=sqrtf(dx*dx+dz*dz); if(dd<r.fogF)VH::draw(r,v,dd); }
     for(auto&c:shells)r.obb(c.x,c.y,c.z,0.012f,0.012f,0.03f,t*20+c.x*9,0,0.85f,0.62f,0.15f,false,false);
     for(auto&g:grs)r.obb(g.x,g.y,g.z,0.09f,0.12f,0.09f,t*6,0,0.2f,0.3f,0.2f,false,false);
+    for(auto&q:rks){ static const float one[3]={1,1,1}; float yw=atan2f(-q.dx,-q.dz),pt=asinf(q.dy); float px=q.ox+q.dx*q.t-q.dx*0.475f,py=q.oy+q.dy*q.t-q.dy*0.475f,pz=q.oz+q.dz*q.t-q.dz*0.475f; drawAwmGroup(8,1,px,py,pz,yw,pt,0,0,1.f,true,one); }
     for(auto&c:c4s){ r.obb(c.x,c.y+0.04f,c.z,0.1f,0.04f,0.065f,0,0,0.22f,0.22f,0.2f,true,true); r.obb(c.x,c.y+0.085f,c.z,0.085f,0.008f,0.05f,0,0,0.45f,0.4f,0.3f,true,true); bool on=((int)(t*2.2f))%2==0; float k=on?1.f:0.15f; r.obb(c.x+0.05f,c.y+0.1f,c.z,0.015f,0.015f,0.015f,0,0,c.team?0.1f*k:k,0.1f*k,c.team?k:0.1f*k,false,false); }
     for(auto&q:puffs){ float k=std::min<float>(1.f,q.t); if(q.fire)r.obb(q.x,q.y,q.z,q.sz*.4f,q.sz*.4f,q.sz*.4f,0,0,1.0f,0.55f*k+0.2f,0.1f,false,false); else r.obb(q.x,q.y,q.z,q.sz*.5f,q.sz*.5f,q.sz*.5f,0,0,0.12f+0.1f*k,0.12f+0.1f*k,0.12f+0.1f*k,false,false); }
     for(int i=0;i<(int)e.size();i++){if((i==meI&&!dn.on)||e[i].gone)continue;const Ent&a=e[i];float dx=a.b.x-c.x,dz=a.b.z-c.z; if(dx*dx+dz*dz>r.fogF*r.fogF||(dx*dx+dz*dz<0.5f&&i!=meI))continue; drawAvatar(a,sqrtf(dx*dx+dz*dz));}

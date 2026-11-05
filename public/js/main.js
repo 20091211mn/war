@@ -10,7 +10,7 @@ import { LocalHost, remoteLink } from './net.js';
 import { Snd } from './audio.js';
 import { input, consume, takeLook, initInput, resetInput, isTouchDevice, pollGamepad } from './input.js';
 import { icon, gunIcon } from './icons.js';
-import { drawAvatar, drawViewmodel, Effects, drawGrenade, drawC4, GUNS } from './models.js';
+import { drawAvatar, drawViewmodel, Effects, drawGrenade, drawRocket, drawC4, GUNS } from './models.js';
 import { drawVehicle, vehicleFx, drawDrop } from './vehview.js';
 import { drawKit, drawZone, drawDrone } from './vis.js';
 import { enhanceSelects } from './ui-select.js';
@@ -43,7 +43,7 @@ function vib(ms) { if (settings.vib && navigator.vibrate) try { navigator.vibrat
 const APP = !!(window.Capacitor && (window.Capacitor.isNativePlatform ? window.Capacitor.isNativePlatform() : true));
 const S = {
   link: null, host: null, mode: '', lanInfo: null, id: 0, hostId: 0, connected: false, phase: 'lobby', cfg: null, players: new Map(), remote: new Map(), maps: [],
-  map: null, inGame: false, paused: false, timeLeft: 0, score: [0, 0], grenades: new Map(), c4: [], ping: 0, ended: false, entered: false, leaving: false,
+  map: null, inGame: false, paused: false, timeLeft: 0, score: [0, 0], grenades: new Map(), rockets: [], c4: [], ping: 0, ended: false, entered: false, leaving: false,
   vehs: new Map(), drops: new Map(), chat: [], typing: false, joinAddr: '',
   drones: new Map(), kits: new Map(), zones: [], zone: null, uavUntil: [0, 0], match: null,
 };
@@ -163,6 +163,7 @@ function onMsg(m) {
     case 'hit': onHit(m); break;
     case 'kill': onKill(m); break;
     case 'boom': onBoom(m); break;
+    case 'rocket': { const dx = m.e[0] - m.o[0], dy = m.e[1] - m.o[1], dz = m.e[2] - m.o[2], len = Math.hypot(dx, dy, dz) || 1; S.rockets.push({ o: m.o, d: [dx / len, dy / len, dz / len], len, v: m.v || 115, t0: performance.now(), last: 0 }); if (S.rockets.length > 12) S.rockets.shift(); break; }
     case 'chat': addChat(m); break;
     case 'seat': onSeat(m); break;
     case 'exit': onExit(m); break;
@@ -425,7 +426,7 @@ function resume() {
 function startGame(m) {
   S.map = buildMap(m.map); S.ended = false; S.paused = false; S.score = [0, 0]; S.cfg = m.cfg || S.cfg;
   try { eng.setMap(S.map, (S.cfg && S.cfg.tod) || 0); } catch (e) { showError('خطأ في الرسم', String(e.message || e)); return; }
-  S.inGame = true; S.remote.clear(); S.grenades.clear(); S.vehs.clear(); S.drops.clear(); fx = new Effects(); me.alive = false; me.veh = -1;
+  S.inGame = true; S.rockets = []; S.remote.clear(); S.grenades.clear(); S.vehs.clear(); S.drops.clear(); fx = new Effects(); me.alive = false; me.veh = -1;
   S.timeLeft = m.tl; S.typing = false;
   S.kits = new Map((m.kits || []).map((k) => [k[0], { id: k[0], x: k[1], z: k[2], up: true }])); S.zones = m.zones || []; S.zone = null; S.uavUntil = [0, 0]; S.match = { kills: 0, deaths: 0, heads: 0, xp: 0 }; me.shield = 0; me.killerId = 0; me.drone = null; me.droneCd = 0; S.drones.clear(); document.body.classList.remove('drone');
   hideScreens(); $('hud').classList.remove('hidden'); $('board').classList.add('hidden'); $('deadmsg').classList.add('hidden'); $('deadpanel').classList.add('hidden'); $('chatbar').classList.add('hidden');
@@ -527,7 +528,7 @@ function onShot(m) {
   const r = S.remote.get(m.id);
   if (r) r.flash = 1;
   for (const e of m.e) {
-    fx.tracer(m.o, e, !!m.s, e[3] === 1);
+    if (!(WEAPONS[m.w] && WEAPONS[m.w].kind === 'launcher')) fx.tracer(m.o, e, !!m.s, e[3] === 1);
     if (e[3] === 0 || e[3] === undefined) fx.decal(e[0], e[1], e[2]); else if (e[3] === 1) fx.decal(e[0], e[1], e[2], true);
     if (m.id !== S.id && me.alive && (teamOf(m.id) !== me.team || (S.cfg && S.cfg.ff))) suppressCheck(m.o, e);
     if (e[3] === 1) fx.spark(e[0], e[1], e[2], [0.8, 0.1, 0.1], 4, 3); else if (e[3] === 2) fx.spark(e[0], e[1], e[2], [1, 0.85, 0.4], 5, 3.5); else fx.spark(e[0], e[1], e[2], [0.8, 0.75, 0.6], 3, 2.5);
@@ -756,7 +757,7 @@ function tryFire(now, pressed) {
       if (q && q.t < best) { best = q.t; hit = 1; }
     }
     const e = [me.x + d[0] * best, eyeY + d[1] * best, me.z + d[2] * best];
-    fx.tracer(o, e, st.muted);
+    if (st.kind !== 'launcher') fx.tracer(o, e, st.muted);
     if (best < maxT && !hit) fx.decal(e[0], e[1], e[2]); else if (best < maxT && hit === 1) fx.decal(e[0], e[1], e[2], true);
     if (best < maxT) fx.spark(e[0], e[1], e[2], hit === 1 ? [0.8, 0.1, 0.1] : hit === 2 ? [1, 0.85, 0.4] : [0.85, 0.8, 0.65], hit ? 4 : 3, 2.5);
   }
@@ -1037,6 +1038,7 @@ function render(dt, now) {
     drawAvatar(eng, { x: me.x, y: me.y - (cab ? 0.36 : 0), z: me.z, yaw: me.yaw, pitch: me.pitch, crouch: droning ? me.crouch : !cab, sit: cab, lean: null, team: me.team, moving: false, sprint: false, stats: droning || me.seat === 0 ? null : st, deadT: -1, flash: me.flash, phase: 0 }, now);
   }
   for (const g of S.grenades.values()) drawGrenade(eng, g.x, g.y, g.z);
+  { const nowT = performance.now(); S.rockets = S.rockets.filter((r) => { const dist = (nowT - r.t0) / 1000 * r.v; if (dist > r.len + 1) return false; const px = r.o[0] + r.d[0] * dist, py = r.o[1] + r.d[1] * dist, pz = r.o[2] + r.d[2] * dist; drawRocket(eng, px, py, pz, r.d[0], r.d[1], r.d[2]); if (nowT - r.last > 40) { r.last = nowT; fx.smoke(px - r.d[0] * 0.6, py - r.d[1] * 0.6, pz - r.d[2] * 0.6, [0.75, 0.75, 0.72]); fx.flame(px - r.d[0] * 0.5, py - r.d[1] * 0.5, pz - r.d[2] * 0.5); } return true; }); }
   for (const c of S.c4) drawC4(eng, c[1], c[2], c[3], c[4], now);
   fx.update(dt); fx.draw(eng); eng.flush();
   const scoped = me.alive && st && me.adsT > 0.92 && st.zoom >= 3.4 && !chase && !droning;
