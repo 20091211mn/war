@@ -624,7 +624,7 @@ struct Game{
     for(auto&k:sparks){ float a=std::min<float>(1.f,k.t*5.f); r.obb(k.x,k.y,k.z,0.025f,0.025f,0.025f,0,0,1.f,0.7f*a+0.2f,0.2f,false,false); }
     if(role==3)aclRender3D();
     // مجسّم السلاح (نفس قطع نسخة أندرويد)
-    if(me.alive&&(drive<0||passenger())&&!dn.on&&!(adsHeld&&zoomOf(me)>=2.f)){ r.flush(); r.zBias=1000.f; const GunDef&g=GUNDEFS[me.wpn]; float k=adsHeld?1.f:0.f; float top=g.sy;
+    if(me.alive&&(drive<0||passenger())&&!dn.on&&!(adsHeld&&(zoomOf(me)>=2.f||(gmodOf(me.wpn)&&me.wpn!=8)))){ r.flush(); r.zBias=1000.f; const GunDef&g=GUNDEFS[me.wpn]; float k=adsHeld?1.f:0.f; float top=g.sy;
       static float bob=0; bob+=me.moving?(me.sprint?0.17f:0.11f):0; float bx=sinf(bob)*0.008f*(me.moving?1:0),by=fabsf(cosf(bob))*0.008f*(me.moving?1:0);
       float x=0.17f*(1-k)+0*k+bx,y=-0.17f*(1-k)+(-top-0.002f)*k+by,z=-0.33f*(1-k)-0.36f*k; float kick=me.flash>0?0.045f:0.f; z+=kick; float rx=kick*1.2f,ry=0.07f*(1-k); y+=sinf(t*1.7f)*0.0025f*(1-k*0.7f); x+=sinf(t*0.9f)*0.0015f;
       RPose RP; bool inRl=false; if(me.reloadT>=0){ float tt=std::min<float>(1.f,me.reloadT/(WEAPONS[me.wpn].reload*me.relM)); int wk=WKIND[me.wpn%WEAPON_COUNT]; RL::pose(GUNDEFS[me.wpn],wk<=1,wk==7,tt,RP,isExpl(me.wpn)); inRl=true; x+=RP.x; y+=RP.y; z+=RP.z; rx+=RP.rx; ry+=RP.ry; }
@@ -641,6 +641,9 @@ struct Game{
       r.flush(); int Hh=r.H,Ww=r.W,rad=(int)(Hh*0.33f),cx=Ww/2,cy=Hh/2;
       for(int y=0;y<Hh;y+=1){ int dy=y-cy; int half=std::abs(dy)>=rad?0:(int)sqrtf((float)(rad*rad-dy*dy)); blendSpan(y,0,cx-half,0xFF000000,1.f); blendSpan(y,cx+half,Ww,0xFF000000,1.f); }
       rect(cx-rad,cy,rad*2,1,0xFF000000,0.9f); rect(cx,cy-rad,1,rad*2,0xFF000000,0.9f); }
+    if(adsHeld&&me.alive&&drive<0&&!dn.on&&zoomOf(me)<3.4f&&(optZ>0||(gmodOf(me.wpn)&&me.wpn!=8))){ // مصوّب بديل (النقطة الحمراء / تقاطع x2) حين يُخفى جسم السلاح
+      r.flush(); int cx=r.W/2,cy=r.H/2,s=std::max(2,r.H/270); rect(cx-s,cy-s,s*2+1,s*2+1,0xFFFF2828,0.95f);
+      if(zoomOf(me)>=2.f){ int rad=r.H/12,gap=s*4; rect(cx-rad,cy,rad-gap,1,0xFF000000,0.85f); rect(cx+gap,cy,rad-gap,1,0xFF000000,0.85f); rect(cx,cy+gap,1,rad-gap,0xFF000000,0.85f); rect(cx,cy-rad,1,rad-gap,0xFF000000,0.85f); } }
     hud();
   }
   // ---- واجهة ----

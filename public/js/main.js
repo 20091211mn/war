@@ -1046,6 +1046,8 @@ function render(dt, now) {
     drawViewmodel(eng, { stats: st, ads: me.adsT, kick: me.kick, flash: me.flash, reload: me.reloading >= 0 ? clamp((now - me.reloadStart) / (me.reloadEnd - me.reloadStart), 0, 1) : -1, swap: clamp((now - me.swapAt) / 350, 0, 1), sprint: me.sprinting, team: me.team, bobX: Math.cos(me.bob) * 0.006 * (me.onGround ? 1 : 0), bobY: bobY * 0.8, swayX: me.swayX, swayY: me.swayY });
   }
   $('scope').classList.toggle('hidden', !scoped);
+  { const hidModel = st && (st.kind === 'rifle' || st.kind === 'dmr'), showRet = me.alive && st && me.adsT > 0.9 && !scoped && !chase && !isDriver() && !droning && (hidModel || st.att.optic !== 'iron');
+    const rt = $('adsret'); rt.classList.toggle('hidden', !showRet); if (showRet) rt.className = st.att.optic === 'iron' || st.att.optic === 'red' ? 'dot' : 'ring'; }
   hud(dt, now, st, chase);
 }
 

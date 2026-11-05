@@ -376,3 +376,7 @@ body.c4live #b-det{display:flex}
 body.invehicle #b-c4,body.invehicle #b-det{display:none}
 body.touch #b-c4{left:calc(var(--el) + var(--bs)*1.7 + 8px);top:calc(max(6px,var(--st)) + var(--bs)*1.44 + 12px)}
 body.touch #b-det{left:calc(var(--el) + var(--bs)*1.7 + 8px);top:calc(max(6px,var(--st)) + var(--bs)*2.16 + 18px)}
+
+#adsret{position:fixed;left:50%;top:50%;z-index:8;pointer-events:none;transform:translate(-50%,-50%)}#adsret.hidden{display:none}
+#adsret.dot{width:8px;height:8px;border-radius:50%;background:#ff2828;box-shadow:0 0 6px #f22}
+#adsret.ring{width:20vh;height:20vh;border-radius:50%;border:1px solid rgba(0,0,0,.8);background:radial-gradient(circle,#ff2828 0 3px,transparent 4px),linear-gradient(#000,#000) center/1px 100% no-repeat,linear-gradient(#000,#000) center/100% 1px no-repeat}

@@ -36,7 +36,7 @@ export function drawGun(eng, G, st, flash, opts) {
     const k = a.mag === 'ext' ? 1.4 : 1;
     part(g.mag[0], g.mag[1] - (k - 1) * g.mag[4] * 0.5, g.mag[2], g.mag[3], g.mag[4] * k, g.mag[5], a.mag === 'fast' ? C.o : C.b);
   }
-  if (a.optic !== 'iron' && OPT[a.optic] && !MODEL) {
+  if (a.optic !== 'iron' && OPT[a.optic] && !MODEL && !(curAds > 0.5)) {
     const o = OPT[a.optic], zc = -0.04, top = o[3];
     part(0, 0.034 + 0.01, zc, 0.024, 0.014, o[2] * 0.6 + 0.04, C.b);           // قاعدة التثبيت
     if (a.optic === 'red') {                                                      // نقطة حمراء: علبة + نافذة
@@ -251,8 +251,9 @@ const _rz = new Float32Array(16);
 function rotZ(a) { const c = Math.cos(a), sn = Math.sin(a); _rz.fill(0); _rz[0] = c; _rz[1] = sn; _rz[4] = -sn; _rz[5] = c; _rz[10] = 1; _rz[15] = 1; return _rz; }
 
 // ---- مجسم السلاح بمنظور اللاعب ----
+let curAds = 0;
 export function drawViewmodel(eng, vm) {
-  const st = vm.stats, g = GUNS[st.kind], k = vm.ads;
+  const st = vm.stats, g = GUNS[st.kind], k = vm.ads; curAds = k;
   const top = sightTop(st);
   const hip = [0.17, -0.17, -0.33], ads = [0, -top - 0.002, -0.36];
   let x = hip[0] + (ads[0] - hip[0]) * k, y = hip[1] + (ads[1] - hip[1]) * k, z = hip[2] + (ads[2] - hip[2]) * k;
