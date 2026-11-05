@@ -137,7 +137,8 @@ int main(int,char**){
 #if WZ_VARIANT==1
   wzlog("variant 1: 3D cube test only (no pad/game)"); cubeLoop(false);
 #elif WZ_VARIANT==3
-  { wzlog("variant 3: privileged + UserService init + pad, then cube"); OrbisUserServiceInitializeParams up3; up3.priority=ORBIS_KERNEL_PRIO_FIFO_LOWEST; wzlog("v3: calling sceUserServiceInitialize"); int u3=sceUserServiceInitialize(&up3); wzlog("v3: userservice init ret=0x%x",(unsigned)u3);
+  { wzlog("variant 3: privileged + UserService init + pad, then cube"); OrbisUserServiceInitializeParams up3; up3.priority=ORBIS_KERNEL_PRIO_FIFO_LOWEST; { int m1=sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_USER_SERVICE); wzlog("v3: load internal UserService ret=0x%x",(unsigned)m1); int m2=sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_PAD); wzlog("v3: load internal Pad ret=0x%x",(unsigned)m2); }
+    wzlog("v3: calling sceUserServiceInitialize"); int u3=sceUserServiceInitialize(&up3); wzlog("v3: userservice init ret=0x%x",(unsigned)u3);
     int uid3=0; wzlog("v3: calling GetInitialUser"); int g3=sceUserServiceGetInitialUser(&uid3); wzlog("v3: GetInitialUser ret=0x%x uid=%d",(unsigned)g3,uid3);
     wzlog("v3: calling scePadInit"); int p3=scePadInit(); wzlog("v3: scePadInit ret=0x%x",(unsigned)p3); padH=scePadOpen(uid3,0,0,NULL); wzlog("v3: scePadOpen=%d",padH); cubeLoop(true); }
 #endif
