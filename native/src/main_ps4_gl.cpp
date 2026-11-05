@@ -107,10 +107,33 @@ static void glPresent(const uint32_t*up){
   if(pf<=2)wzlog("calling swap"); EGLBoolean sr=eglSwapBuffers(gD,gS); if(pf<=2)wzlog("swap ret=%d err=0x%x",(int)sr,(unsigned)eglGetError());
 }
 
+// ===== اختبار ثلاثي الأبعاد على الـGPU: مكعب يدور بشيدر khronos/earth الجاهز (إضاءة + نسيج) — للتأكد من العرض والـ3D بدون يد/لعبة =====
+static void m4mul(const float*a,const float*b,float*o){ float r[16]; for(int c=0;c<4;c++)for(int rI=0;rI<4;rI++){ float v=0; for(int k=0;k<4;k++)v+=a[k*4+rI]*b[c*4+k]; r[c*4+rI]=v; } memcpy(o,r,sizeof(r)); }
+static void cubeLoop(){
+  unsigned char*vp,*fp; uint64_t vl,fl; if(!fetchSh("khronos/earth.vert",vp,vl)||!fetchSh("khronos/earth.frag",fp,fl)){wzlog("earth shader missing");for(;;)sceKernelUsleep(100000);}
+  GLuint vs=glCreateShader(GL_VERTEX_SHADER),fs=glCreateShader(GL_FRAGMENT_SHADER),pg=glCreateProgram(); glShaderBinary(1,&vs,0,vp,vl); glShaderBinary(1,&fs,0,fp,fl); glAttachShader(pg,vs); glAttachShader(pg,fs); glLinkProgram(pg);
+  GLint uM=glGetUniformLocation(pg,"u_modelViewProjMatrix"),uN=glGetUniformLocation(pg,"u_normalMatrix"),uL=glGetUniformLocation(pg,"lightDir"),uS=glGetUniformLocation(pg,"sampler2d"),aN=glGetAttribLocation(pg,"vNormal"),aP=glGetAttribLocation(pg,"vPosition"),aT=glGetAttribLocation(pg,"vTexCoord");
+  wzlog("cube: link err=0x%x loc M%d N%d L%d S%d aN%d aP%d aT%d",(unsigned)glGetError(),uM,uN,uL,uS,aN,aP,aT);
+  static GLfloat nr[36*3],ps[36*4],tc[36*4]; static const float F[6][9]={{1,0,0, 0,1,0, 0,0,1},{-1,0,0, 0,0,1, 0,1,0},{0,1,0, 0,0,1, 1,0,0},{0,-1,0, 1,0,0, 0,0,1},{0,0,1, 1,0,0, 0,1,0},{0,0,-1, 0,1,0, 1,0,0}};
+  static const int Q[6]={0,1,2, 0,2,3}; static const float cu[4][2]={{-1,-1},{1,-1},{1,1},{-1,1}}; int vi=0;
+  for(int f=0;f<6;f++){ const float*n=F[f],*u=F[f]+3,*v=F[f]+6; for(int q=0;q<6;q++){ int k=Q[q]; float a=cu[k][0],b=cu[k][1]; for(int i=0;i<3;i++){ nr[vi*3+i]=n[i]; ps[vi*4+i]=n[i]+u[i]*a+v[i]*b; } ps[vi*4+3]=1; tc[vi*4]=(a+1)*0.5f; tc[vi*4+1]=(b+1)*0.5f; tc[vi*4+2]=0; tc[vi*4+3]=1; vi++; } }
+  GLuint tex; glGenTextures(1,&tex); glBindTexture(GL_TEXTURE_2D,tex); static unsigned char px[64*64*4]; for(int y=0;y<64;y++)for(int x=0;x<64;x++){ bool c=((x>>3)+(y>>3))&1; unsigned char*q=&px[(y*64+x)*4]; q[0]=c?230:40; q[1]=c?160:90; q[2]=c?30:200; q[3]=255; }
+  glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,64,64,0,GL_RGBA,GL_UNSIGNED_BYTE,px); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+  wzlog("cube: ready, looping"); for(int fr=0;;fr++){
+    float a=fr*0.02f,ca=cosf(a),sa=sinf(a),cb=cosf(a*0.7f),sb=sinf(a*0.7f);
+    float RY[16]={ca,0,-sa,0, 0,1,0,0, sa,0,ca,0, 0,0,0,1}, RX[16]={1,0,0,0, 0,cb,sb,0, 0,-sb,cb,0, 0,0,0,1}, T[16]={1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,-4.5f,1}; float R[16],MV[16],P[16]={0},MVP[16];
+    m4mul(RY,RX,R); m4mul(T,R,MV); float f=1.f/tanf(0.5f),asp=(float)OUT_W/OUT_H,n=0.1f,fa=50.f; P[0]=f/asp; P[5]=f; P[10]=(fa+n)/(n-fa); P[11]=-1; P[14]=2*fa*n/(n-fa); m4mul(P,MV,MVP);
+    glViewport(0,0,OUT_W,OUT_H); glClearColor(0.1f,0.12f,0.2f,1.f); glClear(GL_COLOR_BUFFER_BIT); glDisable(GL_BLEND); glEnable(GL_CULL_FACE); glUseProgram(pg);
+    glUniformMatrix4fv(uM,1,GL_FALSE,MVP); glUniformMatrix4fv(uN,1,GL_FALSE,R); glUniform3f(uL,0.4f,0.7f,0.6f); glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D,tex); glUniform1i(uS,0);
+    glVertexAttribPointer(aN,3,GL_FLOAT,GL_FALSE,0,nr); glEnableVertexAttribArray(aN); glVertexAttribPointer(aP,4,GL_FLOAT,GL_FALSE,0,ps); glEnableVertexAttribArray(aP); glVertexAttribPointer(aT,4,GL_FLOAT,GL_FALSE,0,tc); glEnableVertexAttribArray(aT);
+    glDrawArrays(GL_TRIANGLES,0,36); EGLBoolean sr=eglSwapBuffers(gD,gS); if(fr<=2||fr%300==0)wzlog("cube frame %d err=0x%x swap=%d",fr,(unsigned)glGetError(),(int)sr); sceKernelUsleep(16000); } }
 int main(int,char**){
   wzlog("== main start build %d variant %d threads %d ==",(int)BUILD_ID,(int)WZ_VARIANT,(int)WZ_THREADS);
   setvbuf(stdout,NULL,_IONBF,0);
   wzlog("gl first"); if(!glInit()){wzlog("glInit FAILED");for(;;);} wzlog("gl up");
+#if WZ_VARIANT==1
+  wzlog("variant 1: 3D cube test only (no pad/game)"); cubeLoop();
+#endif
 #ifdef WZ_SKIP_USINIT
   wzlog("skip sceUserServiceInitialize (Piglet/privileged may have done it)");
 #else
@@ -157,7 +180,7 @@ int main(int,char**){
     if(frame==1)wzlog("f1 converted");
     static std::vector<uint32_t> tst; if(tst.empty()){ static const uint32_t cb[8]={0xFF0000FFu,0xFF00FF00u,0xFFFF0000u,0xFFFFFFFFu,0xFF00FFFFu,0xFFFF00FFu,0xFFFFFF00u,0xFF808080u}; tst.resize(WZ_IW*WZ_IH); for(int y=0;y<WZ_IH;y++)for(int x=0;x<WZ_IW;x++)tst[y*WZ_IW+x]=(y<WZ_IH/8)?(0xFF000000u|(uint32_t)(x*255/WZ_IW)*0x010101u):cb[x*8/WZ_IW]; }
     bool testMode=(frame<=180); if(frame==1)wzlog("test pattern ON"); if(frame==181)wzlog("test pattern OFF -> game");
-    glPresent(testMode?tst.data():upb.data()); if(frame<=3||frame==60)wzlog("frame %d presented",frame);
+    glPresent(testMode?tst.data():upb.data()); if(frame<=3||frame==60||(frame>180&&frame<=184)||frame%600==0)wzlog("frame %d presented fps=%d",frame,(int)fps);
     { uint32_t el=ticks()-now; if(el<33)sceKernelUsleep((33-el)*1000); } // سقف 30fps
   }
 }
