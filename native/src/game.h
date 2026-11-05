@@ -7,7 +7,6 @@
 #include "net.h"
 #include "sfx.h"
 #include "reload.h"
-#include "awm_data.h"
 #include "gunmodels.h"
 #include "ws.h"
 #include <string>
@@ -516,7 +515,7 @@ struct Game{
   // موديلات الأسلحة الحقيقية (مثلثات بألوان رؤوس مولَّدة من GLB): مجموعات 0 أمامي 1 مخزن 2 متحرك 3 كعب
   struct GMod{int nv;const int*grp;const float*lo;const float*rng;const int16_t*pos;const int8_t*nor;const uint8_t*col;const uint16_t*idx;};
   static const GMod* gmodOf(int wi){
-    static const GMod AW={AWMD::NV,AWMD::GRP,AWMD::LO,AWMD::RNG,AWMD::pos,AWMD::nor,AWMD::col,AWMD::idx};
+    static const GMod AW={GMD::sniper_NV,GMD::sniper_GRP,GMD::sniper_LO,GMD::sniper_RNG,GMD::sniper_pos,GMD::sniper_nor,GMD::sniper_col,GMD::sniper_idx};
     static const GMod RI={GMD::rifle_NV,GMD::rifle_GRP,GMD::rifle_LO,GMD::rifle_RNG,GMD::rifle_pos,GMD::rifle_nor,GMD::rifle_col,GMD::rifle_idx};
     static const GMod DM={GMD::dmr_NV,GMD::dmr_GRP,GMD::dmr_LO,GMD::dmr_RNG,GMD::dmr_pos,GMD::dmr_nor,GMD::dmr_col,GMD::dmr_idx};
     static const GMod LA={GMD::launcher_NV,GMD::launcher_GRP,GMD::launcher_LO,GMD::launcher_RNG,GMD::launcher_pos,GMD::launcher_nor,GMD::launcher_col,GMD::launcher_idx};

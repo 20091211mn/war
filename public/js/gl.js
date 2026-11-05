@@ -1,5 +1,3 @@
-import { AWM } from './awm-data.js';
-import { GM } from './gunmodels.js';
 // محرك عرض WebGL صغير (بدون مكتبات): مجسّمات ملوّنة مضاءة + ضباب + سماء
 const VS = `
 attribute vec3 aPos; attribute vec3 aNor; attribute vec3 aCol;
@@ -200,9 +198,8 @@ export class Engine {
     this.skyBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, this.skyBuf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     this.cube = this._mesh(cubeData()); this.sphere = this._mesh(sphereData()); this.cyl = this._mesh(cylData()); this.tube = this._mesh(tubeData());
-    this.map = null; this.awm = null;
-    this.models = {};
-    try { this.awm = this._groups(AWM); this.models.sniper = this.awm; for (const k in GM) this.models[k] = this._groups(GM[k]); } catch (e) { this.awm = null; this.models = {}; }
+    this.map = null;
+    this.models = {}; this.mlevel = '';
     this.ext = null; this.lists = new Map();
     try { this.ext = gl.getExtension('ANGLE_instanced_arrays'); if (this.ext) this._initInst(); } catch (e) { this.ext = null; }
     this.VP = mat(); this.VPvm = mat(); this.proj = mat(); this.projVm = mat(); this.V = mat();
@@ -223,7 +220,7 @@ export class Engine {
     this.LI = L; this.instBuf = gl.createBuffer();
     this.fs = { vp: null, cam: [0, 0, 0], fog: [40, 120] };
     this.meshIds = new Map([[this.cube, 0], [this.sphere, 1], [this.cyl, 2], [this.tube, 3]]);
-    let nid = 4; for (const k in this.models) this.models[k].forEach((m) => this.meshIds.set(m, nid++));
+    this.nid = 4;
   }
   _program(vs, fs) {
     const gl = this.gl;
@@ -231,6 +228,17 @@ export class Engine {
     const p = gl.createProgram(); gl.attachShader(p, mk(gl.VERTEX_SHADER, vs)); gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('link: ' + gl.getProgramInfoLog(p));
     return p;
+  }
+  // موديلات الأسلحة الحقيقية بمستوى تفصيل حسب الجودة: h عالية، m متوسطة، l منخفضة (تُحمَّل عند الحاجة)
+  static levelFor(q) { return q >= 0.95 ? 'h' : q >= 0.75 ? 'm' : 'l'; }
+  async loadModels(level) {
+    if (this.mlevel === level) return;
+    let GM; try { GM = (await import('./gm-' + level + '.js')).GM; } catch (e) { return; }
+    const gl = this.gl, old = this.models, nm = {};
+    try { for (const k in GM) nm[k] = this._groups(GM[k]); } catch (e) { return; }
+    for (const k in nm) for (const m of nm[k]) { if (this.meshIds) this.meshIds.set(m, this.nid++); }
+    this.models = nm; this.mlevel = level;
+    for (const k in old) { const vb = old[k][0] && old[k][0].vb; if (vb) gl.deleteBuffer(vb); for (const m of old[k]) { if (m.ib) gl.deleteBuffer(m.ib); if (this.meshIds) this.meshIds.delete(m); } }
   }
   // مجسّم بألوان رؤوس مقسّم إلى مجموعات (بنفس مخزن الرؤوس) — موديل AWM
   _groups(A) {
@@ -420,7 +428,6 @@ export class Engine {
     for (const a of [this.A.pos, this.A.nor, this.A.col]) gl.enableVertexAttribArray(a);
     this.cur = null;
   }
-  awmAt(group, m, r, g, b, unlit, alpha, add) { if (this.awm) this.draw(this.awm[group], m, r, g, b, unlit, alpha, add); }
   modelAt(name, group, m, r, g, b, unlit) { const L = this.models[name]; if (L && L[group] && L[group].count) this.draw(L[group], m, r, g, b, unlit, 1, false); }
   cubeAt(m, r, g, b, unlit, alpha, add) { this.draw(this.cube, m, r, g, b, unlit, alpha, add); }
   cylAt(m, r, g, b, unlit, alpha, add) { this.draw(this.cyl, m, r, g, b, unlit, alpha, add); }

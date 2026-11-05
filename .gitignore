@@ -9,3 +9,4 @@ node_modules/
 /ps4/eboot.bin
 /ps4/out/
 /ps4/assets/
+__pycache__/
