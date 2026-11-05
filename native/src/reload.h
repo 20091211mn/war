@@ -9,6 +9,7 @@ struct RPose{
   int ns=0; float sh[1][3];                               // خرطوشة شوتغن
   int shiftIdx=-1; float shiftV=0;                        // جزء يتحرك (شريحة/غطاء)
   int shiftIdx2=-1;
+  bool hasRocket=false; float rk[3]={0,0,0};              // RPG: القذيفة المتحركة (إزاحة عن موضعها داخل الأنبوب)
 };
 namespace RL{
   static inline float ez(float x){ return x<=0?0:x>=1?1:x*x*(3-2*x); }
@@ -16,7 +17,21 @@ namespace RL{
   static inline void mix3(const float*a,const float*b,float k,float*o){ for(int i=0;i<3;i++)o[i]=a[i]+(b[i]-a[i])*k; }
   static inline void set3(float*o,float a,float b,float c){ o[0]=a;o[1]=b;o[2]=c; }
   // pistolClass: مسدس/ماغنوم ، shotgun
-  template<class GD> static void pose(const GD&g,bool pistol,bool shotgun,float t,RPose&P){
+  static void launcherPose(float t,RPose&P){
+    static const float PT[5][4]={{0.00f,-0.26f,-0.32f,0.80f},{0.17f,-0.24f,-0.16f,0.45f},{0.32f,-0.30f,-0.06f,-0.10f},{0.45f,-0.16f,0.0f,-0.42f},{0.55f,0.0f,0.0f,-0.36f}};
+    float tilt=sg(t,0,0.14f)-sg(t,0.9f,1.f); P.tilt=tilt; P.hideRear=false; P.y=0.05f*tilt; P.x=-0.03f*tilt; P.z=-0.06f*tilt; P.rx=0.42f*tilt; P.ry=0; P.rz=-0.32f*tilt; P.hideMag=t<0.74f;
+    float H0[3]={-0.03f,-0.13f,-0.08f},off[3]={0,0,0}; bool have=false;
+    if(t>=0.07f&&t<0.55f){ int i=0; while(i<3&&t>=PT[i+1][0])i++; float k=i?sg(t,PT[i][0],PT[i+1][0]):sg(t,0.07f,PT[1][0]); float a[3]={PT[i][1],PT[i][2],PT[i][3]},b[3]={PT[i+1][1],PT[i+1][2],PT[i+1][3]}; mix3(a,b,k,off); have=true; }
+    else if(t>=0.55f&&t<0.74f){ float k=sg(t,0.6f,0.72f); off[0]=0;off[1]=0;off[2]=-0.36f*(1-k); have=true; }
+    P.hasRocket=have; for(int i=0;i<3;i++)P.rk[i]=off[i];
+    float hand[3]={H0[0],H0[1],H0[2]};
+    if(t<0.07f){ float a[3]={-0.2f,-0.3f,0.6f}; mix3(H0,a,sg(t,0,0.07f),hand); }
+    else if(have&&t<0.74f){ set3(hand,off[0]-0.02f,off[1]-0.06f,-0.46f+off[2]+0.1f); }
+    else if(t<0.9f){ float a[3]={0,-0.06f,-0.26f}; mix3(a,H0,sg(t,0.78f,0.9f),hand); }
+    for(int i=0;i<3;i++)P.hand[i]=hand[i];
+    P.z+=0.03f*std::max(0.f,sinf(std::min(1.f,std::max(0.f,(t-0.7f)/0.08f))*3.14159265f)); }
+  template<class GD> static void pose(const GD&g,bool pistol,bool shotgun,float t,RPose&P,bool launcher=false){
+    if(launcher){ launcherPose(t,P); return; }
     float M[3]={0,-0.08f,0.05f},MS[3]={0.028f,0.09f,0.04f}; if(g.hasMag){ for(int i=0;i<3;i++){M[i]=g.mag[i];MS[i]=g.mag[3+i];} }
     for(int i=0;i<3;i++)P.ms[i]=MS[i];
     float H0[3]; if(pistol)set3(H0,-0.03f,-0.075f,0.05f); else set3(H0,-0.005f,-0.05f,g.mz*0.42f);

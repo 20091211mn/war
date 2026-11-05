@@ -70,7 +70,28 @@ const seg = (t, a, b) => _ez((t - a) / (b - a));
 const mix3 = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
 export const RELOAD_SYNC = { out: 0.17, in: 0.5, seat: 0.585, pull: 0.69, slam: 0.83 }; // نقاط الصوت (كسر من مدة التعبئة)
 const BRASS = [0.85, 0.62, 0.18];
+// قاذف RPG: يُمال السلاح، تُسحب القذيفة من الحقيبة، تُدار حول الجانب الأيسر إلى فوهة الأنبوب، ثم تُدفع للداخل بضربة وتُقفل
+const L_PATH = [[0.00, [-0.26, -0.32, 0.80]], [0.17, [-0.24, -0.16, 0.45]], [0.32, [-0.30, -0.06, -0.10]], [0.45, [-0.16, 0.0, -0.42]], [0.55, [0.0, 0.0, -0.36]]];
+function launcherPose(t) {
+  const M = [0, 0, -0.46], tilt = seg(t, 0, 0.14) - seg(t, 0.9, 1), H0 = [-0.03, -0.13, -0.08];
+  const P = { hideRear: false, y: 0.05 * tilt, x: -0.03 * tilt, z: -0.06 * tilt, rx: 0.42 * tilt, ry: 0, rz: -0.32 * tilt, hand: H0, hideMag: t < 0.74, mags: [], shells: [], bolt: 0, shift: null, handle: false, tilt, rocket: null };
+  let off = null;
+  if (t >= 0.07 && t < 0.55) { // سحب من الحقيبة ثم نقل إلى الفوهة
+    let i = 0; while (i < L_PATH.length - 2 && t >= L_PATH[i + 1][0]) i++;
+    const a = L_PATH[i], b = L_PATH[i + 1]; off = mix3(a[1], b[1], i ? seg(t, a[0], b[0]) : seg(t, 0.07, b[0]));
+  } else if (t >= 0.55 && t < 0.74) { const k = seg(t, 0.6, 0.72); off = [0, 0, -0.36 * (1 - k)]; } // ينزلق داخل الأنبوب
+  if (off) P.rocket = off;
+  // اليد اليسرى: على القذيفة أثناء حملها، ثم تدفع من الخلف، ثم تعود للمقبض الأمامي
+  let hand = H0;
+  if (t < 0.07) hand = mix3(H0, [-0.2, -0.3, 0.6], seg(t, 0.0, 0.07));
+  else if (off && t < 0.74) hand = [off[0] - 0.02, off[1] - 0.06, M[2] + off[2] + 0.1];
+  else if (t < 0.9) hand = mix3([0, -0.06, -0.36 + 0.1], H0, seg(t, 0.78, 0.9));
+  P.hand = hand;
+  P.z += 0.03 * Math.max(0, Math.sin(Math.min(1, Math.max(0, (t - 0.7) / 0.08)) * Math.PI)); // دفعة القفل
+  return P;
+}
 export function reloadPose(kind, t) {
+  if (kind === 'launcher') return launcherPose(t);
   const g = GUNS[kind], sg = kind === 'shotgun', pistol = kind === 'pistol' || kind === 'magnum';
   const M = g.mag ? [g.mag[0], g.mag[1], g.mag[2]] : [0, -0.08, 0.05], MS = g.mag ? [g.mag[3], g.mag[4], g.mag[5]] : [0.028, 0.09, 0.04];
   const H0 = pistol ? [-0.03, -0.075, 0.05] : [-0.005, -0.05, g.mz * 0.42];
@@ -132,6 +153,7 @@ export function drawReloadExtras(eng, G, st, P) {
   const part = (p, s, col, unlit) => eng.cubeAt(mul(tmp(), G, trs(tmp(), p[0], p[1], p[2], 0, 0, s[0], s[1], s[2])), col[0], col[1], col[2], unlit);
   const fast = st.att && st.att.mag === 'fast';
   for (const m of P.mags) part(m.p, m.s, fast ? C.o : C.b);
+  if (P.rocket && eng.models && eng.models[st.kind]) eng.modelAt(st.kind, 1, mul(tmp(), G, trs(tmp(), P.rocket[0], P.rocket[1], P.rocket[2], 0, 0, 1, 1, 1)), 1, 1, 1, false);
   for (const sh of P.shells) { part(sh, [0.02, 0.02, 0.07], BRASS); part([sh[0], sh[1], sh[2] + 0.03], [0.021, 0.021, 0.018], [0.7, 0.1, 0.08]); }
   if (P.handle && !(eng.models && eng.models[st.kind])) part([st.kind === 'sniper' ? 0.062 : 0.03, st.kind === 'sniper' ? 0.0 : 0.032, 0.05 + P.bolt], [0.014, 0.014, 0.04], C.g);
 }
@@ -216,7 +238,9 @@ export function drawAvatar(eng, a, t) {
     const base = a.sprint ? 0.9 : Math.PI / 2;
     const RP = a.rl >= 0 ? reloadPose(st.kind, a.rl) : null;
     arm(0.27, base + ap - 0.12 + br); arm(-0.27, base + ap + 0.12 + br + (RP ? RP.tilt * 0.55 : 0));
-    let G = pivot(tmp(), U, 0.12, 1.3 - Y0, 0, ap - L, 0, -0.05, -0.38, 1, 1, 1);
+    // موديلات GLB الواقعية رفيعة مقارنة بجسم الجندي المكعّب: نكبّرها قليلًا ليظهر السلاح بوضوح من منظور الآخرين؛ والـRPG يرتكز على الكتف
+    const lau = st.kind === 'launcher', sc = eng.models && eng.models[st.kind] ? 1.5 : 1;
+    let G = pivot(tmp(), U, 0.12, 1.3 - Y0, 0, ap - L, 0, lau ? 0.13 : -0.05, lau ? -0.14 : -0.38, sc, sc, sc);
     if (RP) G = mul(tmp(), mul(tmp(), G, trs(tmp(), RP.x * 0.6, RP.y * 0.7, RP.z, RP.ry * 0.8, RP.rx * 0.6, 1, 1, 1)), rotZ(RP.rz * 0.7));
     drawGun(eng, G, st, a.flash || 0, RP);
     if (RP) drawReloadExtras(eng, G, st, RP);
