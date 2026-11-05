@@ -37,6 +37,8 @@ static float stickN(uint8_t v){return ((int)v-128)/127.f;}
 #endif
 #if WZ_VARIANT==2
 #define WZ_LOGFILE "/data/wz_gl_log2.txt"
+#elif WZ_VARIANT==3
+#define WZ_LOGFILE "/data/wz_gl_log3.txt"
 #else
 #define WZ_LOGFILE "/data/wz_gl_log.txt"
 #endif
@@ -109,7 +111,7 @@ static void glPresent(const uint32_t*up){
 
 // ===== اختبار ثلاثي الأبعاد على الـGPU: مكعب يدور بشيدر khronos/earth الجاهز (إضاءة + نسيج) — للتأكد من العرض والـ3D بدون يد/لعبة =====
 static void m4mul(const float*a,const float*b,float*o){ float r[16]; for(int c=0;c<4;c++)for(int rI=0;rI<4;rI++){ float v=0; for(int k=0;k<4;k++)v+=a[k*4+rI]*b[c*4+k]; r[c*4+rI]=v; } memcpy(o,r,sizeof(r)); }
-static void cubeLoop(){
+static void cubeLoop(bool usePad){
   unsigned char*vp,*fp; uint64_t vl,fl; if(!fetchSh("khronos/earth.vert",vp,vl)||!fetchSh("khronos/earth.frag",fp,fl)){wzlog("earth shader missing");for(;;)sceKernelUsleep(100000);}
   GLuint vs=glCreateShader(GL_VERTEX_SHADER),fs=glCreateShader(GL_FRAGMENT_SHADER),pg=glCreateProgram(); glShaderBinary(1,&vs,0,vp,vl); glShaderBinary(1,&fs,0,fp,fl); glAttachShader(pg,vs); glAttachShader(pg,fs); glLinkProgram(pg);
   GLint uM=glGetUniformLocation(pg,"u_modelViewProjMatrix"),uN=glGetUniformLocation(pg,"u_normalMatrix"),uL=glGetUniformLocation(pg,"lightDir"),uS=glGetUniformLocation(pg,"sampler2d"),aN=glGetAttribLocation(pg,"vNormal"),aP=glGetAttribLocation(pg,"vPosition"),aT=glGetAttribLocation(pg,"vTexCoord");
@@ -119,8 +121,9 @@ static void cubeLoop(){
   for(int f=0;f<6;f++){ const float*n=F[f],*u=F[f]+3,*v=F[f]+6; for(int q=0;q<6;q++){ int k=Q[q]; float a=cu[k][0],b=cu[k][1]; for(int i=0;i<3;i++){ nr[vi*3+i]=n[i]; ps[vi*4+i]=n[i]+u[i]*a+v[i]*b; } ps[vi*4+3]=1; tc[vi*4]=(a+1)*0.5f; tc[vi*4+1]=(b+1)*0.5f; tc[vi*4+2]=0; tc[vi*4+3]=1; vi++; } }
   GLuint tex; glGenTextures(1,&tex); glBindTexture(GL_TEXTURE_2D,tex); static unsigned char px[64*64*4]; for(int y=0;y<64;y++)for(int x=0;x<64;x++){ bool c=((x>>3)+(y>>3))&1; unsigned char*q=&px[(y*64+x)*4]; q[0]=c?230:40; q[1]=c?160:90; q[2]=c?30:200; q[3]=255; }
   glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,64,64,0,GL_RGBA,GL_UNSIGNED_BYTE,px); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-  wzlog("cube: ready, looping"); for(int fr=0;;fr++){
-    float a=fr*0.02f,ca=cosf(a),sa=sinf(a),cb=cosf(a*0.7f),sb=sinf(a*0.7f);
+  wzlog("cube: ready, looping pad=%d",(int)usePad); float angA=0,angB=0; uint32_t lastBtn=0xFFFFFFFFu; int btnLogs=0; for(int fr=0;;fr++){
+    if(usePad&&padH>=0){ memset(&pd,0,sizeof(pd)); int rr=scePadReadState(padH,&pd); if(fr<3)wzlog("padRead ret=0x%x",(unsigned)rr); angA+=stickN(pd.rightStick.x)*0.06f; angB+=stickN(pd.rightStick.y)*0.06f; if(pd.buttons!=lastBtn&&btnLogs<40){ lastBtn=pd.buttons; btnLogs++; wzlog("pad btn=%05X LS %d,%d RS %d,%d L2 %d R2 %d",(unsigned)pd.buttons,pd.leftStick.x,pd.leftStick.y,pd.rightStick.x,pd.rightStick.y,pd.analogButtons.l2,pd.analogButtons.r2); } }
+    float a=fr*0.02f+angA,ca=cosf(a),sa=sinf(a),cb=cosf(a*0.7f+angB),sb=sinf(a*0.7f+angB);
     float RY[16]={ca,0,-sa,0, 0,1,0,0, sa,0,ca,0, 0,0,0,1}, RX[16]={1,0,0,0, 0,cb,sb,0, 0,-sb,cb,0, 0,0,0,1}, T[16]={1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,-4.5f,1}; float R[16],MV[16],P[16]={0},MVP[16];
     m4mul(RY,RX,R); m4mul(T,R,MV); float f=1.f/tanf(0.5f),asp=(float)OUT_W/OUT_H,n=0.1f,fa=50.f; P[0]=f/asp; P[5]=f; P[10]=(fa+n)/(n-fa); P[11]=-1; P[14]=2*fa*n/(n-fa); m4mul(P,MV,MVP);
     glViewport(0,0,OUT_W,OUT_H); glClearColor(0.1f,0.12f,0.2f,1.f); glClear(GL_COLOR_BUFFER_BIT); glDisable(GL_BLEND); glEnable(GL_CULL_FACE); glUseProgram(pg);
@@ -132,7 +135,11 @@ int main(int,char**){
   setvbuf(stdout,NULL,_IONBF,0);
   wzlog("gl first"); if(!glInit()){wzlog("glInit FAILED");for(;;);} wzlog("gl up");
 #if WZ_VARIANT==1
-  wzlog("variant 1: 3D cube test only (no pad/game)"); cubeLoop();
+  wzlog("variant 1: 3D cube test only (no pad/game)"); cubeLoop(false);
+#elif WZ_VARIANT==3
+  { wzlog("variant 3: privileged + UserService init + pad, then cube"); OrbisUserServiceInitializeParams up3; up3.priority=ORBIS_KERNEL_PRIO_FIFO_LOWEST; wzlog("v3: calling sceUserServiceInitialize"); int u3=sceUserServiceInitialize(&up3); wzlog("v3: userservice init ret=0x%x",(unsigned)u3);
+    int uid3=0; wzlog("v3: calling GetInitialUser"); int g3=sceUserServiceGetInitialUser(&uid3); wzlog("v3: GetInitialUser ret=0x%x uid=%d",(unsigned)g3,uid3);
+    wzlog("v3: calling scePadInit"); int p3=scePadInit(); wzlog("v3: scePadInit ret=0x%x",(unsigned)p3); padH=scePadOpen(uid3,0,0,NULL); wzlog("v3: scePadOpen=%d",padH); cubeLoop(true); }
 #endif
 #ifdef WZ_SKIP_USINIT
   wzlog("skip sceUserServiceInitialize (Piglet/privileged may have done it)");
