@@ -55,7 +55,7 @@ static float stickN(uint8_t v){return ((int)v-128)/127.f;}
 #endif
 static void wzlog(const char*f,...){ FILE*fp=fopen(WZ_LOGFILE,"a"); if(!fp)return; va_list a; va_start(a,f); vfprintf(fp,f,a); va_end(a); fputc('\n',fp); fclose(fp); }
 #if WZ_VARIANT==5
-static void* audioThread(void*){ wzlog("audio: thread start"); SFX::initBuffers(); wzlog("audio: buffers ok"); { int am=sceSysmoduleLoadModuleInternal(0x80000001); wzlog("audio: internal AUDIOOUT module 0x%x",(unsigned)am); } int ai=sceAudioOutInit(); wzlog("audio: init 0x%x",(unsigned)ai); int h=sceAudioOutOpen(ORBIS_USER_SERVICE_USER_ID_SYSTEM,ORBIS_AUDIO_OUT_PORT_TYPE_MAIN,0,256,48000,ORBIS_AUDIO_OUT_PARAM_FORMAT_S16_STEREO); wzlog("audio: open %d",h);
+static void* audioThread(void*){ wzlog("audio: thread start"); SFX::initBuffers(); wzlog("audio: buffers ok"); { int am=sceSysmoduleLoadModuleInternal((decltype(ORBIS_SYSMODULE_INTERNAL_USER_SERVICE))0x80000001); wzlog("audio: internal AUDIOOUT module 0x%x",(unsigned)am); } int ai=sceAudioOutInit(); wzlog("audio: init 0x%x",(unsigned)ai); int h=sceAudioOutOpen(ORBIS_USER_SERVICE_USER_ID_SYSTEM,ORBIS_AUDIO_OUT_PORT_TYPE_MAIN,0,256,48000,ORBIS_AUDIO_OUT_PARAM_FORMAT_S16_STEREO); wzlog("audio: open %d",h);
   if(h<=0)return NULL; static int16_t buf[256*2]; for(;;){ SFX::mix(buf,256); sceAudioOutOutput(h,buf); } return NULL; }
 #endif
 static uint32_t ticks(){ return (uint32_t)(sceKernelGetProcessTime()/1000); }
