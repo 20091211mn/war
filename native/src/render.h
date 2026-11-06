@@ -32,7 +32,7 @@ struct Renderer {
   Cam cam{}; float fx=0,fy=0,fz=0,rx=0,rz=0,ux=0,uy=0,uz=0,focal=1;
   const MapDef* m=nullptr; float fog[3]={0,0,0}, fogN=30, fogF=100; float sunN[3]={0,1,0};
   float powLut[257]; float lineLut[32*32]; float hashTab[256]; int LL[1024],HH[256];
-  void init(int w,int h){flush();W=w;H=h;fb.assign(w*h,0);zb.assign(w*h,0);for(int i=0;i<=256;i++)powLut[i]=powf(i/256.f,0.55f); for(int j=0;j<32;j++)for(int i=0;i<32;i++){float fu=(i+0.5f)/32-0.5f,fv=(j+0.5f)/32-0.5f;float gm=std::max<float>(fabsf(fu),fabsf(fv));float ln=gm>0.43f?std::min<float>(1.f,(gm-0.43f)/0.07f):0.f;lineLut[j*32+i]=1.f-0.2f*ln;} for(int i=0;i<256;i++)hashTab[i]=0.9f+0.2f*hash2(i&15,i>>4); for(int i=0;i<1024;i++)LL[i]=(int)(lineLut[i]*256.f+0.5f); for(int i=0;i<256;i++)HH[i]=(int)(hashTab[i]*256.f+0.5f);}
+  void init(int w,int h){flush();W=w;H=h;fb.assign(w*h,0);rowD.assign(h,0);zb.assign(w*h,0);for(int i=0;i<=256;i++)powLut[i]=powf(i/256.f,0.55f); for(int j=0;j<32;j++)for(int i=0;i<32;i++){float fu=(i+0.5f)/32-0.5f,fv=(j+0.5f)/32-0.5f;float gm=std::max<float>(fabsf(fu),fabsf(fv));float ln=gm>0.43f?std::min<float>(1.f,(gm-0.43f)/0.07f):0.f;lineLut[j*32+i]=1.f-0.2f*ln;} for(int i=0;i<256;i++)hashTab[i]=0.9f+0.2f*hash2(i&15,i>>4); for(int i=0;i<1024;i++)LL[i]=(int)(lineLut[i]*256.f+0.5f); for(int i=0;i<256;i++)HH[i]=(int)(hashTab[i]*256.f+0.5f);}
   void setCam(const Cam&c){
     cam=c; float cy=cosf(c.yaw),sy=sinf(c.yaw),cp=cosf(c.pitch),sp=sinf(c.pitch);
     fx=-sy*cp; fy=sp; fz=-cy*cp; rx=cy; rz=-sy;
@@ -136,6 +136,7 @@ struct Renderer {
   struct E{float x,z,u,v;};
   static std::vector<TJ>*& tgt(){ static thread_local std::vector<TJ>* t=nullptr; return t; }
   // ===== وضع GPU التجريبي: المضلعات تُجمع كمثلثات (x,y,z,u,v) وتُرسم عبر Piglet؛ اللون = إحداثي في نسيج لوحة ألوان 6-6-6 =====
+  std::vector<uint8_t> rowD; // صفوف الواجهة التي كُتب فيها (لرفع الأجزاء المتغيّرة فقط في وضع GPU)
   bool gpu=false; std::vector<float> gv[2]; std::vector<float> gd[3]; // [0]=العالم ، [1]=مجسّم السلاح ؛ gd = طبقات نقش الشبكة (بحسب الضباب)
   // رأس = {x,y,z,u,v} (u,v إحداثيات النقش التفصيلي بوحدة العالم)
   void gpuTri(const float*a,const float*b,const float*c,float r,float g,float bl,bool useFog,bool det,int dep){

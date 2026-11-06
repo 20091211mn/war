@@ -647,8 +647,8 @@ struct Game{
     hud();
   }
   // ---- واجهة ----
-  void px(int x,int y,uint32_t c){ if(x>=0&&y>=0&&x<r.W&&y<r.H)r.fb[y*r.W+x]=c; }
-  void blendSpan(int y,int x0,int x1,uint32_t c,float a){ if(y<0||y>=r.H)return; x0=std::max(0,x0); x1=std::min(r.W,x1); if(x1<=x0||a<=0)return; uint32_t*row=&r.fb[(size_t)y*r.W];
+  void px(int x,int y,uint32_t c){ if(x>=0&&y>=0&&x<r.W&&y<r.H){ r.fb[y*r.W+x]=c; r.rowD[y]=1; } }
+  void blendSpan(int y,int x0,int x1,uint32_t c,float a){ if(y<0||y>=r.H)return; x0=std::max(0,x0); x1=std::min(r.W,x1); if(x1<=x0||a<=0)return; uint32_t*row=&r.fb[(size_t)y*r.W]; r.rowD[y]=1;
     if(a>=0.999f){ std::fill(row+x0,row+x1,c|0xFF000000u); return; }
     uint32_t ia=(uint32_t)(a*256.f+0.5f),na=256-ia,crb=(c&0xFF00FFu)*ia,cg=(c&0x00FF00u)*ia,ca=255u*ia;
     for(int i=x0;i<x1;i++){ uint32_t o=row[i]; uint32_t rb=(((o&0xFF00FFu)*na+crb)>>8)&0xFF00FFu; uint32_t g=(((o&0x00FF00u)*na+cg)>>8)&0x00FF00u; uint32_t aa=((((o>>24)*na)+ca)>>8)&0xFFu; row[i]=(aa<<24)|rb|g; } } // ألفا مُتراكمة (تُستعمل في وضع GPU؛ في الـCPU تبقى 255)
@@ -661,7 +661,7 @@ struct Game{
   void text(int x,int y,const char*s,int sc,uint32_t col){ r.flush(); int em=fontEm(sc); std::string line; const char*p=s; int ly=y;
     auto flush=[&](){ int cx=x,bl=ly+7*sc; for(auto cp:AR::visual(line.c_str())){ int base; const FGlyph*g=fgFor(em,cp,base); if(!g){cx+=em/3;continue;} float k=(float)em/base;
         if(g->w){ int dw=std::max<float>(1,(int)(g->w*k+0.5f)),dh=std::max<float>(1,(int)(g->h*k+0.5f)); int dx=cx+(int)(g->bx*k+(g->bx<0?-0.5f:0.5f)),dy=bl-(int)(g->by*k+0.5f); const uint8_t*src=FDATA+g->off;
-          for(int j=0;j<dh;j++){ int py=dy+j; if(py<0||py>=r.H)continue; float fy=(j+0.5f)/k-0.5f; int y0=(int)floorf(fy); float ty=fy-y0; int y1=std::min(g->h-1,y0+1); y0=std::max(0,y0);
+          for(int j=0;j<dh;j++){ int py=dy+j; if(py<0||py>=r.H)continue; r.rowD[py]=1; float fy=(j+0.5f)/k-0.5f; int y0=(int)floorf(fy); float ty=fy-y0; int y1=std::min(g->h-1,y0+1); y0=std::max(0,y0);
             for(int i=0;i<dw;i++){ int px=dx+i; if(px<0||px>=r.W)continue; float fx=(i+0.5f)/k-0.5f; int x0=(int)floorf(fx); float tx=fx-x0; int x1=std::min(g->w-1,x0+1); x0=std::max(0,x0);
               float a=(src[y0*g->w+x0]*(1-tx)+src[y0*g->w+x1]*tx)*(1-ty)+(src[y1*g->w+x0]*(1-tx)+src[y1*g->w+x1]*tx)*ty; a/=255.f; if(a<0.04f)continue;
               uint32_t o=r.fb[py*r.W+px]; auto m=[&](int sh){int A=(o>>sh)&255,B=(col>>sh)&255;return (uint32_t)(A+(B-A)*a)<<sh;}; { int oa=(o>>24)&255; r.fb[py*r.W+px]=((uint32_t)(oa+(255-oa)*a)<<24)|m(16)|m(8)|m(0); } } } }

@@ -34,6 +34,11 @@ static float stickN(uint8_t v){return ((int)v-128)/127.f;}
 #ifndef WZ_VARIANT
 #define WZ_VARIANT 1
 #endif
+#if WZ_VARIANT>=7
+#define WZ_OPT 1
+#else
+#define WZ_OPT 0
+#endif
 #if WZ_VARIANT>=4
 #define WZ_GPU 1
 #else
@@ -48,6 +53,8 @@ static float stickN(uint8_t v){return ((int)v-128)/127.f;}
 #define WZ_LOGFILE "/data/wz_gl_log3.txt"
 #elif WZ_VARIANT==4
 #define WZ_LOGFILE "/data/wz_gl_log4.txt"
+#elif WZ_VARIANT==7
+#define WZ_LOGFILE "/data/wz_gl_log7.txt"
 #elif WZ_VARIANT==6
 #define WZ_LOGFILE "/data/wz_gl_log6.txt"
 #elif WZ_VARIANT==5
@@ -94,7 +101,7 @@ static bool glInit(){
 #else
   const int dl[1]={0};
 #endif
-#if WZ_VARIANT==6
+#if WZ_VARIANT>=6
   const int sl[2]={4,0};
 #else
   const int sl[1]={0};
@@ -127,9 +134,11 @@ static bool glInit(){
   wzlog("probe done");
   return true;
 }
-static void glPresent(const uint32_t*up,bool overlay=false){
+static void glPresent(const uint32_t*up,bool overlay=false,const uint8_t*rows=nullptr){
   glViewport(0,0,OUT_W,OUT_H); if(!overlay){ glClearColor(0.05f,0.2f,0.6f,1.f); glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT); } glDisable(GL_DEPTH_TEST); glEnable(GL_BLEND); if(overlay)glBlendFunc(GL_ONE,GL_ONE_MINUS_SRC_ALPHA); else glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
-  glBindTexture(GL_TEXTURE_2D,gTex); glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,WZ_IW,WZ_IH,0,GL_RGBA,GL_UNSIGNED_BYTE,up);
+  glBindTexture(GL_TEXTURE_2D,gTex);
+  static bool upInit=false; if(overlay&&rows&&upInit){ for(int y=0;y<WZ_IH;){ if(!rows[y]){y++;continue;} int y1=y; while(y1<WZ_IH&&rows[y1])y1++; glTexSubImage2D(GL_TEXTURE_2D,0,0,y,WZ_IW,y1-y,GL_RGBA,GL_UNSIGNED_BYTE,up+(size_t)y*WZ_IW); y=y1; } } // رفع الصفوف المتغيّرة فقط
+  else { glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,WZ_IW,WZ_IH,0,GL_RGBA,GL_UNSIGNED_BYTE,up); upInit=true; }
   static const GLfloat v[]={0,1,0,1, 1,0,1,0, 0,0,0,0, 0,1,0,1, 1,1,1,1, 1,0,1,0};
   GLfloat id[16]={1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
   GLfloat mv[16]={(GLfloat)OUT_W,0,0,0, 0,(GLfloat)OUT_H,0,0, 0,0,1,0, 0,0,0,1};
@@ -253,6 +262,7 @@ int main(int,char**){
 #endif
  wzlog("game init"); static std::vector<uint32_t> upb(WZ_IW*WZ_IH); wzlog("upload buf ok");
   wzlog("entering loop");
+  static std::vector<uint8_t> prevD,rowUp; double sU=0,sR=0,sG=0,sP=0,mxT=0; int nT=0;
   uint32_t last=ticks(); bool dbg=false; uint32_t prevB=0; float acc=0,fpsT=0,fps=30; int fpsN=0; float smx=0,smy=0; int frame=0;
   for(;;){
     memset(&pd,0,sizeof(pd));     if(padH>=0)scePadReadState(padH,&pd); else padH=scePadOpen(uid,0,0,NULL);
@@ -278,20 +288,37 @@ int main(int,char**){
     if(g.menu||g.paused){ if(B(ORBIS_PAD_BUTTON_RIGHT))in.mx=1; else if(B(ORBIS_PAD_BUTTON_LEFT))in.mx=-1; if(g.menu)in.my=B(ORBIS_PAD_BUTTON_UP)?1.f:B(ORBIS_PAD_BUTTON_DOWN)?-1.f:0.f;
       if((edge&ORBIS_PAD_BUTTON_R1)&&(g.menu==1||g.paused))g.swapSticks=!g.swapSticks; }
     if((edge&ORBIS_PAD_BUTTON_TOUCH_PAD)&&(g.menu||g.paused))dbg=!dbg;
-#if WZ_GPU
+#if WZ_OPT
+    { static bool f0=true; if(f0){ f0=false; prevD.assign(g.r.H,1); rowUp.assign(g.r.H,1); } for(int y=0;y<g.r.H;y++){ prevD[y]=g.r.rowD[y]; if(g.r.rowD[y]){ memset(&g.r.fb[(size_t)y*g.r.W],0,(size_t)g.r.W*4); g.r.rowD[y]=0; } } }
+#elif WZ_GPU
     memset(g.r.fb.data(),0,g.r.fb.size()*4); // طبقة HUD شفافة
 #endif
+    uint64_t tS=sceKernelGetProcessTime();
     acc+=dt; int steps=0; while(acc>=1.f/60.f&&steps<4){ g.update(1.f/60.f,in); acc-=1.f/60.f; steps++; } if(steps==4)acc=0;
-    if(frame==1)wzlog("f1 updated"); if(g.menu)g.renderMenu(); else g.render(); if(frame==1)wzlog("f1 rendered");
+    uint64_t tU=sceKernelGetProcessTime(); if(frame==1)wzlog("f1 updated"); if(g.menu)g.renderMenu(); else g.render(); if(frame==1)wzlog("f1 rendered");
     if(dbg){ char b[96]; snprintf(b,96,"FPS %d RES %d SHADERS %d",(int)fps,g.r.W,gShN); g.text(40,40,b,2,0xFFFFFF00);
       { int pg=(frame/120)%std::max(1,(gShN+11)/12),k=0; for(NikShader*e=scePrecompiledShaderEntries;e->ident;++e,++k){ if(k<pg*12||k>=pg*12+12)continue; snprintf(b,96,"%d %.40s",k,e->ident); g.text(40,110+(k-pg*12)*16,b,1,0xFF66FFCC); } }
       snprintf(b,96,"LS %d %d RS %d %d L2 %d R2 %d",pd.leftStick.x,pd.leftStick.y,pd.rightStick.x,pd.rightStick.y,pd.analogButtons.l2,pd.analogButtons.r2); g.text(40,60,b,2,0xFFFFFF00);
       snprintf(b,96,"BTN %05X PAD %d",(unsigned)pd.buttons,padH); g.text(40,80,b,2,0xFFFFFF00); }
+#if WZ_OPT
+    g.r.flush(); { int W=g.r.W; for(int y=0;y<g.r.H;y++){ uint32_t*ub=&upb[(size_t)y*W]; if(g.r.rowD[y]){ const uint32_t*s=&g.r.fb[(size_t)y*W]; for(int i=0;i<W;i++){ uint32_t p=s[i]; ub[i]=(p&0xFF00FF00u)|((p>>16)&0xFFu)|((p&0xFFu)<<16); } rowUp[y]=1; } else if(prevD[y]){ memset(ub,0,(size_t)W*4); rowUp[y]=1; } else rowUp[y]=0; } }
+#else
     g.r.flush(); { const uint32_t*fbp=g.r.fb.data(); uint32_t*ub=upb.data(); int n=WZ_IW*WZ_IH; std::atomic<int> nx(0); g.r.pool.exec([&]{ for(;;){ int i0=nx.fetch_add(65536); if(i0>=n)break; int i1=std::min(n,i0+65536); for(int i=i0;i<i1;i++){ uint32_t p=fbp[i]; ub[i]=(p&0xFF00FF00u)|((p>>16)&0xFFu)|((p&0xFFu)<<16)|(WZ_GPU?0u:0xFF000000u); } } }); }
+#endif
     if(frame==1)wzlog("f1 converted");
     static std::vector<uint32_t> tst; if(tst.empty()){ static const uint32_t cb[8]={0xFF0000FFu,0xFF00FF00u,0xFFFF0000u,0xFFFFFFFFu,0xFF00FFFFu,0xFFFF00FFu,0xFFFFFF00u,0xFF808080u}; tst.resize(WZ_IW*WZ_IH); for(int y=0;y<WZ_IH;y++)for(int x=0;x<WZ_IW;x++)tst[y*WZ_IW+x]=(y<WZ_IH/8)?(0xFF000000u|(uint32_t)(x*255/WZ_IW)*0x010101u):cb[x*8/WZ_IW]; }
 #if WZ_GPU
-    gpuFrame(g,frame); glPresent(upb.data(),true); if(frame<=3||frame%600==0)wzlog("frame %d presented fps=%d",frame,(int)fps); { uint32_t el=ticks()-now; if(el<16)sceKernelUsleep((16-el)*1000); } continue;
+    uint64_t tR=sceKernelGetProcessTime(); gpuFrame(g,frame); uint64_t tG=sceKernelGetProcessTime();
+#if WZ_OPT
+    glPresent(upb.data(),true,rowUp.data());
+#else
+    glPresent(upb.data(),true);
+#endif
+    uint64_t tP=sceKernelGetProcessTime();
+#if WZ_OPT
+    sU+=(tU-tS)/1000.0; sR+=(tR-tU)/1000.0; sG+=(tG-tR)/1000.0; sP+=(tP-tG)/1000.0; { double ft=(tP-tS)/1000.0; if(ft>mxT)mxT=ft; } if(++nT==300){ wzlog("timing avg ms/frame: update %.2f render(gen) %.2f gpuSubmit %.2f present+swap %.2f | max frame %.1f | fps %d",sU/nT,sR/nT,sG/nT,sP/nT,mxT,(int)fps); sU=sR=sG=sP=mxT=0; nT=0; }
+#endif
+    if(frame<=3||frame%600==0)wzlog("frame %d presented fps=%d",frame,(int)fps); { uint32_t el=ticks()-now; if(el<16)sceKernelUsleep((16-el)*1000); } continue;
 #endif
     bool testMode=(frame<=180); if(frame==1)wzlog("test pattern ON"); if(frame==181)wzlog("test pattern OFF -> game");
     glPresent(testMode?tst.data():upb.data()); if(frame<=3||frame==60||(frame>180&&frame<=184)||frame%600==0)wzlog("frame %d presented fps=%d",frame,(int)fps);
