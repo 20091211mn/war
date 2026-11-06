@@ -44,7 +44,7 @@ public class LanHostPlugin: CAPPlugin, CAPBridgedPlugin {
         if p >= end { call.reject("تعذّر فتح المنفذ"); return }
         let params = NWParameters.tcp
         params.allowLocalEndpointReuse = true
-        if let tcp = params.defaultProtocolStack.transportProtocol as? NWProtocolTCP.Options { tcp.noDelay = true; tcp.enableKeepAlive = true }
+        if let tcp = params.defaultProtocolStack.transportProtocol as? NWProtocolTCP.Options { tcp.noDelay = true; tcp.enableKeepalive = true }
         guard let np = NWEndpoint.Port(rawValue: UInt16(p)), let l = try? NWListener(using: params, on: np) else { tryPort(p + 1, end, call); return }
         var done = false
         l.newConnectionHandler = { [weak self] c in self?.accept(c) }
