@@ -34,7 +34,7 @@ static float stickN(uint8_t v){return ((int)v-128)/127.f;}
 #ifndef WZ_VARIANT
 #define WZ_VARIANT 1
 #endif
-#if WZ_VARIANT==4||WZ_VARIANT==5
+#if WZ_VARIANT>=4
 #define WZ_GPU 1
 #else
 #define WZ_GPU 0
@@ -48,13 +48,15 @@ static float stickN(uint8_t v){return ((int)v-128)/127.f;}
 #define WZ_LOGFILE "/data/wz_gl_log3.txt"
 #elif WZ_VARIANT==4
 #define WZ_LOGFILE "/data/wz_gl_log4.txt"
+#elif WZ_VARIANT==6
+#define WZ_LOGFILE "/data/wz_gl_log6.txt"
 #elif WZ_VARIANT==5
 #define WZ_LOGFILE "/data/wz_gl_log5.txt"
 #else
 #define WZ_LOGFILE "/data/wz_gl_log.txt"
 #endif
 static void wzlog(const char*f,...){ FILE*fp=fopen(WZ_LOGFILE,"a"); if(!fp)return; va_list a; va_start(a,f); vfprintf(fp,f,a); va_end(a); fputc('\n',fp); fclose(fp); }
-#if WZ_VARIANT==5
+#if WZ_VARIANT>=5
 static void* audioThread(void*){ wzlog("audio: thread start"); SFX::initBuffers(); wzlog("audio: buffers ok"); { int am=sceSysmoduleLoadModuleInternal((decltype(ORBIS_SYSMODULE_INTERNAL_USER_SERVICE))0x80000001); wzlog("audio: internal AUDIOOUT module 0x%x",(unsigned)am); } int ai=sceAudioOutInit(); wzlog("audio: init 0x%x",(unsigned)ai); int h=sceAudioOutOpen(ORBIS_USER_SERVICE_USER_ID_SYSTEM,ORBIS_AUDIO_OUT_PORT_TYPE_MAIN,0,256,48000,ORBIS_AUDIO_OUT_PARAM_FORMAT_S16_STEREO); wzlog("audio: open %d",h);
   if(h<=0)return NULL; static int16_t buf[256*2]; for(;;){ SFX::mix(buf,256); sceAudioOutOutput(h,buf); } return NULL; }
 #endif
@@ -92,9 +94,16 @@ static bool glInit(){
 #else
   const int dl[1]={0};
 #endif
-  for(size_t di=0;di<sizeof(dl)/sizeof(dl[0]);di++){ at[9]=dl[di]; nc=0; if(!eglChooseConfig(gD,at,&cfg,1,&nc)||nc<1){wzlog("choose cfg fail depth %d",dl[di]);continue;}
+#if WZ_VARIANT==6
+  const int sl[2]={4,0};
+#else
+  const int sl[1]={0};
+#endif
+  for(size_t si=0;si<sizeof(sl)/sizeof(sl[0])&&gS==EGL_NO_SURFACE;si++){ at[13]=sl[si]?1:0; at[15]=sl[si];
+  for(size_t di=0;di<sizeof(dl)/sizeof(dl[0]);di++){ at[9]=dl[di]; nc=0; if(!eglChooseConfig(gD,at,&cfg,1,&nc)||nc<1){wzlog("choose cfg fail samples %d depth %d",sl[si],dl[di]);continue;}
     gS=eglCreateWindowSurface(gD,cfg,&w,wa); if(gS==EGL_NO_SURFACE){wzlog("surface fail depth %d 0x%x",dl[di],eglGetError());continue;}
-    EGLint gotD=-1; eglGetConfigAttrib(gD,cfg,EGL_DEPTH_SIZE,&gotD); gDepthBits=gotD; wzlog("config chosen: requested depth %d got %d",dl[di],(int)gotD); break; }
+    EGLint gotD=-1; eglGetConfigAttrib(gD,cfg,EGL_DEPTH_SIZE,&gotD); gDepthBits=gotD; EGLint gotS=-1; eglGetConfigAttrib(gD,cfg,EGL_SAMPLES,&gotS); wzlog("config chosen: requested samples %d depth %d got depth %d samples %d",sl[si],dl[di],(int)gotD,(int)gotS); break; }
+  }
   if(gS==EGL_NO_SURFACE){wzlog("no usable config/surface");return false;}
   wzlog("surface created"); gC=eglCreateContext(gD,cfg,EGL_NO_CONTEXT,ca); if(gC==EGL_NO_CONTEXT){wzlog("ctx fail 0x%x",eglGetError());return false;}
   wzlog("context created"); if(!eglMakeCurrent(gD,gS,gS,gC)){wzlog("makecurrent fail 0x%x",eglGetError());return false;}
@@ -221,7 +230,7 @@ int main(int,char**){
     int m1=sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_USER_SERVICE); int m2=sceSysmoduleLoadModuleInternal(ORBIS_SYSMODULE_INTERNAL_PAD); wzlog("v4: internal modules ret=0x%x 0x%x",(unsigned)m1,(unsigned)m2);
     int u4=sceUserServiceInitialize(&up4); wzlog("v4: userservice init ret=0x%x",(unsigned)u4); int g4=sceUserServiceGetInitialUser(&uid); wzlog("v4: GetInitialUser ret=0x%x uid=%d",(unsigned)g4,uid);
     int p4=scePadInit(); wzlog("v4: scePadInit ret=0x%x",(unsigned)p4); padH=scePadOpen(uid,0,0,NULL); wzlog("v4: scePadOpen=%d",padH);
-#if WZ_VARIANT==5
+#if WZ_VARIANT>=5
 #endif
     if(!gpuInit()){ wzlog("gpuInit FAILED"); for(;;)sceKernelUsleep(100000); } }
 #else
@@ -250,7 +259,7 @@ int main(int,char**){
 
     uint32_t now=ticks(); float dt=(now-last)/1000.f; last=now; if(dt>0.1f)dt=0.1f; if(dt<=0)dt=0.001f; frame++;
     fpsT+=dt; fpsN++; if(fpsT>=1.f){fps=fpsN/fpsT;g.fpsShow=fps;fpsT=0;fpsN=0;}
-#if WZ_VARIANT==5
+#if WZ_VARIANT>=5
     if(frame==120){ pthread_t at; int pr=pthread_create(&at,NULL,audioThread,NULL); wzlog("audio thread create %d",pr); }
 #endif
     if(frame==1)wzlog("f1 pad read"); uint32_t edge=pd.buttons&~prevB; prevB=pd.buttons;
