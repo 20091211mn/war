@@ -51,17 +51,22 @@ jobs:
           LX=$(find /tmp/oo -name link.x | head -1)
           echo "OO_PS4_TOOLCHAIN=$(dirname "$LX")" >> "$GITHUB_ENV"
           chmod -R +x "$(dirname "$LX")/bin" || true
-      - name: Build native PKG (from the working hello_world sample)
+      - name: Build native PKG (GPU renderer via Piglet, privileged eboot)
         run: |
-          S="$OO_PS4_TOOLCHAIN/samples"; N=wzNative; BUILD=${{ github.run_number }}; VER=$(printf "01.%02d" $((BUILD % 100)))
-          rm -rf "$S/$N"; cp -r "$S/hello_world" "$S/$N"
-          rm -rf "$S/$N/hello_world"; mkdir -p "$S/$N/$N" "$S/$N/gen"
-          cp native/src/*.h native/src/main_ps4.cpp "$S/$N/$N/"
+          S="$OO_PS4_TOOLCHAIN/samples"; BUILD=${{ github.run_number }}; VER=$(printf "01.%02d" $((BUILD % 100))); N=wzNative
+          if [ ! -d "$S/piglet" ]; then
+            git clone -q --depth 1 https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain /tmp/oo-src
+            cp -r /tmp/oo-src/samples/piglet "$S/piglet"
+          fi
+          rm -rf "$S/$N"; cp -r "$S/piglet" "$S/$N"
+          rm -rf "$S/$N/piglet"; mkdir -p "$S/$N/$N" "$S/$N/gen"
+          cp native/src/*.h "$S/$N/$N/"; cp native/src/main_ps4.cpp "$S/$N/$N/main.cpp"
           cp native/gen/data.h "$S/$N/gen/"
           ( cd "$S/$N"
-            sed -i "s/^LIBS .*/LIBS        := -lc -lkernel -lc++ -lSceUserService -lSceVideoOut -lSceAudioOut -lScePad -lSceSysmodule -lSDL2\nEXTRAFLAGS := -O2 -march=btver2 -fno-math-errno -DBUILD_ID=$BUILD/" Makefile
-            sed -i "s/^VERSION .*/VERSION     := $VER/" Makefile
-            sed -i "s/BREW00[0-9]*/BREW00790/g; s/IV0000-BREW00790_00-[A-Z0-9]*/IV0000-BREW00790_00-WZNATIVE00000000/; s/^TITLE .*/TITLE       := Warzone Native/" Makefile
+            sed -i "s/^LIBS .*/LIBS        := -lc -lkernel -lc++ -lSceShellCoreUtil -lSceSysmodule -lSceSystemService -lScePigletv2VSH -lScePrecompiledShaders -lSceRtc -lSceUserService -lScePad -lSceAudioOut/" Makefile
+            sed -i "s/^EXTRAFLAGS .*/EXTRAFLAGS  := -fexceptions -fcxx-exceptions -O2 -fno-math-errno -DBUILD_ID=$BUILD -DWZ_VARIANT=9 -DWZ_THREADS=1 -DWZ_IW=1920 -DWZ_IH=1080/" Makefile
+            sed -i "s/^VERSION .*/VERSION     := $VER/; s/^TITLE .*/TITLE       := Warzone Native/; s/^TITLE_ID .*/TITLE_ID    := BREW00790/; s/^CONTENT_ID .*/CONTENT_ID  := IV0000-BREW00790_00-WZNATIVE00000000/" Makefile
+            cp "$GITHUB_WORKSPACE/native/icon0.png" sce_sys/icon0.png || true
             make
             cp ./*.pkg "$GITHUB_WORKSPACE/WarzoneNative.pkg"; cp ./*.pkg "$GITHUB_WORKSPACE/WarzoneNative-b$BUILD.pkg" )
           ls -la "$GITHUB_WORKSPACE"/*.pkg
