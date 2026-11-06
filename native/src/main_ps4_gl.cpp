@@ -55,7 +55,7 @@ static float stickN(uint8_t v){return ((int)v-128)/127.f;}
 #endif
 static void wzlog(const char*f,...){ FILE*fp=fopen(WZ_LOGFILE,"a"); if(!fp)return; va_list a; va_start(a,f); vfprintf(fp,f,a); va_end(a); fputc('\n',fp); fclose(fp); }
 #if WZ_VARIANT==5
-static void* audioThread(void*){ wzlog("audio: thread start"); SFX::initBuffers(); int ai=sceAudioOutInit(); wzlog("audio: init 0x%x",(unsigned)ai); int h=sceAudioOutOpen(ORBIS_USER_SERVICE_USER_ID_SYSTEM,ORBIS_AUDIO_OUT_PORT_TYPE_MAIN,0,256,48000,ORBIS_AUDIO_OUT_PARAM_FORMAT_S16_STEREO); wzlog("audio: open %d",h);
+static void* audioThread(void*){ wzlog("audio: thread start"); SFX::initBuffers(); wzlog("audio: buffers ok"); { int am=sceSysmoduleLoadModuleInternal(0x80000001); wzlog("audio: internal AUDIOOUT module 0x%x",(unsigned)am); } int ai=sceAudioOutInit(); wzlog("audio: init 0x%x",(unsigned)ai); int h=sceAudioOutOpen(ORBIS_USER_SERVICE_USER_ID_SYSTEM,ORBIS_AUDIO_OUT_PORT_TYPE_MAIN,0,256,48000,ORBIS_AUDIO_OUT_PARAM_FORMAT_S16_STEREO); wzlog("audio: open %d",h);
   if(h<=0)return NULL; static int16_t buf[256*2]; for(;;){ SFX::mix(buf,256); sceAudioOutOutput(h,buf); } return NULL; }
 #endif
 static uint32_t ticks(){ return (uint32_t)(sceKernelGetProcessTime()/1000); }
@@ -222,7 +222,6 @@ int main(int,char**){
     int u4=sceUserServiceInitialize(&up4); wzlog("v4: userservice init ret=0x%x",(unsigned)u4); int g4=sceUserServiceGetInitialUser(&uid); wzlog("v4: GetInitialUser ret=0x%x uid=%d",(unsigned)g4,uid);
     int p4=scePadInit(); wzlog("v4: scePadInit ret=0x%x",(unsigned)p4); padH=scePadOpen(uid,0,0,NULL); wzlog("v4: scePadOpen=%d",padH);
 #if WZ_VARIANT==5
-    { pthread_t at; int pr=pthread_create(&at,NULL,audioThread,NULL); wzlog("audio thread create %d",pr); }
 #endif
     if(!gpuInit()){ wzlog("gpuInit FAILED"); for(;;)sceKernelUsleep(100000); } }
 #else
@@ -251,6 +250,9 @@ int main(int,char**){
 
     uint32_t now=ticks(); float dt=(now-last)/1000.f; last=now; if(dt>0.1f)dt=0.1f; if(dt<=0)dt=0.001f; frame++;
     fpsT+=dt; fpsN++; if(fpsT>=1.f){fps=fpsN/fpsT;g.fpsShow=fps;fpsT=0;fpsN=0;}
+#if WZ_VARIANT==5
+    if(frame==120){ pthread_t at; int pr=pthread_create(&at,NULL,audioThread,NULL); wzlog("audio thread create %d",pr); }
+#endif
     if(frame==1)wzlog("f1 pad read"); uint32_t edge=pd.buttons&~prevB; prevB=pd.buttons;
     auto stick=[&](float x,float y,float&ox,float&oy){float m=sqrtf(x*x+y*y);const float D=0.18f;if(m<D){ox=oy=0;return;}float k=(m-D)/(1-D);if(k>1)k=1;ox=x/m*k;oy=y/m*k;};
     float ax,ay,bx,by; stick(stickN(pd.leftStick.x),-stickN(pd.leftStick.y),ax,ay); stick(stickN(pd.rightStick.x),-stickN(pd.rightStick.y),bx,by); // y موجب = أعلى
