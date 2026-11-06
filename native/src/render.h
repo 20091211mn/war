@@ -117,7 +117,7 @@ struct Renderer {
   }
   // مضلع محدب بإحداثيات نقش (u,v بالعالم) اختيارية
   void poly(const float (*p)[3],int n,float r,float g,float b,bool detail=false,const float (*uv)[2]=nullptr,bool useFog=true){
-    if(gpu){ gpuPoly(p,n,r,g,b,useFog); return; }
+    if(gpu){ gpuPoly(p,n,r,g,b,useFog,detail,uv); return; }
     PV v[8]; int cnt=0; const float NEAR=0.08f; PV c[8];
     for(int i=0;i<n;i++){ float dx=p[i][0]-cam.x,dy=p[i][1]-cam.y,dz=p[i][2]-cam.z;
       c[i]={dx*rx+dz*rz, dx*ux+dy*uy+dz*uz, dx*fx+dy*fy+dz*fz, uv?uv[i][0]:0, uv?uv[i][1]:0}; }
@@ -136,21 +136,23 @@ struct Renderer {
   struct E{float x,z,u,v;};
   static std::vector<TJ>*& tgt(){ static thread_local std::vector<TJ>* t=nullptr; return t; }
   // ===== وضع GPU التجريبي: المضلعات تُجمع كمثلثات (x,y,z,u,v) وتُرسم عبر Piglet؛ اللون = إحداثي في نسيج لوحة ألوان 6-6-6 =====
-  bool gpu=false; std::vector<float> gv[2]; // [0]=العالم ، [1]=مجسّم السلاح
-  void gpuTri(const float*a,const float*b,const float*c,float r,float g,float bl,bool useFog,int dep){
+  bool gpu=false; std::vector<float> gv[2]; std::vector<float> gd[3]; // [0]=العالم ، [1]=مجسّم السلاح ؛ gd = طبقات نقش الشبكة (بحسب الضباب)
+  // رأس = {x,y,z,u,v} (u,v إحداثيات النقش التفصيلي بوحدة العالم)
+  void gpuTri(const float*a,const float*b,const float*c,float r,float g,float bl,bool useFog,bool det,int dep){
     float cx=(a[0]+b[0]+c[0])*(1.f/3)-cam.x,cy=(a[1]+b[1]+c[1])*(1.f/3)-cam.y,cz=(a[2]+b[2]+c[2])*(1.f/3)-cam.z; float d=sqrtf(cx*cx+cy*cy+cz*cz);
     float f=0; if(useFog){
       const float*P[3]={a,b,c}; float rad=0; for(int i=0;i<3;i++){ float ex=P[i][0]-cam.x-cx,ey=P[i][1]-cam.y-cy,ez=P[i][2]-cam.z-cz; rad=std::max(rad,sqrtf(ex*ex+ey*ey+ez*ez)); }
       float e2=0; for(int i=0;i<3;i++){ const float*p0=P[i],*p1=P[(i+1)%3]; float ex=p0[0]-p1[0],ey=p0[1]-p1[1],ez=p0[2]-p1[2]; e2=std::max(e2,ex*ex+ey*ey+ez*ez); }
       bool grad=(d-rad<fogF)&&(d+rad>fogN);
-      if(grad&&dep<7&&e2>14.f*14.f){ float m0[3],m1[3],m2[3]; for(int i=0;i<3;i++){ m0[i]=(a[i]+b[i])*.5f; m1[i]=(b[i]+c[i])*.5f; m2[i]=(c[i]+a[i])*.5f; }
-        gpuTri(a,m0,m2,r,g,bl,useFog,dep+1); gpuTri(m0,b,m1,r,g,bl,useFog,dep+1); gpuTri(m2,m1,c,r,g,bl,useFog,dep+1); gpuTri(m0,m1,m2,r,g,bl,useFog,dep+1); return; }
+      if(grad&&dep<7&&e2>14.f*14.f){ float m0[5],m1[5],m2[5]; for(int i=0;i<5;i++){ m0[i]=(a[i]+b[i])*.5f; m1[i]=(b[i]+c[i])*.5f; m2[i]=(c[i]+a[i])*.5f; }
+        gpuTri(a,m0,m2,r,g,bl,useFog,det,dep+1); gpuTri(m0,b,m1,r,g,bl,useFog,det,dep+1); gpuTri(m2,m1,c,r,g,bl,useFog,det,dep+1); gpuTri(m0,m1,m2,r,g,bl,useFog,det,dep+1); return; }
       f=(d-fogN)/(fogF-fogN+1e-9f); f=f<0?0:f>1?1:f; }
     float R=r+(fog[0]-r)*f,G=g+(fog[1]-g)*f,B=bl+(fog[2]-bl)*f;
-    auto q6=[](float v){ int i=(int)(v*63.f+0.5f); return i<0?0:i>63?63:i; }; int idx=(q6(R)<<12)|(q6(G)<<6)|q6(B); float u=((idx&511)+0.5f)*(1.f/512),vv=((idx>>9)+0.5f)*(1.f/512);
+    auto q=[](float v,float m){ int i=(int)(v*m+0.5f); return i<0?0:i>(int)m?(int)m:i; }; int idx=(q(R,127.f)<<13)|(q(G,127.f)<<6)|q(B,63.f); float u=((idx&1023)+0.5f)*(1.f/1024),vv=((idx>>10)+0.5f)*(1.f/1024);
     std::vector<float>&o=gv[zBias>0?1:0]; const float*P[3]={a,b,c}; for(int i=0;i<3;i++){ o.push_back(P[i][0]); o.push_back(P[i][1]); o.push_back(P[i][2]); o.push_back(u); o.push_back(vv); }
+    if(det&&f<0.8f){ std::vector<float>&dq=gd[f<0.27f?0:f<0.54f?1:2]; for(int i=0;i<3;i++){ dq.push_back(P[i][0]); dq.push_back(P[i][1]); dq.push_back(P[i][2]); dq.push_back(P[i][3]*(1.f/8)); dq.push_back(P[i][4]*(1.f/8)); } }
   }
-  void gpuPoly(const float (*p)[3],int n,float r,float g,float b,bool useFog){ for(int i=1;i+1<n;i++)gpuTri(p[0],p[i],p[i+1],r,g,b,useFog,0); }
+  void gpuPoly(const float (*p)[3],int n,float r,float g,float b,bool useFog,bool det,const float (*uv)[2]){ float V[8][5]; if(n>8)n=8; for(int i=0;i<n;i++){ V[i][0]=p[i][0];V[i][1]=p[i][1];V[i][2]=p[i][2]; V[i][3]=uv?uv[i][0]:0.f; V[i][4]=uv?uv[i][1]:0.f; } for(int i=1;i+1<n;i++)gpuTri(V[0],V[i],V[i+1],r,g,b,useFog,det&&uv,0); }
   float zBias=0; // مجسّم السلاح: يُرسم فوق كل شيء بدون مسح مخزن العمق (إزاحة ثابتة في 1/z)
   void tri(float x0,float y0,float z0,float u0,float v0,float x1,float y1,float z1,float u1,float v1,float x2,float y2,float z2,float u2,float v2,float r,float g,float b,bool det,bool useFog){
     float key=std::max(z0,std::max(z1,z2)); z0+=zBias;z1+=zBias;z2+=zBias;
