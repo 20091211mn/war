@@ -34,7 +34,7 @@ static float stickN(uint8_t v){return ((int)v-128)/127.f;}
 #ifndef WZ_VARIANT
 #define WZ_VARIANT 1
 #endif
-#if WZ_VARIANT>=8
+#if WZ_VARIANT==8
 #define WZ_BAND 1
 #else
 #define WZ_BAND 0
@@ -58,6 +58,8 @@ static float stickN(uint8_t v){return ((int)v-128)/127.f;}
 #define WZ_LOGFILE "/data/wz_gl_log3.txt"
 #elif WZ_VARIANT==4
 #define WZ_LOGFILE "/data/wz_gl_log4.txt"
+#elif WZ_VARIANT==9
+#define WZ_LOGFILE "/data/wz_gl_log9.txt"
 #elif WZ_VARIANT==8
 #define WZ_LOGFILE "/data/wz_gl_log8.txt"
 #elif WZ_VARIANT==7
@@ -141,11 +143,13 @@ static bool glInit(){
   wzlog("probe done");
   return true;
 }
-static void glPresent(const uint32_t*up,bool overlay=false,const uint8_t*rows=nullptr){
+static double gTUp=0,gTSw=0;
+static void glPresent(const uint32_t*up,bool overlay=false,const uint8_t*rows=nullptr){ uint64_t tq0=sceKernelGetProcessTime();
   glViewport(0,0,OUT_W,OUT_H); if(!overlay){ glClearColor(0.05f,0.2f,0.6f,1.f); glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT|GL_STENCIL_BUFFER_BIT); } glDisable(GL_DEPTH_TEST); glEnable(GL_BLEND); if(overlay)glBlendFunc(GL_ONE,GL_ONE_MINUS_SRC_ALPHA); else glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
   glBindTexture(GL_TEXTURE_2D,gTex);
   static bool upInit=false; if(overlay&&rows&&upInit){ for(int y=0;y<WZ_IH;){ if(!rows[y]){y++;continue;} int y1=y; while(y1<WZ_IH&&rows[y1])y1++; glTexSubImage2D(GL_TEXTURE_2D,0,0,y,WZ_IW,y1-y,GL_RGBA,GL_UNSIGNED_BYTE,up+(size_t)y*WZ_IW); y=y1; } } // رفع الصفوف المتغيّرة فقط
   else { glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,WZ_IW,WZ_IH,0,GL_RGBA,GL_UNSIGNED_BYTE,up); upInit=true; }
+  gTUp+=(sceKernelGetProcessTime()-tq0)/1000.0;
   static const GLfloat v[]={0,1,0,1, 1,0,1,0, 0,0,0,0, 0,1,0,1, 1,1,1,1, 1,0,1,0};
   GLfloat id[16]={1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
   GLfloat mv[16]={(GLfloat)OUT_W,0,0,0, 0,(GLfloat)OUT_H,0,0, 0,0,1,0, 0,0,0,1};
@@ -154,7 +158,7 @@ static void glPresent(const uint32_t*up,bool overlay=false,const uint8_t*rows=nu
   glVertexAttribPointer(aV,4,GL_FLOAT,GL_FALSE,4*sizeof(GLfloat),v); glEnableVertexAttribArray(aV);
   glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D,gTex); glUniform1i(uSam,0); glDrawArrays(GL_TRIANGLES,0,6);
   static int pf=0; if(++pf<=2)wzlog("draw issued err=0x%x",(unsigned)glGetError());
-  if(pf<=2)wzlog("calling swap"); EGLBoolean sr=eglSwapBuffers(gD,gS); if(pf<=2)wzlog("swap ret=%d err=0x%x",(int)sr,(unsigned)eglGetError());
+  if(pf<=2)wzlog("calling swap"); uint64_t tq1=sceKernelGetProcessTime(); EGLBoolean sr=eglSwapBuffers(gD,gS); gTSw+=(sceKernelGetProcessTime()-tq1)/1000.0; if(pf<=2)wzlog("swap ret=%d err=0x%x",(int)sr,(unsigned)eglGetError());
 }
 
 #if WZ_BAND
@@ -339,14 +343,14 @@ int main(int,char**){
     uint64_t tR=sceKernelGetProcessTime(); gpuFrame(g,frame); uint64_t tG=sceKernelGetProcessTime();
 #if WZ_BAND
     glPresentBands(upb.data(),g.r.rowD.data());
-#elif WZ_OPT
-    glPresent(upb.data(),true,rowUp.data());
+#elif WZ_VARIANT==9
+    glPresent(upb.data(),true);
 #else
     glPresent(upb.data(),true);
 #endif
     uint64_t tP=sceKernelGetProcessTime();
 #if WZ_OPT
-    sU+=(tU-tS)/1000.0; sR+=(tR-tU)/1000.0; sG+=(tG-tR)/1000.0; sP+=(tP-tG)/1000.0; { double ft=(tP-tS)/1000.0; if(ft>mxT)mxT=ft; } if(++nT==300){ wzlog("timing avg ms/frame: update %.2f render(gen) %.2f gpuSubmit %.2f present+swap %.2f | max frame %.1f | fps %d",sU/nT,sR/nT,sG/nT,sP/nT,mxT,(int)fps); sU=sR=sG=sP=mxT=0; nT=0; }
+    sU+=(tU-tS)/1000.0; sR+=(tR-tU)/1000.0; sG+=(tG-tR)/1000.0; sP+=(tP-tG)/1000.0; { double ft=(tP-tS)/1000.0; if(ft>mxT)mxT=ft; } if(++nT==300){ wzlog("timing avg ms/frame: update %.2f render(gen) %.2f gpuSubmit %.2f present+swap %.2f (upload %.2f swap %.2f) | max frame %.1f | fps %d",sU/nT,sR/nT,sG/nT,sP/nT,gTUp/nT,gTSw/nT,mxT,(int)fps); sU=sR=sG=sP=mxT=0; nT=0; gTUp=gTSw=0; }
 #endif
     if(frame<=3||frame%600==0)wzlog("frame %d presented fps=%d",frame,(int)fps); { uint32_t el=ticks()-now; if(el<16)sceKernelUsleep((16-el)*1000); } continue;
 #endif
