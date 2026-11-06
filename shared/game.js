@@ -1,5 +1,5 @@
 // منطق اللعبة على الخادم: اللوبي، المباراة، الإصابات، القنابل، والبوتات
-import { WEAPONS, PRIMARIES, computeStats, sanitizeLoadout, damageAt, defaultLoadout, sanitizeAtt } from './weapons.js';
+import { WEAPONS, PRIMARIES, computeStats, sanitizeLoadout, damageAt, defaultLoadout, sanitizeAtt, MOUNT_MG, MOUNT_SEAT } from './weapons.js';
 import { buildMap, MAP_COUNT, MAP_NAMES } from './maps.js';
 import { PLAYER, rayPlayer, raycastMap, moveBody, blocked, groundAt } from './physics.js';
 import { VEH, SEATS, VT, TANK, vp, seatsOf, rayVehicle, seatWorld, w2l, l2w, vehStep, vehCollides, pushOutVeh } from './vehicle.js';
@@ -208,7 +208,8 @@ export class Game {
       }
       case 'shoot': {
         if (this.phase !== 'playing' || !p.alive || !Array.isArray(m.d) || (p.veh >= 0 && p.seat === 0)) break;
-        const w = m.w === 1 ? 1 : 0, s = p.st[w];
+        const mv = p.veh >= 0 ? this.vehs[p.veh] : null, mnt = !!(mv && mv.type !== 1 && p.seat === MOUNT_SEAT);
+        const w = mnt ? 0 : m.w === 1 ? 1 : 0, s = mnt ? MOUNT_MG : p.st[w];
         if (!s) break;
         const now = this.now();
         p.credit[w] = Math.min(2, p.credit[w] + (now - p.lastT[w]) / (s.interval * 1000));
@@ -222,7 +223,7 @@ export class Game {
           if (l < 0.5) continue;
           dirs.push([d[0] / l, d[1] / l, d[2] / l]);
         }
-        if (dirs.length) { p.w = w; this.processShot(p, w, dirs); }
+        if (dirs.length) { p.w = w; this.processShot(p, w, dirs, mnt ? MOUNT_MG : null); }
         break;
       }
       case 'cannon': this.onCannon(p, m); break;
@@ -317,8 +318,8 @@ export class Game {
   }
 
   // ---------- القتال ----------
-  processShot(p, slot, dirs) {
-    const s = p.st[slot], map = this.map, now = this.now();
+  processShot(p, slot, dirs, sOv) {
+    const s = sOv || p.st[slot], map = this.map, now = this.now();
     const ox = p.x, oy = p.y + (p.crouch ? PLAYER.eyec : PLAYER.eye), oz = p.z;
     const maxT = Math.min(s.range[1] * 1.6, 300);
     const dmg = new Map(), dd = new Map(), ends = [], vd = new Map(), ff = !!this.cfg.ff;

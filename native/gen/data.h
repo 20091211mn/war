@@ -51,6 +51,7 @@ static const WeaponDef WEAPONS[]={{"carbine",27,2,750,1,1,30,4,2.2,0.032,0.0035,
 {"pistol",22,2,420,0,1,15,4,1.5,0.028,0.007,0.012,0.003,18,45,0.55,1.1,1.15,1,"مسدس G17"},
 {"magnum",58,2,150,0,1,6,5,2.7,0.04,0.004,0.03,0.005,25,65,0.6,1.05,1.2,1,"ماغنوم .357"},
 {"rpg",140,1,20,0,1,1,4,3.8,0.03,0.003,0.05,0.01,250,300,1,0.84,1.5,0,"قاذف RPG-7"}};
+static const WeaponDef MOUNTDEF={"mount",30,1.5,720,1,1,9999,0,0,0.014,0.014,0.0016,0.0016,48,115,0.6,1,1,0,"MG"};
 static const int WKIND[]={2,3,7,6,4,5,0,1,6};
 struct GPart{float x,y,z,sx,sy,sz;char c;};
 struct GunDef{float mz,sy;int np;GPart p[20];int hasMag;float mag[6];};

@@ -6,7 +6,7 @@ namespace VH{
 static const float HP=450,L=3.0f,HW=1.0f,MAXFWD=26,MAXREV=7,ACCEL=7.5f,BRAKE=16,MAXSTEER=0.52f,TIREHP=30,CRASHMIN=4;
 struct VP{ float hp,L,hw,hl,maxFwd,maxRev,accel,brake,maxSteer,crashMin,armor; int nseats; bool tracked; };
 static const VP VPS[2]={ {450,3.0f,1.0f,2.5f,26,7,7.5f,16,0.52f,4,1.f,5,false}, {1100,3.6f,1.5f,3.1f,11,5,3.8f,12,1.f,6,0.14f,2,true} };
-struct Veh{ int occ=0; int type=0; float kick=0,ty=0,tp=0,cannonT=0; float x=0,z=0,h=0,vx=0,vz=0,steer=0,speed=0,hp=HP,tireHp[4]={30,30,30,30}; int tires=0,driver=-1,team=-1; bool dead=false,burn=false; float respawnT=0,sx=0,sz=0,sh=0,smoke=0,crashT=0,tx=0,tz=0,th=0; };
+struct Veh{ int occ=0; int type=0; float kick=0,ty=0,tp=0,cannonT=0; bool mgFp=false; float x=0,z=0,h=0,vx=0,vz=0,steer=0,speed=0,hp=HP,tireHp[4]={30,30,30,30}; int tires=0,driver=-1,team=-1; bool dead=false,burn=false; float respawnT=0,sx=0,sz=0,sh=0,smoke=0,crashT=0,tx=0,tz=0,th=0; };
 static inline void l2w(const Veh&v,float lx,float lz,float&ox,float&oz){ float c=cosf(v.h),s=sinf(v.h); ox=v.x+c*lx+s*lz; oz=v.z-s*lx+c*lz; }
 static inline void w2l(const Veh&v,float wx,float wz,float&lx,float&lz){ float c=cosf(v.h),s=sinf(v.h),dx=wx-v.x,dz=wz-v.z; lx=c*dx-s*dz; lz=s*dx+c*dz; }
 static inline const VP&vp(const Veh&v){ return VPS[v.type==1?1:0]; }
@@ -86,7 +86,7 @@ static const Part PARTS[]={
  {0,0.7f,-2.575f,1.1f,0.03f,0.03f,.62f,.64f,.68f,0},{0,0.77f,-2.575f,1.1f,0.03f,0.03f,.62f,.64f,.68f,0},{0,0.84f,-2.575f,1.1f,0.03f,0.03f,.62f,.64f,.68f,0},
  {0,0.86f,-2.58f,0.2f,0.1f,0.03f,.7f,.1f,.1f,0},{0,0.37f,2.56f,2.0f,0.14f,0.12f,.4f,.41f,.43f,0},
  {-0.55f,1.1f,-1.4f,0.6f,0.012f,0.45f,.62f,.56f,.42f,0},{0.35f,1.1f,-1.9f,0.5f,0.012f,0.3f,.62f,.56f,.42f,0},{0.1f,1.45f,-0.3f,0.7f,0.012f,0.5f,.62f,.56f,.42f,0},
- {0.55f,1.35f,0.9f,0.8f,0.8f,0.3f,.06f,.06f,.07f,0},{0,1.28f,1.7f,0.1f,0.8f,0.1f,.07f,.07f,.07f,0},{0,1.72f,1.45f,0.16f,0.16f,0.7f,.1f,.1f,.11f,0},{0,1.72f,0.85f,0.05f,0.05f,0.55f,.06f,.06f,.06f,0},{0,1.85f,1.4f,0.8f,0.45f,0.04f,BD,0},
+ {0.55f,1.35f,0.9f,0.8f,0.8f,0.3f,.06f,.06f,.07f,0},{0,1.28f,1.7f,0.1f,0.8f,0.1f,.07f,.07f,.07f,0},
  {-0.55f,1.0f,2.0f,0.3f,0.2f,0.2f,.3f,.3f,.24f,0},
  {-0.7f,0.62f,2.52f,0.3f,0.12f,0.05f,.9f,.1f,.1f,1},{0.7f,0.62f,2.52f,0.3f,0.12f,0.05f,.9f,.1f,.1f,1},
  {-1.005f,0.96f,-0.62f,0.012f,0.72f,0.025f,.05f,.05f,.05f,0},{1.005f,0.96f,-0.62f,0.012f,0.72f,0.025f,.05f,.05f,.05f,0},{-1.005f,0.96f,0.32f,0.012f,0.72f,0.025f,.05f,.05f,.05f,0},{1.005f,0.96f,0.32f,0.012f,0.72f,0.025f,.05f,.05f,.05f,0},
@@ -123,5 +123,8 @@ static void draw(Renderer&r,const Veh&v,float dist){
   if(dist>60){ P(0,0.6f,0,1.9f,0.5f,4.9f,BC[0],BC[1],BC[2],false); P(0,1.3f,-0.15f,1.9f,0.8f,1.5f,BC[0],BC[1],BC[2],false); }
   else for(auto&p:PARTS)P(p.x,p.y,p.z,p.sx,p.sy,p.sz,p.r,p.g,p.b,p.unlit&&!v.dead);
   for(int i=0;i<4;i++){ bool bl=(v.tires>>i)&1; P(WH[i][0],bl?0.3f:0.38f,WH[i][1],0.34f,bl?0.55f:0.76f,bl?0.55f:0.76f,0.06f,0.06f,0.07f,false); }
+  if(dist<=60){ // الرشاش المثبّت: يدور مع نظر الرامي (v.ty/v.tp) ؛ للرامي المحلي نخفي الجسم والدرع كي لا يحجبا الرؤية
+    float rel=v.ty-v.h,pt=v.tp; auto G=[&](float lx,float ly,float lz,float sx,float sy,float sz,float cr,float cg,float cb){ float o[3]; Renderer::rot(rel,pt,lx,ly,lz,o); float wx,wz; l2w(v,o[0],1.6f+o[2],wx,wz); r.obb(wx,1.72f+o[1],wz,sx*.5f,sy*.5f,sz*.5f,v.h+rel,pt,cr*tint,cg*tint,cb*tint,true,true); };
+    if(!v.mgFp){ G(0,0,-0.15f,0.16f,0.16f,0.7f,.1f,.1f,.11f); G(0,0.13f,-0.2f,0.8f,0.45f,0.04f,BD); } G(0,-0.04f,-0.75f,0.05f,0.05f,0.55f,.06f,.06f,.06f); }
 }
 }

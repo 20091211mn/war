@@ -116,3 +116,12 @@ export function damageAt(stats, dist) {
   if (dist >= r1) return stats.dmg * stats.minMul;
   return stats.dmg * (1 - (1 - stats.minMul) * ((dist - r0) / (r1 - r0)));
 }
+
+// رشاش الشاص المثبّت (مقعد الصندوق الخلفي رقم 4): ذخيرة لا نهائية، معدل رمي عالٍ، دقة جيدة
+export const MOUNT_SEAT = 4;
+export const MOUNT_MG = (() => {
+  const s = computeStats('lmg', {});
+  s.name = 'رشاش الشاص'; s.dmg = 30; s.head = 1.5; s.rpm = 720; s.interval = 60 / 720; s.hip = 0.014; s.ads = 0.014; s.recoilV = 0.0016; s.recoilH = 0.0016;
+  s.range = [48, 115]; s.minMul = 0.6; s.mag = 9999; s.reserve = 0; s.move = 1; s.zoom = 1; s.muted = false; s.mount = true;
+  return s;
+})();

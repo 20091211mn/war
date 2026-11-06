@@ -1,7 +1,7 @@
 // Warzone — العميل: الشبكة (منفرد/استضافة/انضمام)، الواجهة، اللعب، المركبات
 import { BUILD } from './version.js';
 import { Engine, tmp } from './gl.js';
-import { WEAPONS, PRIMARIES, SECONDARIES, OPTICS, MUZZLES, UNDERS, MAGS, computeStats, sanitizeLoadout } from '/shared/weapons.js';
+import { WEAPONS, PRIMARIES, SECONDARIES, OPTICS, MUZZLES, UNDERS, MAGS, computeStats, sanitizeLoadout, MOUNT_MG, MOUNT_SEAT } from '/shared/weapons.js';
 import { buildMap } from '/shared/maps.js';
 import { PLAYER, moveBody, canStand, raycastMap, rayPlayer } from '/shared/physics.js';
 import { VEH, SEATS, VT, TANK, vp, seatsOf, seatWorld, rayVehicle, vehStep, pushOutVeh, w2l } from '/shared/vehicle.js';
@@ -703,14 +703,16 @@ function boardHtml(sc) {
 function renderBoard() { $('board').innerHTML = boardHtml(); }
 
 // ---------- منطق اللعب المحلي ----------
-function curStats() { return me.st[me.w]; }
+const isMount = () => { if (!(me.veh >= 0 && me.seat === MOUNT_SEAT)) return false; const v = S.vehs.get(me.veh); return !!v && v.type !== 1; };
+function curStats() { return isMount() ? MOUNT_MG : me.st[me.w]; }
+let lastMountHud = false;
 function updateAmmoHud() {
-  const st = curStats(); if (!st) return; const am = me.ammo[me.w];
-  $('wname').textContent = st.name; $('mag').textContent = am.mag; $('res').textContent = am.res; $('gcount').innerHTML = icon('gren', 14) + ' ' + me.grenades + ' &nbsp; ' + icon('c4', 14) + ' ' + (me.c4Left | 0); { const cn = $('c4n'); if (cn) cn.textContent = me.c4Left | 0; document.body.classList.toggle('c4live', S.c4.some((c) => c[5] === S.id)); };
+  const st = curStats(); if (!st) return; const am = me.ammo[me.w], mt = isMount();
+  $('wname').textContent = st.name; $('mag').textContent = mt ? '∞' : am.mag; $('res').textContent = mt ? '' : am.res; $('gcount').innerHTML = icon('gren', 14) + ' ' + me.grenades + ' &nbsp; ' + icon('c4', 14) + ' ' + (me.c4Left | 0); { const cn = $('c4n'); if (cn) cn.textContent = me.c4Left | 0; document.body.classList.toggle('c4live', S.c4.some((c) => c[5] === S.id)); };
 }
 function startReload(now) {
   const st = curStats(), am = me.ammo[me.w];
-  if (!st || me.reloading >= 0 || am.mag >= st.mag || am.res <= 0 || now < me.swapAt + 350) return;
+  if (!st || isMount() || me.reloading >= 0 || am.mag >= st.mag || am.res <= 0 || now < me.swapAt + 350) return;
   me.reloading = me.w; me.reloadStart = now; me.reloadEnd = now + st.reload * 1000; Snd.reload(0.5, 0, st.reload, st.kind); send({ t: 'rl' });
 }
 function aimDir(yaw, pitch) { const cp = Math.cos(pitch); return [-Math.sin(yaw) * cp, Math.sin(pitch), -Math.cos(yaw) * cp]; }
@@ -724,7 +726,7 @@ function spreadDir(f, sp) {
 }
 const isDriver = () => me.veh >= 0 && me.seat === 0;
 function tryFire(now, pressed) {
-  const st = curStats(), am = me.ammo[me.w];
+  const st = curStats(), mnt = isMount(), am = mnt ? { mag: 9999, res: 0 } : me.ammo[me.w];
   if (!st || me.reloading >= 0 || now < me.nextShot || now < me.swapAt + 350 || now < me.noFireUntil || me.sprinting || isDriver()) return;
   if (am.mag <= 0) {
     if (pressed || !me.emptyClick) { Snd.empty(); me.emptyClick = true; }
@@ -1010,7 +1012,8 @@ function render(dt, now) {
   }
   if (me.shake > 0) { cam.yaw += (Math.random() - 0.5) * 0.03 * me.shake; cam.pitch += (Math.random() - 0.5) * 0.03 * me.shake; }
   eng.begin(cam); eng.drawMap();
-  for (const v of S.vehs.values()) { if (v.type === 1 && !(me.veh === v.id && me.seat === 0)) { const dr = v.seats[0] ? S.remote.get(v.seats[0]) : null; const ty = dr ? dr.yaw : v.th; let dy = ty - v.ty; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI; v.ty += dy * Math.min(1, dt * 6); v.tp = dr ? clamp(dr.pitch, -0.35, 0.5) : 0; v.kick = Math.max(0, (v.kick || 0) - dt * 3); }
+  for (const v of S.vehs.values()) { if (v.type !== 1) { const gid = v.seats[MOUNT_SEAT], gr = gid ? (gid === S.id ? me : S.remote.get(gid)) : null; v.mgFp = !!gr && gr === me && me.vview === 'fp'; if (gr) { let dy = gr.yaw - (v.mgy === undefined ? v.h : v.mgy); while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI; v.mgy = (v.mgy === undefined ? v.h : v.mgy) + dy * Math.min(1, dt * 12); v.mgp = clamp(gr.pitch, -0.5, 0.9); } else if (v.mgy !== undefined) { v.mgy = undefined; v.mgp = 0; } }
+    if (v.type === 1 && !(me.veh === v.id && me.seat === 0)) { const dr = v.seats[0] ? S.remote.get(v.seats[0]) : null; const ty = dr ? dr.yaw : v.th; let dy = ty - v.ty; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI; v.ty += dy * Math.min(1, dt * 6); v.tp = dr ? clamp(dr.pitch, -0.35, 0.5) : 0; v.kick = Math.max(0, (v.kick || 0) - dt * 3); }
     if (!eng.visible(v.x, 1, v.z, 4)) continue; drawVehicle(eng, v, now, Math.hypot(v.x - cam.x, v.z - cam.z) > 55, S.cfg && S.cfg.tod > 0); }
   for (const k of S.kits.values()) if (k.up && Math.hypot(k.x - cam.x, k.z - cam.z) < 80 && eng.visible(k.x, 0.6, k.z, 1)) drawKit(eng, k, now);
   if (S.zone) drawZone(eng, S.zone, now);
@@ -1042,7 +1045,7 @@ function render(dt, now) {
   for (const c of S.c4) drawC4(eng, c[1], c[2], c[3], c[4], now);
   fx.update(dt); fx.draw(eng); eng.flush();
   const scoped = me.alive && st && me.adsT > 0.92 && st.zoom >= 3.4 && !chase && !droning;
-  if (me.alive && st && !scoped && !chase && !isDriver() && !droning) {
+  if (me.alive && st && !scoped && !chase && !isDriver() && !droning && !isMount()) {
     drawViewmodel(eng, { stats: st, ads: me.adsT, kick: me.kick, flash: me.flash, reload: me.reloading >= 0 ? clamp((now - me.reloadStart) / (me.reloadEnd - me.reloadStart), 0, 1) : -1, swap: clamp((now - me.swapAt) / 350, 0, 1), sprint: me.sprinting, team: me.team, bobX: Math.cos(me.bob) * 0.006 * (me.onGround ? 1 : 0), bobY: bobY * 0.8, swayX: me.swayX, swayY: me.swayY });
   }
   $('scope').classList.toggle('hidden', !scoped);
@@ -1092,6 +1095,7 @@ function hudSlow(now, st, chase) {
   } else $('cross').style.display = 'none';
   // المركبة: لوحة القيادة والتلميحات
   const near = me.alive ? nearVehicle() : null, myV = me.alive && me.veh >= 0 ? S.vehs.get(me.veh) : null;
+  { const mt = isMount(); if (mt !== lastMountHud) { lastMountHud = mt; updateAmmoHud(); } }
   document.body.classList.toggle('invehicle', !!myV); document.body.classList.toggle('driving', !!myV && me.seat === 0); document.body.classList.toggle('tankdrv', !!myV && me.seat === 0 && myV.type === 1); document.body.classList.toggle('canuse', !!near);
   $('vhud').classList.toggle('hidden', !myV);
   if (myV) {
@@ -1099,7 +1103,7 @@ function hudSlow(now, st, chase) {
     $('vhp').style.width = clamp(myV.hp / vp(myV).hp * 100, 0, 100) + '%';
     const tkv = myV.type === 1; $('vtires').style.display = tkv ? 'none' : ''; const cb = $('vcanbar'); if (cb) cb.style.display = tkv && me.seat === 0 ? '' : 'none';
     if (!tkv) { const ti = $('vtires').children; for (let i = 0; i < 4; i++) ti[i].className = (myV.tires >> i & 1) ? 'bad' : 'ok'; }
-    $('vseat').textContent = ['السائق', 'الراكب الأمامي', 'الصندوق (يسار)', 'الصندوق (يمين)', 'الصندوق (خلف)'][me.seat];
+    $('vseat').textContent = ['السائق', 'الراكب الأمامي', 'الصندوق (يسار)', 'الصندوق (يمين)', 'الرشاش المثبّت (خلف)'][me.seat];
     if (myV.flags & 1) { $('prompt').textContent = 'المركبة تحترق! انزل فورًا'; $('prompt').classList.remove('hidden'); }
     else { $('prompt').textContent = input.touch ? '' : 'E نزول · F تبديل المقعد · V الكاميرا' + (me.seat === 0 ? ' · Space فرامل اليد' : ''); $('prompt').classList.toggle('hidden', input.touch || now - me.seatAt > 6000); }
   } else if (near) { $('prompt').textContent = input.touch ? 'اضغط زر الركوب' : 'E — اركب الشاص'; $('prompt').classList.remove('hidden'); }
