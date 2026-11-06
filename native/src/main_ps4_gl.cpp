@@ -34,6 +34,11 @@ static float stickN(uint8_t v){return ((int)v-128)/127.f;}
 #ifndef WZ_VARIANT
 #define WZ_VARIANT 1
 #endif
+#if WZ_VARIANT>=8
+#define WZ_BAND 1
+#else
+#define WZ_BAND 0
+#endif
 #if WZ_VARIANT>=7
 #define WZ_OPT 1
 #else
@@ -53,6 +58,8 @@ static float stickN(uint8_t v){return ((int)v-128)/127.f;}
 #define WZ_LOGFILE "/data/wz_gl_log3.txt"
 #elif WZ_VARIANT==4
 #define WZ_LOGFILE "/data/wz_gl_log4.txt"
+#elif WZ_VARIANT==8
+#define WZ_LOGFILE "/data/wz_gl_log8.txt"
 #elif WZ_VARIANT==7
 #define WZ_LOGFILE "/data/wz_gl_log7.txt"
 #elif WZ_VARIANT==6
@@ -149,6 +156,27 @@ static void glPresent(const uint32_t*up,bool overlay=false,const uint8_t*rows=nu
   static int pf=0; if(++pf<=2)wzlog("draw issued err=0x%x",(unsigned)glGetError());
   if(pf<=2)wzlog("calling swap"); EGLBoolean sr=eglSwapBuffers(gD,gS); if(pf<=2)wzlog("swap ret=%d err=0x%x",(int)sr,(unsigned)eglGetError());
 }
+
+#if WZ_BAND
+// الواجهة الشفافة تُرسم على شكل شرائح (12 شريحة × 90 صف): كل شريحة فيها محتوى تُرفع كنسيج كامل جديد (بلا glTexSubImage الذي يوقف الـGPU) وتُرسم ؛ الفارغة تُتجاهل
+static GLuint gBandTex[12]={0}; static const int BANDH=90;
+static void glPresentBands(const uint32_t*up,const uint8_t*rowD){
+  glViewport(0,0,OUT_W,OUT_H); glDisable(GL_DEPTH_TEST); glEnable(GL_BLEND); glBlendFunc(GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
+  static const GLfloat v[]={0,1,0,1, 1,0,1,0, 0,0,0,0, 0,1,0,1, 1,1,1,1, 1,0,1,0};
+  GLfloat id[16]={1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+  GLfloat pr[16]={2.f/OUT_W,0,0,0, 0,-2.f/OUT_H,0,0, 0,0,-1,0, -1,1,0,1};
+  glUseProgram(gProg); glUniform1f(uOp,1.f); glUniformMatrix4fv(uPR,1,GL_FALSE,pr); glUniformMatrix4fv(uTS,1,GL_FALSE,id);
+  glVertexAttribPointer(aV,4,GL_FLOAT,GL_FALSE,4*sizeof(GLfloat),v); glEnableVertexAttribArray(aV); glActiveTexture(GL_TEXTURE0); glUniform1i(uSam,0);
+  int drawn=0;
+  for(int b=0;b<12;b++){ bool any=false; for(int y=b*BANDH;y<(b+1)*BANDH;y++)if(rowD[y]){any=true;break;} if(!any)continue;
+    if(!gBandTex[b]){ glGenTextures(1,&gBandTex[b]); glBindTexture(GL_TEXTURE_2D,gBandTex[b]); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE); glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE); }
+    glBindTexture(GL_TEXTURE_2D,gBandTex[b]); glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,WZ_IW,BANDH,0,GL_RGBA,GL_UNSIGNED_BYTE,up+(size_t)b*BANDH*WZ_IW);
+    GLfloat mv[16]={(GLfloat)OUT_W,0,0,0, 0,(GLfloat)BANDH*OUT_H/WZ_IH,0,0, 0,0,1,0, 0,(GLfloat)b*BANDH*OUT_H/WZ_IH,0,1};
+    glUniformMatrix4fv(uMV,1,GL_FALSE,mv); glDrawArrays(GL_TRIANGLES,0,6); drawn++; }
+  static int pf=0; if(++pf<=2)wzlog("bands drawn %d err=0x%x",drawn,(unsigned)glGetError());
+  eglSwapBuffers(gD,gS);
+}
+#endif
 
 // ===== نسخة 4: المشهد ثلاثي الأبعاد يُرسم على الـGPU (Piglet) بشيدر trilithium (نسيج فقط) ؛ اللون = نسيج لوحة 6-6-6 ؛ الواجهة (HUD) طبقة شفافة من المعالج فوقه =====
 static void m4mul(const float*a,const float*b,float*o);
@@ -309,7 +337,9 @@ int main(int,char**){
     static std::vector<uint32_t> tst; if(tst.empty()){ static const uint32_t cb[8]={0xFF0000FFu,0xFF00FF00u,0xFFFF0000u,0xFFFFFFFFu,0xFF00FFFFu,0xFFFF00FFu,0xFFFFFF00u,0xFF808080u}; tst.resize(WZ_IW*WZ_IH); for(int y=0;y<WZ_IH;y++)for(int x=0;x<WZ_IW;x++)tst[y*WZ_IW+x]=(y<WZ_IH/8)?(0xFF000000u|(uint32_t)(x*255/WZ_IW)*0x010101u):cb[x*8/WZ_IW]; }
 #if WZ_GPU
     uint64_t tR=sceKernelGetProcessTime(); gpuFrame(g,frame); uint64_t tG=sceKernelGetProcessTime();
-#if WZ_OPT
+#if WZ_BAND
+    glPresentBands(upb.data(),g.r.rowD.data());
+#elif WZ_OPT
     glPresent(upb.data(),true,rowUp.data());
 #else
     glPresent(upb.data(),true);
