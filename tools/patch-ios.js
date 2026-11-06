@@ -19,6 +19,20 @@ pb('Delete :UIRequiresFullScreen'); pb('Add :UIRequiresFullScreen bool true');
 // السماح بالاتصال HTTP/WS بالشبكة المحلية (ملاعب LAN)
 pb('Delete :NSAppTransportSecurity'); pb('Add :NSAppTransportSecurity dict'); pb('Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true');
 pb('Delete :NSLocalNetworkUsageDescription'); pb('Add :NSLocalNetworkUsageDescription string للاتصال بلاعبين على نفس الشبكة');
+// إضافة LanHost الأصلية (استضافة LAN داخل التطبيق) + تسجيلها: تُدمج في AppDelegate.swift (ملف موجود أصلًا في الهدف) وتُستبدل فئة الواجهة في الـ storyboard
+try {
+  const ad = path.join(app, 'AppDelegate.swift');
+  let a = fs.readFileSync(ad, 'utf8');
+  if (!a.includes('LanHostPlugin')) { fs.writeFileSync(ad, fs.readFileSync(path.join(root, 'tools', 'native', 'LanHostPlugin.swift'), 'utf8') + '\n' + a); }
+  const sb = path.join(app, 'Base.lproj', 'Main.storyboard');
+  let t = fs.readFileSync(sb, 'utf8');
+  if (!t.includes('WZBridgeViewController')) {
+    const n = t.replace(/customClass="CAPBridgeViewController"\s+customModule="Capacitor"/, 'customClass="WZBridgeViewController" customModule="App" customModuleProvider="target"');
+    if (n === t) throw new Error('storyboard: لم يُعثر على CAPBridgeViewController');
+    fs.writeFileSync(sb, n);
+  }
+  console.log('تمت إضافة LanHost لنظام iOS');
+} catch (e) { console.error('فشل إضافة LanHost لـ iOS:', e.message); process.exit(1); }
 // أيقونة (1024 مربعة بلا شفافية)
 const icon = path.join(app, 'Assets.xcassets', 'AppIcon.appiconset', 'AppIcon-512@2x.png');
 try { const tmp = path.join(root, 'icon-tmp.jpg'); const src = path.join(root, 'public', 'icon-512.png'); execSync(`sips -z 1024 1024 -s format jpeg "${src}" --out "${tmp}" && sips -s format png "${tmp}" --out "${icon}"`, { stdio: 'pipe' }); fs.rmSync(tmp, { force: true }); } catch { try { execSync(`convert "${path.join(root, 'public', 'icon-512.png')}" -resize 1024x1024 -background black -alpha remove -alpha off "${icon}"`); } catch { try { fs.copyFileSync(path.join(root, 'public', 'icon-512.png'), icon); } catch { /* */ } } }

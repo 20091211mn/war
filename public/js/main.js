@@ -121,7 +121,7 @@ function getPlugin() {
 }
 async function startHost() {
   const plugin = getPlugin();
-  if (!plugin) { $('menuMsg').textContent = 'الاستضافة متاحة داخل تطبيق الأندرويد فقط (' + pluginErr + '). ' + envReport(); return; }
+  if (!plugin) { $('menuMsg').textContent = 'الاستضافة متاحة داخل تطبيق الأندرويد وiOS فقط (' + pluginErr + '). ' + envReport(); return; }
   beginSession(); stopHost();
   const host = new LocalHost(); host.game.cfg.fill = 0;
   $('menuMsg').textContent = 'جارٍ بدء الاستضافة…';

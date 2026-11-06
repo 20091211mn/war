@@ -103,7 +103,7 @@ def build(name, cfg, tris):
     top = Q[:, 1].max(); meta['top'] = round(float(top), 3)
     return Q, Nq, Ca, Fi.astype(np.uint16), counts, meta
 LEVELS = {'h': 50000, 'm': 12000, 'l': 3500, 'p': 0}  # h عالية، m متوسطة، l منخفضة (أندرويد/iOS حسب الجودة) ، p لـ PS4 (مُرسِم برمجي: عدد أقل لكل سلاح)
-PS4_TRIS = {'sniper': 6000, 'rifle': 9350, 'dmr': 9350, 'launcher': 2530}
+PS4_TRIS = {'sniper': 20000, 'rifle': 26000, 'dmr': 26000, 'launcher': 9000}
 def emit_js(level, models):
     b64 = lambda a: base64.b64encode(a.tobytes()).decode()
     js = '// مولَّد من ملفات GLB بواسطة tools/convert_guns.py — لا تعدّله يدويًا\nexport const GM = {\n'
