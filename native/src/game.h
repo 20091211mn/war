@@ -463,7 +463,7 @@ struct Game{
     if(menu==1){
       bool up=in.my>0.5f&&prev.my<=0.5f,dn=in.my<-0.5f&&prev.my>=-0.5f,rt=in.mx>0.5f&&prev.mx<=0.5f,lf=in.mx<-0.5f&&prev.mx>=-0.5f;
       if(up)menuRow=(menuRow+2)%3; if(dn)menuRow=(menuRow+1)%3; int d=rt?1:lf?-1:0;
-      if(d){ if(menuRow==0)menuSel=(menuSel+d+MAP_COUNT)%MAP_COUNT; else if(menuRow==1)diff=(diff+d+3)%3; else mode=(mode+d+6)%6; }
+      if(d){ if(menuRow==0)menuSel=(menuSel+d+MAP_COUNT)%MAP_COUNT; else if(menuRow==1)diff=(diff+d+3)%3; else mode=(mode+d+modeCount)%modeCount; }
       if(msgT>0)msgT-=dt;
       if((in.confirm&&!prev.confirm)||(in.start&&!prev.start)){ if(mode==0||mode>=4){ nLocal=mode>=4?2:1; coop=mode!=5; fovMul=nLocal==2?1.12f:1.f; hudK=nLocal==2?0.8f:1.f; menu=0;role=0;meI=0;startMatch(menuSel);} else { nLocal=1; fovMul=hudK=1.f; if(mode==1)hostStart(); else if(mode==2)lobbyStart(); else aclStart(0,3000); } }
       prev=in; return; }
@@ -517,7 +517,7 @@ struct Game{
   // ---- لاعبان على نفس الجهاز (شاشة مقسومة): حالة اللاعب المحلي كلها تُبدَّل بين اللاعبين (lsx) ، والعالم مشترك ----
   struct LS{ int meI=1,drive=-1,gren=2,prim=0,streak=0,glCnt=2; float lookIdle=0,hitMark=0,dmgFlash=0,hitAng=0,hitAngT=0,dnCd=0,dnSpot=0,msgT=0,optZ=0,camX=0,camY=3,camZ=0;
     bool nearVeh=false,pdn=false,pfireD=false,pg=false,gunner=false,pSeat=false,pc4=false,pdet=false,adsHeld=false,pFireV=false; Drn dn; Input prev; char msg[64]={0}; GAtt wAtt[16],myAtt; };
-  int nLocal=1,act=0; bool coop=true; Input in2; LS ls2; int vpass=0; float fovMul=1.f,hudK=1.f;
+  int modeCount=6; int nLocal=1,act=0; bool coop=true; Input in2; LS ls2; int vpass=0; float fovMul=1.f,hudK=1.f;
   void lsx(){ if(nLocal<2)return; LS&o=ls2; std::swap(meI,o.meI);std::swap(drive,o.drive);std::swap(gren,o.gren);std::swap(prim,o.prim);std::swap(streak,o.streak);std::swap(glCnt,o.glCnt);
     std::swap(lookIdle,o.lookIdle);std::swap(hitMark,o.hitMark);std::swap(dmgFlash,o.dmgFlash);std::swap(hitAng,o.hitAng);std::swap(hitAngT,o.hitAngT);std::swap(dnCd,o.dnCd);std::swap(dnSpot,o.dnSpot);std::swap(msgT,o.msgT);std::swap(optZ,o.optZ);
     std::swap(camX,o.camX);std::swap(camY,o.camY);std::swap(camZ,o.camZ);std::swap(nearVeh,o.nearVeh);std::swap(pdn,o.pdn);std::swap(pfireD,o.pfireD);std::swap(pg,o.pg);std::swap(gunner,o.gunner);std::swap(pSeat,o.pSeat);
