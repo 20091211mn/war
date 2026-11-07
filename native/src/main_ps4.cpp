@@ -205,8 +205,8 @@ static void gpuDraw(const std::vector<float>&v,const float*vp){
   size_t nv=v.size()/5; for(size_t o=0;o<nv;o+=60000){ size_t c=std::min<size_t>(60000,nv-o); c-=c%3; if(!c)break; glVertexAttribPointer(gpaP,3,GL_FLOAT,GL_FALSE,20,&v[o*5]); glVertexAttribPointer(gpaT,2,GL_FLOAT,GL_FALSE,20,&v[o*5+3]); glDrawArrays(GL_TRIANGLES,0,(GLsizei)c); } }
 static void gpuVP(const Renderer&r,float n,float f,float*o){ float P[16]={0},V[16]={0}; P[0]=2.f*r.focal/r.W; P[5]=2.f*r.focal/r.H; P[10]=(f+n)/(n-f); P[11]=-1; P[14]=2*f*n/(n-f);
   V[0]=r.rx;V[4]=0;V[8]=r.rz;V[12]=-(r.rx*r.cam.x+r.rz*r.cam.z); V[1]=r.ux;V[5]=r.uy;V[9]=r.uz;V[13]=-(r.ux*r.cam.x+r.uy*r.cam.y+r.uz*r.cam.z); V[2]=-r.fx;V[6]=-r.fy;V[10]=-r.fz;V[14]=r.fx*r.cam.x+r.fy*r.cam.y+r.fz*r.cam.z; V[15]=1; m4mul(P,V,o); }
-static void gpuFrame(Game&g,int frame){
-  Renderer&r=g.r; for(int i=0;i<8;i++)glDisableVertexAttribArray(i); glViewport(0,0,OUT_W,OUT_H); glDisable(GL_BLEND); glDisable(GL_CULL_FACE); glDepthMask(GL_TRUE); glClearColor(0.45f,0.55f,0.75f,1.f); glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+static void gpuFrame(Game&g,int frame,int vx=0,int vw=OUT_W){
+  Renderer&r=g.r; for(int i=0;i<8;i++)glDisableVertexAttribArray(i); glViewport(vx,0,vw,OUT_H); if(vw<OUT_W){ glEnable(GL_SCISSOR_TEST); glScissor(vx,0,vw,OUT_H); } else glDisable(GL_SCISSOR_TEST); glDisable(GL_BLEND); glDisable(GL_CULL_FACE); glDepthMask(GL_TRUE); glClearColor(0.45f,0.55f,0.75f,1.f); glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
   glUseProgram(gpPg); glActiveTexture(GL_TEXTURE0); if(gpSam>=0)glUniform1i(gpSam,0); glEnableVertexAttribArray(gpaP); glEnableVertexAttribArray(gpaT);
   size_t nw=r.gv[0].size()/15,nvm=r.gv[1].size()/15;
   if(r.m&&r.W>0){ // السماء: نسيج صغير بتدرّج السماء الحقيقي (skyAt) على مستطيل كامل الشاشة
@@ -229,7 +229,22 @@ static void gpuFrame(Game&g,int frame){
       glDepthMask(GL_TRUE); glDisable(GL_BLEND); glBindTexture(GL_TEXTURE_2D,gpPal); } }
   if(nvm){ if(gDepthBits>0)glClear(GL_DEPTH_BUFFER_BIT); gpuVP(r,0.04f,12.f,vp); gpuDraw(r.gv[1],vp); }
   if(frame<=3||frame%300==0)wzlog("gpuFrame %d world tris %d viewmodel tris %d err=0x%x",frame,(int)nw,(int)nvm,(unsigned)glGetError());
-  for(int i=0;i<8;i++)glDisableVertexAttribArray(i); r.gv[0].clear(); r.gv[1].clear(); for(int L=0;L<3;L++)r.gd[L].clear();
+  for(int i=0;i<8;i++)glDisableVertexAttribArray(i); r.gv[0].clear(); r.gv[1].clear(); for(int L=0;L<3;L++)r.gd[L].clear(); glDisable(GL_SCISSOR_TEST);
+}
+// لاعبان على نفس الجهاز: شاشة مقسومة (يسار/يمين)؛ كل لاعب يُرسم مشهده على الـGPU في نصف الشاشة وواجهته (HUD) في نصف نسيج الطبقة الشفافة
+static void splitRender(Game&g,std::vector<uint32_t>&upb,int frame){
+  Renderer&r=g.r; const int HW=WZ_IW/2;
+  for(int pI=0;pI<2;pI++){
+    if(pI)g.lsx();
+    memset(r.fb.data(),0,(size_t)HW*WZ_IH*4); std::fill(r.rowD.begin(),r.rowD.end(),0);
+    r.W=HW; g.render(); r.flush();
+    gpuFrame(g,frame,pI*HW,HW);
+    for(int y=0;y<WZ_IH;y++){ uint32_t*ub=&upb[(size_t)y*WZ_IW+pI*HW]; if(r.rowD[y]){ const uint32_t*sr=&r.fb[(size_t)y*HW]; for(int i=0;i<HW;i++){ uint32_t p=sr[i]; ub[i]=(p&0xFF00FF00u)|((p>>16)&0xFFu)|((p&0xFFu)<<16); } } else memset(ub,0,(size_t)HW*4); }
+    r.W=WZ_IW;
+    if(pI)g.lsx();
+  }
+  for(int y=0;y<WZ_IH;y++)for(int x=HW-3;x<HW+3;x++)upb[(size_t)y*WZ_IW+x]=0xFF000000u; // فاصل بين الشاشتين
+  std::fill(r.fb.begin(),r.fb.end(),0u); std::fill(r.rowD.begin(),r.rowD.end(),0);
 }
 #endif
 
@@ -294,6 +309,7 @@ int main(int,char**){
 #endif
  wzlog("game init"); static std::vector<uint32_t> upb(WZ_IW*WZ_IH); wzlog("upload buf ok");
   wzlog("entering loop");
+  static int padH2=-1; static OrbisPadData pd2; static float smx2=0,smy2=0;
   static std::vector<uint8_t> prevD,rowUp; double sU=0,sR=0,sG=0,sP=0,mxT=0; int nT=0;
   uint32_t last=ticks(); bool dbg=false; uint32_t prevB=0; float acc=0,fpsT=0,fps=30; int fpsN=0; float smx=0,smy=0; int frame=0;
   for(;;){
@@ -307,6 +323,19 @@ int main(int,char**){
     if(frame==1)wzlog("f1 pad read"); uint32_t edge=pd.buttons&~prevB; prevB=pd.buttons;
     auto stick=[&](float x,float y,float&ox,float&oy){float m=sqrtf(x*x+y*y);const float D=0.18f;if(m<D){ox=oy=0;return;}float k=(m-D)/(1-D);if(k>1)k=1;ox=x/m*k;oy=y/m*k;};
     float ax,ay,bx,by; stick(stickN(pd.leftStick.x),-stickN(pd.leftStick.y),ax,ay); stick(stickN(pd.rightStick.x),-stickN(pd.rightStick.y),bx,by); // y موجب = أعلى
+    // ---- اليد الثانية (لاعبان على نفس الجهاز) ----
+    if(g.nLocal==2&&!g.menu){
+      if(padH2<0&&frame%60==1){ OrbisUserServiceLoginUserIdList ul; memset(&ul,0xFF,sizeof ul); if(sceUserServiceGetLoginUserIdList(&ul)==0)for(int k=0;k<4&&padH2<0;k++){ if(ul.userId[k]!=-1&&ul.userId[k]!=uid){ int h=scePadOpen(ul.userId[k],0,0,NULL); wzlog("pad2 open user %d -> %d",(int)ul.userId[k],h); if(h>=0)padH2=h; } }
+        if(padH2<0){ int h=scePadOpen(uid,0,1,NULL); wzlog("pad2 open same user index1 -> %d",h); if(h>=0)padH2=h; } }
+      memset(&pd2,0,sizeof pd2); Input q; if(padH2>=0){ int rr=scePadReadState(padH2,&pd2); if(rr!=0){ wzlog("pad2 read failed 0x%x, closing",(unsigned)rr); scePadClose(padH2); padH2=-1; pd2.connected=0; } }
+      if(padH2>=0&&pd2.connected){ auto B2=[&](uint32_t m){return (pd2.buttons&m)!=0;};
+        float cx_,cy_,dx_,dy_; stick(stickN(pd2.leftStick.x),-stickN(pd2.leftStick.y),cx_,cy_); stick(stickN(pd2.rightStick.x),-stickN(pd2.rightStick.y),dx_,dy_);
+        float mx2=g.swapSticks?dx_:cx_,my2=g.swapSticks?dy_:cy_,lk2=g.swapSticks?cx_:dx_,ly2=g.swapSticks?cy_:dy_; // mx2/my2 = حركة ، lk2/ly2 = نظر
+        float a2=std::min<float>(1.f,dt*14.f); smx2+=(mx2-smx2)*a2; smy2+=(my2-smy2)*a2; if(mx2==0&&fabsf(smx2)<0.05f)smx2=0; if(my2==0&&fabsf(smy2)<0.05f)smy2=0; q.mx=smx2; q.my=smy2;
+        float rm2=sqrtf(lk2*lk2+ly2*ly2); float cv2=rm2*rm2*1.9f+rm2*0.45f; float rk2=rm2>0.001f?cv2/rm2:0; q.lx=lk2*rk2; q.ly=ly2*rk2*0.75f;
+        q.fire=B2(ORBIS_PAD_BUTTON_R2)||pd2.analogButtons.r2>110; q.ads=B2(ORBIS_PAD_BUTTON_L2)||pd2.analogButtons.l2>110; q.jump=B2(ORBIS_PAD_BUTTON_CROSS); q.crouch=B2(ORBIS_PAD_BUTTON_CIRCLE); q.reload=B2(ORBIS_PAD_BUTTON_SQUARE);
+        q.swapP=B2(ORBIS_PAD_BUTTON_L1); q.swapN=B2(ORBIS_PAD_BUTTON_R1); q.sprint=g.swapSticks?B2(ORBIS_PAD_BUTTON_R3):B2(ORBIS_PAD_BUTTON_L3); q.use=B2(ORBIS_PAD_BUTTON_LEFT); q.drone=B2(ORBIS_PAD_BUTTON_DOWN); q.grenade=B2(ORBIS_PAD_BUTTON_UP); q.tri=B2(ORBIS_PAD_BUTTON_TRIANGLE); q.c4=B2(ORBIS_PAD_BUTTON_RIGHT); q.det=B2(ORBIS_PAD_BUTTON_TOUCH_PAD); q.seat=g.swapSticks?B2(ORBIS_PAD_BUTTON_L3):B2(ORBIS_PAD_BUTTON_R3); }
+      g.in2=q; } else g.in2=Input();
     float lx_,ly_,rx_,ry_; if(g.swapSticks){rx_=ax;ry_=ay;lx_=bx;ly_=by;} else {lx_=ax;ly_=ay;rx_=bx;ry_=by;} // l = حركة ، r = نظر
     Input in;
     float a=std::min<float>(1.f,dt*14.f); smx+=(lx_-smx)*a; smy+=(ly_-smy)*a; if(lx_==0&&fabsf(smx)<0.05f)smx=0; if(ly_==0&&fabsf(smy)<0.05f)smy=0;
@@ -327,20 +356,20 @@ int main(int,char**){
 #endif
     uint64_t tS=sceKernelGetProcessTime();
     acc+=dt; int steps=0; while(acc>=1.f/60.f&&steps<4){ g.update(1.f/60.f,in); acc-=1.f/60.f; steps++; } if(steps==4)acc=0;
-    uint64_t tU=sceKernelGetProcessTime(); if(frame==1)wzlog("f1 updated"); if(g.menu)g.renderMenu(); else g.render(); if(frame==1)wzlog("f1 rendered");
+    uint64_t tU=sceKernelGetProcessTime(); if(frame==1)wzlog("f1 updated"); const bool split=WZ_GPU&&!g.menu&&g.nLocal==2&&g.role==0; if(g.menu)g.renderMenu(); else if(split)splitRender(g,upb,frame); else g.render(); if(frame==1)wzlog("f1 rendered");
     if(dbg){ char b[96]; snprintf(b,96,"FPS %d RES %d SHADERS %d",(int)fps,g.r.W,gShN); g.text(40,40,b,2,0xFFFFFF00);
       { int pg=(frame/120)%std::max(1,(gShN+11)/12),k=0; for(NikShader*e=scePrecompiledShaderEntries;e->ident;++e,++k){ if(k<pg*12||k>=pg*12+12)continue; snprintf(b,96,"%d %.40s",k,e->ident); g.text(40,110+(k-pg*12)*16,b,1,0xFF66FFCC); } }
       snprintf(b,96,"LS %d %d RS %d %d L2 %d R2 %d",pd.leftStick.x,pd.leftStick.y,pd.rightStick.x,pd.rightStick.y,pd.analogButtons.l2,pd.analogButtons.r2); g.text(40,60,b,2,0xFFFFFF00);
       snprintf(b,96,"BTN %05X PAD %d",(unsigned)pd.buttons,padH); g.text(40,80,b,2,0xFFFFFF00); }
 #if WZ_OPT
-    g.r.flush(); { int W=g.r.W; for(int y=0;y<g.r.H;y++){ uint32_t*ub=&upb[(size_t)y*W]; if(g.r.rowD[y]){ const uint32_t*s=&g.r.fb[(size_t)y*W]; for(int i=0;i<W;i++){ uint32_t p=s[i]; ub[i]=(p&0xFF00FF00u)|((p>>16)&0xFFu)|((p&0xFFu)<<16); } rowUp[y]=1; } else if(prevD[y]){ memset(ub,0,(size_t)W*4); rowUp[y]=1; } else rowUp[y]=0; } }
+    g.r.flush(); if(!split){ int W=g.r.W; for(int y=0;y<g.r.H;y++){ uint32_t*ub=&upb[(size_t)y*W]; if(g.r.rowD[y]){ const uint32_t*s=&g.r.fb[(size_t)y*W]; for(int i=0;i<W;i++){ uint32_t p=s[i]; ub[i]=(p&0xFF00FF00u)|((p>>16)&0xFFu)|((p&0xFFu)<<16); } rowUp[y]=1; } else if(prevD[y]){ memset(ub,0,(size_t)W*4); rowUp[y]=1; } else rowUp[y]=0; } }
 #else
     g.r.flush(); { const uint32_t*fbp=g.r.fb.data(); uint32_t*ub=upb.data(); int n=WZ_IW*WZ_IH; std::atomic<int> nx(0); g.r.pool.exec([&]{ for(;;){ int i0=nx.fetch_add(65536); if(i0>=n)break; int i1=std::min(n,i0+65536); for(int i=i0;i<i1;i++){ uint32_t p=fbp[i]; ub[i]=(p&0xFF00FF00u)|((p>>16)&0xFFu)|((p&0xFFu)<<16)|(WZ_GPU?0u:0xFF000000u); } } }); }
 #endif
     if(frame==1)wzlog("f1 converted");
     static std::vector<uint32_t> tst; if(tst.empty()){ static const uint32_t cb[8]={0xFF0000FFu,0xFF00FF00u,0xFFFF0000u,0xFFFFFFFFu,0xFF00FFFFu,0xFFFF00FFu,0xFFFFFF00u,0xFF808080u}; tst.resize(WZ_IW*WZ_IH); for(int y=0;y<WZ_IH;y++)for(int x=0;x<WZ_IW;x++)tst[y*WZ_IW+x]=(y<WZ_IH/8)?(0xFF000000u|(uint32_t)(x*255/WZ_IW)*0x010101u):cb[x*8/WZ_IW]; }
 #if WZ_GPU
-    uint64_t tR=sceKernelGetProcessTime(); gpuFrame(g,frame); uint64_t tG=sceKernelGetProcessTime();
+    uint64_t tR=sceKernelGetProcessTime(); if(!split)gpuFrame(g,frame); uint64_t tG=sceKernelGetProcessTime();
 #if WZ_BAND
     glPresentBands(upb.data(),g.r.rowD.data());
 #elif WZ_VARIANT==9
