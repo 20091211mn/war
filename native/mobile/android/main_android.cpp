@@ -67,7 +67,7 @@ static double nowSec(){ timespec t; clock_gettime(CLOCK_MONOTONIC,&t); return t.
 void android_main(struct android_app*app){
   app->onAppCmd=onCmd; app->onInputEvent=onInput; keepOn(app); double last=nowSec();
   for(;;){
-    int ev; struct android_poll_source*src; while(ALooper_pollAll(g_run?0:200,nullptr,&ev,(void**)&src)>=0){ if(src)src->process(app,src); if(app->destroyRequested){ return; } }
+    int ev; struct android_poll_source*src; while(ALooper_pollOnce(g_run?0:200,nullptr,&ev,(void**)&src)>=0){ if(src)src->process(app,src); if(app->destroyRequested){ return; } }
     if(!g_run||!g_win||!M)continue;
     double now=nowSec(); float dt=(float)(now-last); last=now;
     M->frame(dt);
