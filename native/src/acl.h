@@ -208,9 +208,9 @@ void Game::aclRenderMenu(){
     textC(W/2,cy+ch-14*sc,"D-pad: تحريك    X: إدخال    Square: حذف    O: رجوع",sm,C_MUT);
   } else if(menu==7){ textC(W/2,H/2-14*sc,"جارٍ الاتصال…",sc*2,C_ACC); snprintf(b,96,"STEP: %s",A.ws.what()); textC(W/2,H/2+10*sc,b,sc,C_MUT); textC(W/2,cy+ch-14*sc,"O: إلغاء",sm,C_MUT);
   } else if(menu==8){
-    static const char*MN[5]={"المستودع","أطلال الصحراء","شارع المدينة","القاعدة القطبية","صحراء الشاص"};
+    static const char*MN[8]={"المستودع","أطلال الصحراء","شارع المدينة","القاعدة القطبية","صحراء الشاص","أهرامات الجيزة","المدينة القديمة","ميناء الإسكندرية"};
     rect(cx+8*sc,cy,cw/2-8*sc,2*sc,0xFFE23B3B); rect(cx+cw/2,cy,cw/2-8*sc,2*sc,0xFF3B82F6);
-    snprintf(b,96,"%s",MN[A.cfgMap%5]); rrect(W/2-50*sc,cy+30*sc,100*sc,14*sc,7*sc,0xFF0B0F14,0.8f); textC(W/2,cy+33*sc,b,sc,C_ACC);
+    snprintf(b,96,"%s",MN[A.cfgMap%8]); rrect(W/2-50*sc,cy+30*sc,100*sc,14*sc,7*sc,0xFF0B0F14,0.8f); textC(W/2,cy+33*sc,b,sc,C_ACC);
     int colW=(cw-48*sc)/2,top=cy+50*sc,rowH=15*sc,maxRows=std::max(1,(ch-50*sc-92*sc)/(rowH+2*sc));
     for(int t=0;t<2;t++){ int x=cx+16*sc+t*(colW+16*sc); uint32_t col=t?0xFF3B82F6:0xFFE23B3B; int cnt=0; for(auto&l:A.lobby)if((l.tm?1:0)==t)cnt++;
       rrect(x,top,colW,12*sc,5*sc,col,0.85f); snprintf(b,96,"%s  (%d)",t?"الفريق الأزرق":"الفريق الأحمر",cnt); textC(x+colW/2,top+2*sc,b,sc,0xFFFFFFFF);

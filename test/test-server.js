@@ -49,7 +49,7 @@ ok(cs[0].lobby.cfg.scoreLimit === 30, 'لا تُقبل إعدادات من غي�
 cs[0].send({ t: 'cfg', map: 99, scoreLimit: 10, timeLimit: 180, fill: 5 });
 cs[0].send({ t: 'lo', lo: { p: 'hax', s: 'sniper', a: [{ optic: 'x99', muzzle: 'zzz' }, null] } });
 await sleep(200);
-ok(cs[0].lobby.cfg.map === 4 && cs[0].lobby.cfg.fill === 5 && cs[0].lobby.cfg.scoreLimit === 10, 'الإعدادات تُنقّى (map يُقيَّد)');
+ok(cs[0].lobby.cfg.map === 7 && cs[0].lobby.cfg.fill === 5 && cs[0].lobby.cfg.scoreLimit === 10, 'الإعدادات تُنقّى (map يُقيَّد)');
 const me = cs[0].lobby.ps.find(p => p.id === cs[0].id);
 ok(me.p === 'carbine' && me.s === 'pistol', 'العتاد غير الصالح يعود للافتراضي');
 
