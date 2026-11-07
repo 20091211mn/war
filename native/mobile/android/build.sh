@@ -4,7 +4,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"; OUT="${OUT:-$HERE/out}"; rm -rf "$OUT"; mkdir -p "$OUT/stage" "$OUT/res"
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"; NDK="${ANDROID_NDK_LATEST_HOME:-${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-}}}"
 [ -d "$NDK" ] || NDK="$(ls -d "$SDK"/ndk/* | sort -V | tail -1)"
-BT="$(ls -d "$SDK"/build-tools/* | sort -V | tail -1)"; PLAT="$(ls -d "$SDK"/platforms/android-[0-9] "$SDK"/platforms/android-[0-9][0-9] 2>/dev/null | sort -V | tail -1)"
+BT="$(ls -d "$SDK"/build-tools/* | sort -V | tail -1)"; PLAT="$( (ls -d "$SDK"/platforms/android-[0-9] "$SDK"/platforms/android-[0-9][0-9] 2>/dev/null || true) | sort -V | tail -1)"
 TC="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"; GLUE="$NDK/sources/android/native_app_glue"
 echo "SDK=$SDK NDK=$NDK BT=$BT PLAT=$PLAT"
 for abi in arm64-v8a armeabi-v7a; do

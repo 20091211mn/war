@@ -10,7 +10,7 @@ static void startAudio(){
   dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{
     SFX::initBuffers();
     AVAudioSession*s=[AVAudioSession sharedInstance]; [s setCategory:AVAudioSessionCategoryPlayback error:nil]; [s setActive:YES error:nil];
-    AudioComponentDescription d={kAudioUnitType_Output,kAudioUnitSubType_RemoteIO,kAudioUnitManufacturer_Apple,0,0}; AudioComponent c=AudioComponentFindNextComponent(NULL,&d); if(!c)return;
+    AudioComponentDescription d={kAudioUnitType_Output,kAudioUnitSubType_RemoteIO,kAudioUnitManufacturer_Apple,0,0}; AudioComponent c=AudioComponentFindNext(NULL,&d); if(!c)return;
     if(AudioComponentInstanceNew(c,&gAU)!=noErr)return;
     AudioStreamBasicDescription f={}; f.mSampleRate=48000; f.mFormatID=kAudioFormatLinearPCM; f.mFormatFlags=kAudioFormatFlagIsSignedInteger|kAudioFormatFlagIsPacked; f.mChannelsPerFrame=2; f.mBitsPerChannel=16; f.mBytesPerFrame=4; f.mBytesPerPacket=4; f.mFramesPerPacket=1;
     AudioUnitSetProperty(gAU,kAudioUnitProperty_StreamFormat,kAudioUnitScope_Input,0,&f,sizeof f);
