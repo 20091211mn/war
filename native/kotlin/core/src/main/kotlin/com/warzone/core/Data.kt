@@ -177,8 +177,24 @@ object GameData {
             val pos = ShortArray(nv * 3); bb.asShortBuffer().get(pos); bb.position(bb.position() + pos.size * 2)
             val nor = ByteArray(nv * 3); bb.get(nor); val col = ByteArray(nv * 3); bb.get(col)
             val ni = bb.int; val idx = ShortArray(ni); bb.asShortBuffer().get(idx)
-            GunMesh(nv, grp, lo, rng, pos, nor, col, idx)
+            decimate(GunMesh(nv, grp, lo, rng, pos, nor, col, idx), 0.3f)
         } catch (e: Exception) { null }
+    }
+
+    /** يحذف أصغر المثلثات (براغي وتفاصيل دقيقة) داخل كل مجموعة: السلاح في المنظور الأول يرسم على المعالج كل إطار، فنُبقي ~keep فقط بأكبر المساحات. */
+    private fun decimate(m: GunMesh, keep: Float): GunMesh {
+        val ng = IntArray(4); val out = ArrayList<Short>(m.idx.size); var off = 0
+        for (g in 0 until 4) {
+            val cnt = m.grp[g]; val nt = cnt / 3; if (nt == 0) { off += cnt; continue }
+            val ar = FloatArray(nt) { t -> val a = m.index(off + t * 3); val b = m.index(off + t * 3 + 1); val c = m.index(off + t * 3 + 2)
+                val ux = m.vx[b] - m.vx[a]; val uy = m.vy[b] - m.vy[a]; val uz = m.vz[b] - m.vz[a]; val vx = m.vx[c] - m.vx[a]; val vy = m.vy[c] - m.vy[a]; val vz = m.vz[c] - m.vz[a]
+                val cx = uy * vz - uz * vy; val cy = uz * vx - ux * vz; val cz = ux * vy - uy * vx; cx * cx + cy * cy + cz * cz }
+            val sorted = ar.copyOf(); sorted.sort(); val thr = sorted[((1f - keep) * (nt - 1)).toInt().coerceIn(0, nt - 1)]
+            var kept = 0
+            for (t in 0 until nt) if (ar[t] >= thr) { out.add(m.idx[off + t * 3]); out.add(m.idx[off + t * 3 + 1]); out.add(m.idx[off + t * 3 + 2]); kept += 3 }
+            ng[g] = kept; off += cnt
+        }
+        return GunMesh(m.nv, ng, m.lo, m.rng, m.pos, m.nor, m.col, out.toShortArray())
     }
 
     /** Which weapon index uses which 3D mesh (null = box model). */
