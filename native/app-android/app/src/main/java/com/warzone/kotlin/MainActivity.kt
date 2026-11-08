@@ -40,6 +40,8 @@ class MainActivity : Activity() {
         view.setRenderer(GameGL(game, ctl))
         setContentView(view); immersive()
         Thread { Sfx.initBuffers() }.start()
+        // تسخين: تحميل مجسّمات الأسلحة مسبقاً حتى لا يتجمّد أول إطار في المباراة
+        Thread { try { for (n in arrayOf("rifle", "sniper", "dmr", "launcher")) com.warzone.core.GameData.mesh(n) } catch (e: Throwable) {} }.start()
     }
     private fun immersive() {
         @Suppress("DEPRECATION")

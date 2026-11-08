@@ -61,6 +61,7 @@ class GameGL(val g: Game, val ctl: Controls) : GLSurfaceView.Renderer {
     private var hud: Hud? = null
     private val quad: FloatBuffer = ByteBuffer.allocateDirect(8 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply { put(floatArrayOf(-1f, -1f, 1f, -1f, -1f, 1f, 1f, 1f)); position(0) }
     private val look = FloatArray(2)
+    private var err: String? = null; private var tUpd = 0f; private var tScn = 0f; private var fpsAvg = 60f
     @Volatile var ready = false
 
     private fun shader(t: Int, src: String): Int { val s = glCreateShader(t); glShaderSource(s, src); glCompileShader(s)
@@ -103,9 +104,20 @@ class GameGL(val g: Game, val ctl: Controls) : GLSurfaceView.Renderer {
         if (!ready) return
         val now = SystemClock.elapsedRealtimeNanos(); var dt = if (last == 0L) 1f / 60 else ((now - last) / 1e9f); last = now; dt = min(0.1f, max(0.001f, dt))
         synchronized(g) {
-            val inp = ctl.build(); acc += dt; val n = min(4, (acc * 60f).toInt()); ctl.takeLook(n, look)
-            var s = 0; while (acc >= 1f / 60f && s < 4) { val i = Input(); i.set(inp); i.lx = look[0]; i.ly = look[1]; g.update(1f / 60f, i); acc -= 1f / 60f; s++ }; if (s == 4) acc = 0f
-            if (g.menu != 0) g.renderMenu() else g.render()
+            val t0 = SystemClock.elapsedRealtimeNanos()
+            if (err == null) try {
+                val inp = ctl.build(); acc += dt
+                // خطوة أو خطوتان فقط بزمن متغيّر (بدل 4 خطوات ثابتة): لا حلقة موت على الجهاز البطيء
+                val n = if (acc > 1f / 45f) 2 else 1; val sd = min(1f / 30f, acc / n); ctl.takeLook(n, look)
+                for (k in 0 until n) { val i = Input(); i.set(inp); i.lx = look[0]; i.ly = look[1]; g.update(sd, i) }; acc = 0f
+                tUpd += (((SystemClock.elapsedRealtimeNanos() - t0) / 1e6f) - tUpd) * 0.1f
+                val t1 = SystemClock.elapsedRealtimeNanos()
+                if (g.menu != 0) g.renderMenu() else g.render()
+                tScn += (((SystemClock.elapsedRealtimeNanos() - t1) / 1e6f) - tScn) * 0.1f
+            } catch (e: Throwable) { err = e.toString() + "\n" + e.stackTrace.take(6).joinToString("\n") { "  at " + it }; android.util.Log.e("WZ", "game error", e) }
+            fpsAvg += ((1f / dt) - fpsAvg) * 0.05f
+            HudDiag.line = String.format("FPS %.0f  update %.1f ms  scene %.1f ms  tris %d", fpsAvg, tUpd, tScn, g.r.layers[0].triangleCount + g.r.layers[1].triangleCount)
+            HudDiag.err = err
             val r = g.r; val m = r.m
             glViewport(0, 0, sw, sh); glDisable(GL_BLEND); glDisable(GL_CULL_FACE)
             glClearColor(0.5f, 0.6f, 0.8f, 1f); glClear(GL_COLOR_BUFFER_BIT or GL_DEPTH_BUFFER_BIT)

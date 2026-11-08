@@ -4,6 +4,8 @@ import android.graphics.*
 import com.warzone.core.Game
 import kotlin.math.*
 
+object HudDiag { @Volatile var line = ""; @Volatile var err: String? = null }
+
 /** واجهة اللعبة: تُرسم بـ Canvas فوق صورة OpenGL (قائمة، شريط الحياة، الذخيرة، النتيجة، الأزرار). */
 class Hud(private val g: Game, private val c: Controls) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -24,6 +26,7 @@ class Hud(private val g: Game, private val c: Controls) {
 
     fun draw(cv: Canvas, w: Float, h: Float) {
         val u = h / 540f; c.layout()
+        diag(cv, w, h, u)
         if (g.menu == 1) { menu(cv, w, h, u); return }
         val me = g.e[g.meI]
         // وميض الضرر
@@ -36,6 +39,11 @@ class Hud(private val g: Game, private val c: Controls) {
         }
         if (g.paused) pause(cv, w, h, u)
         controls(cv, w, h, u)
+    }
+
+    private fun diag(cv: Canvas, w: Float, h: Float, u: Float) {
+        text(cv, HudDiag.line, 8 * u, h - 6 * u, 11 * u, 0xFFB8FFB8.toInt(), Paint.Align.LEFT)
+        HudDiag.err?.let { e -> p.style = Paint.Style.FILL; p.color = 0xE0200000.toInt(); cv.drawRect(0f, 0f, w, h, p); var y = 30 * u; for (ln in ("ERROR\n" + e).split("\n")) { text(cv, ln, 12 * u, y, 13 * u, 0xFFFF8080.toInt(), Paint.Align.LEFT); y += 17 * u } }
     }
 
     private fun hud(cv: Canvas, w: Float, h: Float, u: Float, me: com.warzone.core.Ent) {
