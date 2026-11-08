@@ -4,10 +4,10 @@ import kotlin.test.assertTrue
 class SmokeTest {
     @Test fun menuThenPlay() {
         val g = Game(); g.modeCount = 1; g.menu = 1; g.init(1280, 600)
-        for (m in 0 until g.MAP_COUNT) { g.menuSel = m; g.renderMenu(); assertTrue(g.r.layers[0].n > 0, "menu map $m") }
+        for (m in 0 until g.MAP_COUNT) { g.menuSel = m; g.renderMenu(); assertTrue(g.r.statics.n > 0, "menu map $m") }
         val i = Input(); i.confirm = true; g.update(1f / 60, i); assertTrue(g.menu == 0)
         for (k in 0 until 600) { val s = Input(); s.my = 1f; s.fire = k % 20 < 10; s.lx = 0.01f; g.update(1f / 60, s); g.render() }
-        assertTrue(g.r.layers[0].n > 1000 && g.r.layers[1].n > 0, "scene tris ${g.r.layers[0].n} vm ${g.r.layers[1].n}")
+        assertTrue(g.r.statics.n > 1000 && g.r.layers[1].n > 0, "scene tris ${g.r.layers[0].n} vm ${g.r.layers[1].n}")
         for (m in 0 until g.MAP_COUNT) { g.startMatch(m); for (k in 0 until 120) { g.update(1f / 60, Input()); g.render() } }
         for (wi in 0 until g.WEAPON_COUNT) {
             g.startMatch(0); g.menu = 0; g.e[0].wpn = wi; g.e[0].alive = true; for (k in 0 until 30) { g.update(1f / 60, Input()) }; g.e[0].wpn = wi; g.render()
@@ -25,7 +25,7 @@ class SmokeTest {
         run { g.startMatch(0); g.menu = 0; for (k in 0 until 200) { g.update(1f / 60, Input()); g.render() }
             var tu = 0L; var tr = 0L; var tg = 0L; val N = 300
             for (k in 0 until N) { val a = System.nanoTime(); g.update(1f / 60, Input()); val b = System.nanoTime(); g.render(); val c = System.nanoTime(); tu += b - a; tr += c - b }
-            println("PERF update=${tu / N / 1000} us render=${tr / N / 1000} us tris=${g.r.layers[0].triangleCount} vm=${g.r.layers[1].triangleCount} wpn=${g.e[g.meI].wpn}") }
-        println("SMOKE OK maps=${g.MAP_COUNT} tris=${g.r.layers[0].triangleCount}")
+            println("PERF update=${tu / N / 1000} us render=${tr / N / 1000} us tris=${g.r.statics.triangleCount}+${g.r.layers[0].triangleCount} vm=${g.r.layers[1].triangleCount} wpn=${g.e[g.meI].wpn}") }
+        println("SMOKE OK maps=${g.MAP_COUNT} tris=${g.r.statics.triangleCount}+${g.r.layers[0].triangleCount}")
     }
 }
