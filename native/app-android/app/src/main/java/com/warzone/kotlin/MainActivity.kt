@@ -53,16 +53,22 @@ class GameView(ctx: Context) : SurfaceView(ctx), SurfaceHolder.Callback {
     }
     private fun stopLoop() { running = false; thread?.join(500); thread = null }
 
+    private var pix: java.nio.ByteBuffer? = null
+    private val wh = IntArray(2)
     private fun drawFrame() {
-        val w = Native.width(); val h = Native.height(); val buf = Native.pixels() ?: return
+        val cap = 1920 * 1080 * 4
+        val buf = pix ?: java.nio.ByteBuffer.allocateDirect(cap).also { pix = it }
+        buf.clear()
+        if (Native.copyPixels(buf, wh) == 0) return
+        val w = wh[0]; val h = wh[1]
         if (w <= 0 || h <= 0) return
         if (bmp == null || bmpW != w || bmpH != h) { bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888); bmpW = w; bmpH = h }
-        buf.rewind(); bmp!!.copyPixelsFromBuffer(buf)
-        val c = holder.lockCanvas() ?: return
+        buf.limit(w * h * 4); buf.position(0); bmp!!.copyPixelsFromBuffer(buf)
+        val c = try { holder.lockCanvas() } catch (e: Exception) { null } ?: return
         try {
             src.set(0, 0, w, h); dst.set(0, 0, c.width, c.height)
             c.drawBitmap(bmp!!, src, dst, paint)
-        } finally { holder.unlockCanvasAndPost(c) }
+        } finally { try { holder.unlockCanvasAndPost(c) } catch (e: Exception) {} }
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {

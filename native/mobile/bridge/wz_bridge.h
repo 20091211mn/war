@@ -12,6 +12,7 @@ void wz_frame(float dt);                           // تحديث + رسم
 int  wz_width(void);  int wz_height(void);         // أبعاد الصورة الداخلية
 int  wz_resize_seq(void);                          // يتغير عند تغيّر الدقة التلقائية
 const uint32_t* wz_pixels(void);                   // RGBA (بايتات R,G,B,A) بحجم width*height
+int  wz_copy_pixels(uint32_t* dst,int capPixels,int* w,int* h); // ينسخ الصورة تحت قفل المحرك (آمن مع تغيّر الدقة من خيط آخر)؛ يرجع 1 عند النجاح
 void wz_mix(int16_t* stereo,int frames);           // صوت 48kHz ستيريو 16 بت (آمن للاستدعاء من خيط الصوت)
 void wz_pause(void);                               // يوقف اللعبة مؤقتاً (عند الخروج من التطبيق)
 #ifdef __cplusplus

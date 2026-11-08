@@ -9,6 +9,6 @@ FN(void,frame)(JNIEnv*,jobject,jfloat dt){ wz_frame(dt); }
 FN(jint,width)(JNIEnv*,jobject){ return wz_width(); }
 FN(jint,height)(JNIEnv*,jobject){ return wz_height(); }
 FN(jint,resizeSeq)(JNIEnv*,jobject){ return wz_resize_seq(); }
-FN(jobject,pixels)(JNIEnv*e,jobject){ const uint32_t*p=wz_pixels(); int n=wz_width()*wz_height(); if(!p||n<=0)return nullptr; return e->NewDirectByteBuffer((void*)p,(jlong)n*4); }
+FN(jint,copyPixels)(JNIEnv*e,jobject,jobject buf,jintArray wh){ void*p=e->GetDirectBufferAddress(buf); if(!p)return 0; jlong cap=e->GetDirectBufferCapacity(buf)/4; int w=0,h=0; int ok=wz_copy_pixels((uint32_t*)p,(int)cap,&w,&h); if(ok){ jint v[2]={w,h}; e->SetIntArrayRegion(wh,0,2,v); } return ok; }
 FN(void,mix)(JNIEnv*e,jobject,jshortArray arr,jint frames){ void*p=e->GetPrimitiveArrayCritical(arr,nullptr); if(!p)return; wz_mix((int16_t*)p,frames); e->ReleasePrimitiveArrayCritical(arr,p,0); }
 FN(void,pause)(JNIEnv*,jobject){ wz_pause(); }

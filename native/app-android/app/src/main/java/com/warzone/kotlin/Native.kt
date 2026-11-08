@@ -13,8 +13,8 @@ object Native {
     external fun width(): Int
     external fun height(): Int
     external fun resizeSeq(): Int
-    /** صورة RGBA مباشرة من المحرك (بدون نسخ) */
-    external fun pixels(): ByteBuffer?
+    /** ينسخ صورة RGBA من المحرك إلى مخزن مباشر تحت القفل؛ wh[0..1] = العرض والارتفاع. يرجع 1 عند النجاح */
+    external fun copyPixels(buf: ByteBuffer, wh: IntArray): Int
     external fun mix(buf: ShortArray, frames: Int)
     external fun pause()
 }
