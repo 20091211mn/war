@@ -9,7 +9,7 @@ android {
         applicationId 'com.warzone.kotlin'
         minSdk 26
         targetSdk 33
-        versionCode (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger() + 100
+        versionCode Integer.parseInt(System.getenv('GITHUB_RUN_NUMBER') ?: '1') + 100
         versionName '1.0'
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
