@@ -22,6 +22,10 @@ class SmokeTest {
             assertTrue(nan == 0, "NaN verts in viewmodel wpn=$wi")
             println("VM wpn=$wi alive=${g.e[0].alive} drive=${g.drive} verts=${L.vertexCount} nan=$nan inFront=$inV ndc x[$mnx,$mxx] y[$mny,$mxy] minW=$mnw")
         }
+        run { g.startMatch(0); g.menu = 0; for (k in 0 until 200) { g.update(1f / 60, Input()); g.render() }
+            var tu = 0L; var tr = 0L; var tg = 0L; val N = 300
+            for (k in 0 until N) { val a = System.nanoTime(); g.update(1f / 60, Input()); val b = System.nanoTime(); g.render(); val c = System.nanoTime(); tu += b - a; tr += c - b }
+            println("PERF update=${tu / N / 1000} us render=${tr / N / 1000} us tris=${g.r.layers[0].triangleCount} vm=${g.r.layers[1].triangleCount} wpn=${g.e[g.meI].wpn}") }
         println("SMOKE OK maps=${g.MAP_COUNT} tris=${g.r.layers[0].triangleCount}")
     }
 }
