@@ -20,7 +20,7 @@ struct Input{
   bool tri=false,seat=false,c4=false,det=false;
   float mx=0,my=0;      // حركة: x يمين، y أمام
   float lx=0,ly=0;      // نظر: x يمين، y أعلى (معدّل)
-  bool fire=false,ads=false,jump=false,crouch=false,reload=false,sprint=false,swapP=false,swapN=false,grenade=false,drone=false,use=false,start=false,confirm=false,back=false;
+  bool fire=false,ads=false,jump=false,crouch=false,reload=false,sprint=false,swapP=false,swapN=false,grenade=false,drone=false,use=false,start=false,confirm=false,back=false; int pick=-1;
 };
 
 static float frand(){return (float)rand()/(float)RAND_MAX;}
@@ -39,7 +39,7 @@ struct Tracer{float x0,y0,z0,x1,y1,z1,t;};
 
 struct Game{
   World w; Renderer r; std::vector<Ent> e; std::vector<Tracer> tr;
-  int mapIdx=0,scoreLim=30,score[2]={0,0},nBots=6,diff=0; float sens=1.0f; bool swapTrig=false,swapL=false,swapSticks=false; float t=0,hitMark=0,dmgFlash=0; bool over=false; int winner=0; int streak=0,glCnt=2; float hitAng=0,hitAngT=0;
+  int mapIdx=0,scoreLim=30,score[2]={0,0},nBots=6,diff=0; float sens=1.0f; bool swapTrig=false,swapL=false,swapSticks=false; float t=0,hitMark=0,dmgFlash=0,wsT=0; bool wheelOpen=false; bool over=false; int winner=0; int streak=0,glCnt=2; float hitAng=0,hitAngT=0;
   float fpsShow=0; std::vector<VH::Veh> vh; int drive=-1; float lookIdle=0; bool nearVeh=false; struct Puff{float x,y,z,vy,t,sz;bool fire;}; std::vector<Puff> puffs; struct Drn{bool on=false;float x=0,y=0,z=0,yaw=0,pitch=0,vx=0,vy=0,vz=0,t=0;} dn; float dnCd=0,dnSpot=0; bool pdn=false,pfireD=false;
   struct Shell{float x,y,z,vx,vy,vz,t;}; std::vector<Shell> shells; struct Gr{float x,y,z,vx,vy,vz,t;}; std::vector<Gr> grs; struct Rk{float ox,oy,oz,dx,dy,dz,len,t,by;}; std::vector<Rk> rks; int gren=2; bool pg=false; struct Spark{float x,y,z,vx,vy,vz,t;}; std::vector<Spark> sparks;
   void sparkAt(float x,float y,float z,float nx,float ny,float nz,int n){ for(int k=0;k<n&&sparks.size()<120;k++)sparks.push_back({x,y,z,-nx*1.5f+(frand()-0.5f)*3.f,-ny*1.5f+frand()*2.5f,-nz*1.5f+(frand()-0.5f)*3.f,0.22f+frand()*0.15f}); }
@@ -271,7 +271,7 @@ struct Game{
       if(fabsf(in.lx)+fabsf(in.ly)<0.05f){ lookIdle+=dt; if(lookIdle>1.0f){ float dy=vh[drive].h-p.yaw; while(dy>3.14159f)dy-=6.28318f; while(dy<-3.14159f)dy+=6.28318f; p.yaw+=dy*std::min<float>(1.f,dt*1.6f); } } else lookIdle=0;
       if(passenger()){ // راكب في صندوق/مقعد الشاص: حرية النظر والتصويب والإطلاق من مقعده
         p.pitch=std::max<float>(-1.2f,std::min<float>(1.2f,p.pitch)); p.crouch=true; p.sprint=false; p.moving=false; lookIdle=0;
-        if(in.reload)reloadStart(p); if(role==3){ if(in.swapP&&!prev.swapP)aclSwapSlot(); } else if((in.swapP&&!prev.swapP)||(in.swapN&&!prev.swapN)){ prim=(prim+(in.swapN&&!prev.swapN?1:WEAPON_COUNT-1))%WEAPON_COUNT; giveWeapon(p,prim); }
+        if(in.reload)reloadStart(p); if(role==3){ if(in.swapP&&!prev.swapP)aclSwapSlot(); } else if((in.swapP&&!prev.swapP)||(in.swapN&&!prev.swapN)){ prim=(prim+(in.swapN&&!prev.swapN?1:WEAPON_COUNT-1))%WEAPON_COUNT; giveWeapon(p,prim); wsT=2.2f; } else if(in.pick>=0&&in.pick<WEAPON_COUNT&&in.pick!=prim){ prim=in.pick; giveWeapon(p,prim); wsT=2.2f; }
         bool trg=in.fire; if(!p.mnt&&!WEAPONS[p.wpn].autof&&prev.fire)trg=false; updateWeapon(meI,dt,trg); return; }
       p.pitch=std::max<float>(-0.7f,std::min<float>(0.5f,p.pitch)); p.crouch=false; p.sprint=false; p.moving=false; adsHeld=false; return; }
     bool wantCrouch=in.crouch; if(!wantCrouch&&p.crouch&&blocked(w,p.b.x,p.b.y,p.b.z,PK.h))wantCrouch=true; p.crouch=wantCrouch;
@@ -283,7 +283,7 @@ struct Game{
     moveBody(w,p.b,vx,vz,dt,in.jump,p.crouch); float mv=hypotf(p.b.x-ox,p.b.z-oz); p.moving=mv>0.001f&&p.b.onGround; p.phase+=mv*3.4f;
     if(in.reload&&role!=2)reloadStart(p);
     if(role==3){ if(in.tri&&!prev.tri&&!nearVeh&&drive<0)aclSwapSlot(); if(in.swapN&&!prev.swapN&&glCnt>0){ glCnt--; aclGrenade(); } }
-    else if((in.swapP&&!prev.swapP)||(in.swapN&&!prev.swapN)){ prim=(prim+(in.swapN&&!prev.swapN?1:WEAPON_COUNT-1))%WEAPON_COUNT; giveWeapon(p,prim); }
+    else if((in.swapP&&!prev.swapP)||(in.swapN&&!prev.swapN)){ prim=(prim+(in.swapN&&!prev.swapN?1:WEAPON_COUNT-1))%WEAPON_COUNT; giveWeapon(p,prim); wsT=2.2f; } else if(in.pick>=0&&in.pick<WEAPON_COUNT&&in.pick!=prim){ prim=in.pick; giveWeapon(p,prim); wsT=2.2f; }
     bool trig=in.fire&&!p.sprint; if(!WEAPONS[p.wpn].autof&&prev.fire)trig=false;
     if(role!=2)updateWeapon(meI,dt,trig);
     { bool pl=in.c4&&!pc4,dtn=in.det&&!pdet; pc4=in.c4; pdet=in.det; if(pl&&p.alive){ float cpt=std::min<float>(p.pitch-0.45f,-0.45f),cp=cosf(cpt),dx=-sinf(p.yaw)*cp,dy=sinf(cpt),dz=-cosf(p.yaw)*cp;
@@ -485,7 +485,7 @@ struct Game{
     if(over&&role==2){ prev=in; return; }
     { Ent&m0=e[meI]; static float lastPh=0; if(m0.alive&&m0.moving&&drive<0&&!dn.on&&(int)(m0.phase/(m0.sprint?2.2f:2.8f))!=(int)(lastPh/(m0.sprint?2.2f:2.8f)))SFX::play(SFX::STEP,m0.crouch?0.12f:0.3f,0); lastPh=m0.phase;
       SFX::engSpeed.store(drive>=0&&drive<(int)vh.size()?fabsf(vh[drive].speed):-1.f); SFX::droneVol.store(dn.on?1.f:0.f); }
-    t+=dt; updateGren(dt,in); if(msgT>0)msgT-=dt; if(hitMark>0)hitMark-=dt; if(dmgFlash>0)dmgFlash-=dt; if(hitAngT>0)hitAngT-=dt;
+    t+=dt; updateGren(dt,in); if(msgT>0)msgT-=dt; if(hitMark>0)hitMark-=dt; if(dmgFlash>0)dmgFlash-=dt; if(hitAngT>0)hitAngT-=dt; if(wsT>0)wsT-=dt;
     for(auto&q:tr)q.t-=dt; tr.erase(std::remove_if(tr.begin(),tr.end(),[](Tracer&q){return q.t<=0;}),tr.end());
     for(int k=0;k<4;k++)if(feedT[k]>0)feedT[k]-=dt;
     for(auto&k:sparks){ k.t-=dt; k.vy-=9.f*dt; k.x+=k.vx*dt; k.y=std::max<float>(0.02f,k.y+k.vy*dt); k.z+=k.vz*dt; } sparks.erase(std::remove_if(sparks.begin(),sparks.end(),[](Spark&k){return k.t<=0;}),sparks.end());
@@ -688,6 +688,20 @@ struct Game{
         cx+=(int)(g->adv16/16.0f*k+0.5f); } line.clear(); };
     for(;*p;p++){ if(*p=='\n'){ flush(); ly+=em*3/2; } else line+=*p; } flush(); }
   void textC(int cx,int y,const char*s,int sc,uint32_t col){text(cx-tw(s,sc)/2,y,s,sc,col);}
+  // ---------- عجلة الأسلحة / شريط التبديل (PS4 + أندرويد + آيفون) ----------
+  void wheelRect(int i,int sc,int&x,int&y,int&w2,int&h2)const{ int W=r.W,H=r.H; w2=98*sc; h2=29*sc; int gp=3*sc; int cx=W/2-(3*w2+2*gp)/2,cy=H/2-(3*h2+2*gp)/2-6*sc; x=cx+(i%3)*(w2+gp); y=cy+(i/3)*(h2+gp); }
+  int hudSc()const{ return std::max(1,(int)((r.H*hudK+135)/270)); }
+  void weaponPanel(int sc){
+    float a=wheelOpen?1.f:std::min<float>(1.f,wsT*2.5f); if(a<=0.01f)return; int sm2=std::max(1,sc-1); Ent&me=e[meI]; char b[48];
+    float mxD=1,mxR=1,mxG=1; for(int i=0;i<WEAPON_COUNT;i++){ mxD=std::max<float>(mxD,WEAPONS[i].dmg*std::min(4,std::max(1,WEAPONS[i].pellets))); mxR=std::max<float>(mxR,WEAPONS[i].rpm); mxG=std::max<float>(mxG,WEAPONS[i].r1); }
+    int x0,y0,w0,h0; wheelRect(0,sc,x0,y0,w0,h0); int gp=3*sc; if(wheelOpen){ rect(0,0,r.W,r.H,0xFF05080C,0.55f); } rrect(x0-6*sc,y0-14*sc,3*w0+2*gp+12*sc,3*h0+2*gp+20*sc,6*sc,0xFF05080C,0.72f*a);
+    textC(r.W/2,y0-11*sc,wheelOpen?"اختر سلاحك":"السلاح",sc,0xFFFFB020);
+    for(int i=0;i<WEAPON_COUNT;i++){ int x,y,w2,h2; wheelRect(i,sc,x,y,w2,h2); const WeaponDef&d=WEAPONS[i]; bool sel=i==me.wpn;
+      rrect(x,y,w2,h2,3*sc,sel?0xFF4A3A14:0xFF121A24,0.92f*a); if(sel){ rect(x,y,w2,sc,0xFFFFB020,a); rect(x,y+h2-sc,w2,sc,0xFFFFB020,a); rect(x,y,sc,h2,0xFFFFB020,a); rect(x+w2-sc,y,sc,h2,0xFFFFB020,a); }
+      text(x+4*sc,y+3*sc,d.name,sc,sel?0xFFFFB020:0xFFFFFFFF); snprintf(b,48,"%d طلقة",d.mag); text(x+4*sc,y+h2-9*sc,b,sm2,0xFF8FA0B4);
+      int bw=46*sc,bx=x+w2-bw-5*sc; float v[3]={d.dmg*std::min(4,std::max(1,d.pellets))/mxD,d.rpm/mxR,d.r1/mxG}; uint32_t cl[3]={0xFFE2573B,0xFFFFB02E,0xFF42D66B};
+      for(int k=0;k<3;k++){ int by=y+h2-18*sc+k*5*sc; rect(bx,by,bw,3*sc,0xFF2A3644,a); rect(bx,by,std::max(sc,(int)(bw*std::min(1.f,v[k]))),3*sc,cl[k],a); } }
+  }
   void hud(){
     int W=r.W,H=r.H,sc=std::max(1,(int)((H*hudK+135)/270)); Ent&me=e[meI]; const WeaponDef&d=WEAPONS[me.wpn];
     { r.flush(); for(auto&o:e){ if(!o.alive||o.reveal<=0||&o==&me||o.team==me.team)continue; float ddx=o.b.x-r.cam.x,ddy=o.b.y+2.1f-r.cam.y,ddz=o.b.z-r.cam.z; float zc=ddx*r.fx+ddy*r.fy+ddz*r.fz; if(zc<0.5f)continue;
@@ -733,6 +747,7 @@ struct Game{
       if(me.reloadT>=0)textC(W/2,H/2+20*sc,"جارٍ التعبئة…",sc,0xFFFFC040);
       if(nearVeh)textC(W/2,py-12*sc,"Triangle: ركوب الشاص",sm,0xFFFFD060); }
     for(int k=0;k<4;k++)if(feedT[k]>0)text(W-tw(feed[k].c_str(),sc)-6*sc,(24+k*10)*sc,feed[k].c_str(),sc,0xFFFFFFFF);
+    if(!menu&&!paused&&me.alive&&drive<0)weaponPanel(sc);
     if(msgT>0)textC(W/2,H/3,msg,sc*2,0xFFFFFFFF);
     if(fpsShow>0){ snprintf(b,64,"%d fps  %dx%d",(int)fpsShow,W,H); text(4*sc,H-10*sc,b,std::max(1,sc-1),0xFF607080); }
     if(role)text(4*sc,H-20*sc,role==1?"LAN HOST":role==2?"LAN CLIENT":"ANDROID LAN",std::max(1,sc-1),0xFF80E0FF);

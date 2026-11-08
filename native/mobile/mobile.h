@@ -10,10 +10,11 @@
 
 struct Mobile{
   Game g; int W=0,H=0,sw=1,sh=1,baseH=540,resizeSeq=0; std::vector<uint32_t> out;
-  enum{ B_FIRE=1,B_ADS,B_JUMP,B_CROUCH,B_RELOAD,B_GREN,B_USE,B_DRONE,B_C4,B_DET,B_SEAT,B_PREV,B_NEXT,B_PAUSE, M_UP,M_DOWN,M_LEFT,M_RIGHT,M_OK,M_BACK, P_OPT,P_MUZ,P_GRIP,P_MAG, NB };
+  enum{ B_FIRE=1,B_ADS,B_JUMP,B_CROUCH,B_RELOAD,B_GREN,B_USE,B_DRONE,B_C4,B_DET,B_SEAT,B_PREV,B_NEXT,B_PAUSE,B_WEAPON, M_UP,M_DOWN,M_LEFT,M_RIGHT,M_OK,M_BACK, P_OPT,P_MUZ,P_GRIP,P_MAG, NB };
   struct Btn{ int id; float x,y,r; const char*lab; };
   struct Tc{ int id=-1; float x=0,y=0,ox=0,oy=0; int role=0,btn=0; }; // role: 1 حركة ، 2 نظر ، 3 زر
   Tc tc[12]; bool held[NB]={}; bool adsL=false,crL=false; float pdx=0,pdy=0,stX=0,stY=0; float acc=0,costAvg=16,fpsAvg=60,slowT=0,fastT=0; bool started=false; int lastMode=-1;
+  int pickReq=-1;
   std::vector<Btn> btns; // أزرار الحالة الحالية (إحداثيات بكسلات الصورة الداخلية)
   float U()const{ return H/540.f; }
 
@@ -35,17 +36,20 @@ struct Mobile{
       A(M_OK,w-110*u,h-110*u,48,"OK"); A(M_BACK,w-235*u,h-72*u,34,"BACK");
       if(g.paused&&!g.menu){ A(P_OPT,w-60*u,150*u,30,"OPTIC"); A(P_MUZ,w-60*u,215*u,30,"MUZZLE"); A(P_GRIP,w-60*u,280*u,30,"GRIP"); A(P_MAG,w-60*u,345*u,30,"MAG"); }
       return; }
-    A(B_FIRE,w-130*u,h-140*u,62,"FIRE"); A(B_ADS,w-255*u,h-82*u,40,"ADS"); A(B_JUMP,w-72*u,h-270*u,38,"JUMP"); A(B_CROUCH,w-205*u,h-240*u,34,"CROUCH"); A(B_RELOAD,w-300*u,h-170*u,32,"R");
-    A(B_GREN,w-42*u,140*u,23,"G"); A(B_USE,w-42*u,190*u,23,"CAR"); A(B_DRONE,w-42*u,240*u,23,"UAV");
-    A(B_C4,42*u,200*u,23,"C4"); A(B_DET,42*u,250*u,23,"DET"); A(B_SEAT,42*u,300*u,23,"SEAT");
-    A(B_PREV,w-190*u,32*u,22,"<"); A(B_NEXT,w-140*u,32*u,22,">"); A(B_PAUSE,w/2+125*u,28*u,20,"II");
+    A(B_FIRE,w-120*u,h-130*u,64,"FIRE"); A(B_ADS,w-236*u,h-70*u,40,"ADS"); A(B_JUMP,w-62*u,h-250*u,36,"JUMP"); A(B_CROUCH,w-196*u,h-200*u,34,"CROUCH"); A(B_RELOAD,w-290*u,h-140*u,32,"R");
+    A(B_GREN,w-46*u,150*u,25,"G"); A(B_USE,w-46*u,208*u,25,"CAR");
+    A(B_C4,44*u,200*u,25,"C4"); A(B_DET,44*u,258*u,25,"DET"); A(B_SEAT,44*u,316*u,25,"SEAT"); A(B_DRONE,44*u,374*u,25,"UAV");
+    A(B_PREV,w-190*u,32*u,22,"<"); A(B_NEXT,w-140*u,32*u,22,">"); A(B_WEAPON,w/2+190*u,h-40*u,30,"WPN"); A(B_PAUSE,w/2+125*u,28*u,20,"II");
     if(g.over)A(M_OK,w/2,h-120*u,46,"OK");
   }
-  int hit(float x,float y)const{ for(int i=(int)btns.size()-1;i>=0;i--){ const Btn&b=btns[i]; float dx=x-b.x,dy=y-b.y,rr=b.r*1.12f; if(dx*dx+dy*dy<=rr*rr)return b.id; } return 0; }
+  int hit(float x,float y)const{ for(int i=(int)btns.size()-1;i>=0;i--){ const Btn&b=btns[i]; float dx=x-b.x,dy=y-b.y,rr=b.r*1.25f; if(dx*dx+dy*dy<=rr*rr)return b.id; } return 0; }
   Tc* find(int id){ for(auto&t:tc)if(t.id==id)return &t; return nullptr; }
   void touchDown(int id,float px,float py){
     if(!started||find(id))return; Tc*t=nullptr; for(auto&q:tc)if(q.id<0){t=&q;break;} if(!t)return;
-    float x=px*W/sw,y=py*H/sh; layout(); int b=hit(x,y); t->id=id; t->x=x; t->y=y; t->ox=x; t->oy=y; t->btn=0; t->role=0;
+    float x=px*W/sw,y=py*H/sh; layout(); int b=hit(x,y);
+    if(g.wheelOpen){ int sc2=g.hudSc(); for(int i=0;i<WEAPON_COUNT;i++){ int rx,ry,rw,rh; g.wheelRect(i,sc2,rx,ry,rw,rh); if(x>=rx&&x<=rx+rw&&y>=ry&&y<=ry+rh){ pickReq=i; break; } } g.wheelOpen=false; t->id=id; t->role=4; t->btn=0; return; }
+    t->id=id; t->x=x; t->y=y; t->ox=x; t->oy=y; t->btn=0; t->role=0;
+    if(b==B_WEAPON){ g.wheelOpen=true; t->role=4; return; }
     if(b){ t->role=3; t->btn=b; held[b]=true; if(b==B_ADS)adsL=!adsL; else if(b==B_CROUCH)crL=!crL; return; }
     if(g.menu||g.paused)return;
     bool haveMove=false; for(auto&q:tc)if(q.id>=0&&q.role==1)haveMove=true;
@@ -53,7 +57,7 @@ struct Mobile{
   }
   void touchMove(int id,float px,float py){
     Tc*t=find(id); if(!t)return; float x=px*W/sw,y=py*H/sh;
-    if(t->role==2){ pdx+=x-t->x; pdy+=y-t->y; }
+    if(t->role==2||(t->role==3&&t->btn==B_FIRE)){ pdx+=x-t->x; pdy+=y-t->y; }
     else if(t->role==1){ float R=75.f*U(),dx=(x-t->ox)/R,dy=(y-t->oy)/R; float m=sqrtf(dx*dx+dy*dy); if(m>1){dx/=m;dy/=m;} stX=dx; stY=-dy; }
     t->x=x; t->y=y; }
   void touchUp(int id){
@@ -65,7 +69,7 @@ struct Mobile{
 
   // ---------- إطار واحد ----------
   Input build(){
-    Input in; bool menuMode=g.menu||g.paused;
+    Input in; in.pick=pickReq; pickReq=-1; bool menuMode=g.menu||g.paused; if(menuMode)g.wheelOpen=false;
     if(menuMode){
       in.my=held[M_UP]?1.f:held[M_DOWN]?-1.f:0.f; in.mx=held[M_RIGHT]?1.f:held[M_LEFT]?-1.f:0.f; in.confirm=held[M_OK]; in.start=held[M_OK]&&!g.menu; in.back=held[M_BACK];
       if(g.paused&&!g.menu){ in.tri=held[P_OPT]; in.reload=held[P_MUZ]; in.swapP=held[P_GRIP]; in.fire=held[P_MAG]; }

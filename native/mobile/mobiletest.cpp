@@ -17,6 +17,11 @@ int main(int argc,char**argv){
   printf("moved %.1f m, yaw change %.2f, ammo %d -> %d, res %dx%d\n",d,me.yaw-yaw0,ammo0,me.ammo,m.W,m.H);
   if(d<3.f){ printf("FAIL: no movement\n"); bad|=2; } if(fabsf(me.yaw-yaw0)<0.5f){ printf("FAIL: no look\n"); bad|=4; } if(me.ammo>=ammo0){ printf("FAIL: no fire\n"); bad|=8; }
   m.frame(1/60.f); if(pre)ppm(m,(std::string(pre)+"_game.ppm").c_str());
+  { // عجلة الأسلحة: اضغط WPN ثم اختر السلاح رقم 3
+    for(int i=0;i<10;i++)m.frame(1/60.f); m.touchDown(6,(m.W/2+190*u)*m.sw/m.W,(m.H-40*u)*m.sh/m.H); m.frame(1/60.f); m.touchUp(6); m.frame(1/60.f);
+    if(!m.g.wheelOpen){ printf("FAIL: wheel did not open\n"); bad|=32; } else { if(pre)ppm(m,(std::string(pre)+"_wheel.ppm").c_str()); int rx,ry,rw,rh; m.g.wheelRect(4,m.g.hudSc(),rx,ry,rw,rh);
+      m.touchDown(7,(rx+rw/2)*m.sw/m.W,(ry+rh/2)*m.sh/m.H); m.frame(1/60.f); m.touchUp(7); for(int i=0;i<3;i++)m.frame(1/60.f);
+      if(m.g.e[m.g.meI].wpn!=4||m.g.wheelOpen){ printf("FAIL: pick weapon (wpn=%d open=%d)\n",m.g.e[m.g.meI].wpn,(int)m.g.wheelOpen); bad|=64; } else { m.g.wsT=2.f; m.frame(1/60.f); if(pre)ppm(m,(std::string(pre)+"_strip.ppm").c_str()); } } }
   m.touchDown(5,(m.W/2+125*u)*m.sw/m.W,28*u*m.sh/m.H); m.frame(1/60.f); m.touchUp(5); m.frame(1/60.f); m.frame(1/60.f); // إيقاف مؤقت
   if(!m.g.paused){ printf("FAIL: pause\n"); bad|=16; } if(pre)ppm(m,(std::string(pre)+"_pause.ppm").c_str());
   printf(bad?"MOBILE TEST FAILED %d\n":"mobile ok\n",bad); return bad?1:0;
