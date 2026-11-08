@@ -93,7 +93,16 @@ class MainActivity : Activity() {
         try { if (crashF.exists()) { val txt = crashF.readText(); crashF.delete()
             android.app.AlertDialog.Builder(this).setTitle("سبب الإغلاق السابق (صوّر الشاشة وأرسلها)").setMessage(txt.take(1500)).setPositiveButton("حسنًا", null).show() } } catch (e: Throwable) {}
         Thread.setDefaultUncaughtExceptionHandler { _, e -> try { crashF.writeText("JAVA CRASH: " + e.toString() + "\n" + e.stackTrace.take(8).joinToString("\n")) } catch (x: Throwable) {}; android.os.Process.killProcess(android.os.Process.myPid()) }
-        Native.setCrashFile(crashF.absolutePath)
+        if (Build.VERSION.SDK_INT >= 30) try {
+            val am = getSystemService(android.app.ActivityManager::class.java); val prefs = getSharedPreferences("wz", MODE_PRIVATE)
+            val ex = am.getHistoricalProcessExitReasons(packageName, 0, 3).firstOrNull()
+            if (ex != null && ex.timestamp > prefs.getLong("seenExit", 0L)) { prefs.edit().putLong("seenExit", ex.timestamp).apply()
+                val names = mapOf(android.app.ApplicationExitInfo.REASON_CRASH to "CRASH (Java)", android.app.ApplicationExitInfo.REASON_CRASH_NATIVE to "CRASH_NATIVE (C++)", android.app.ApplicationExitInfo.REASON_ANR to "ANR (تجمّد)",
+                    android.app.ApplicationExitInfo.REASON_LOW_MEMORY to "LOW_MEMORY (ذاكرة)", android.app.ApplicationExitInfo.REASON_SIGNALED to "SIGNALED", android.app.ApplicationExitInfo.REASON_EXIT_SELF to "EXIT_SELF", android.app.ApplicationExitInfo.REASON_USER_REQUESTED to "USER")
+                val nm = names[ex.reason] ?: "reason ${ex.reason}"
+                if (ex.reason != android.app.ApplicationExitInfo.REASON_USER_REQUESTED && ex.reason != android.app.ApplicationExitInfo.REASON_EXIT_SELF)
+                    android.app.AlertDialog.Builder(this).setTitle("سبب الإغلاق السابق").setMessage("$nm\n${ex.description ?: ""}\nsignal ${ex.status}").setPositiveButton("حسنًا", null).show() }
+        } catch (e: Throwable) {}
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or WindowManager.LayoutParams.FLAG_FULLSCREEN)
         if (Build.VERSION.SDK_INT >= 28) window.attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         view = GameView(this); setContentView(view); immersive()
