@@ -18,6 +18,8 @@ import android.view.View
 import android.view.WindowManager
 
 /** شاشة اللعبة: تعرض صورة المحرك وتمرّر اللمس. */
+object Dbg { @Volatile var msg = "بدء التشغيل…"; @Volatile var frames = 0 }
+
 class GameView(ctx: Context) : SurfaceView(ctx), SurfaceHolder.Callback {
     @Volatile private var running = false
     private var thread: Thread? = null
@@ -32,9 +34,13 @@ class GameView(ctx: Context) : SurfaceView(ctx), SurfaceHolder.Callback {
 
     override fun surfaceCreated(h: SurfaceHolder) {}
     override fun surfaceChanged(h: SurfaceHolder, format: Int, w: Int, hh: Int) {
-        Native.init(w, hh, Runtime.getRuntime().availableProcessors())
-        Native.setScreen(w, hh)
-        startLoop()
+        try {
+            Dbg.msg = "تهيئة المحرك ${w}x$hh …"
+            Native.init(w, hh, Runtime.getRuntime().availableProcessors())
+            Native.setScreen(w, hh)
+            Dbg.msg = "المحرك جاهز"
+            startLoop()
+        } catch (e: Throwable) { Dbg.msg = "خطأ تهيئة: $e" }
     }
     override fun surfaceDestroyed(h: SurfaceHolder) { stopLoop(); Native.touch(3, 0, 0f, 0f) }
 
@@ -46,8 +52,7 @@ class GameView(ctx: Context) : SurfaceView(ctx), SurfaceHolder.Callback {
             while (running) {
                 val now = SystemClock.elapsedRealtimeNanos()
                 val dt = ((now - last) / 1e9).toFloat(); last = now
-                Native.frame(dt)
-                drawFrame()
+                try { Native.frame(dt); drawFrame(); Dbg.frames++ } catch (e: Throwable) { Dbg.msg = "خطأ إطار: $e"; Thread.sleep(500) }
             }
         }, "wz-render").apply { start() }
     }
@@ -105,7 +110,12 @@ class MainActivity : Activity() {
         } catch (e: Throwable) {}
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or WindowManager.LayoutParams.FLAG_FULLSCREEN)
         if (Build.VERSION.SDK_INT >= 28) window.attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-        view = GameView(this); setContentView(view); immersive()
+        view = GameView(this)
+        val tv = android.widget.TextView(this).apply { setTextColor(0xFFB8FFB8.toInt()); textSize = 12f; setPadding(24, 8, 24, 8); setBackgroundColor(0x88000000.toInt()) }
+        val root = android.widget.FrameLayout(this); root.addView(view); root.addView(tv, android.widget.FrameLayout.LayoutParams(-2, -2))
+        setContentView(root); immersive()
+        val h = android.os.Handler(mainLooper)
+        h.post(object : Runnable { override fun run() { val f = Dbg.frames; tv.text = "${Dbg.msg}  |  إطارات: $f"; if (f > 120 && Dbg.msg == "المحرك جاهز") tv.visibility = View.GONE else h.postDelayed(this, 300) } })
     }
     private fun immersive() {
         @Suppress("DEPRECATION")
