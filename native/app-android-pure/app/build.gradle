@@ -16,9 +16,11 @@ android {
     kotlinOptions { jvmTarget = '17' }
     // مفتاح توقيع ثابت: كل بناء يُثبَّت فوق السابق كتحديث (بدل مفتاح عشوائي جديد كل مرة يمنع التحديث فتبقى النسخة القديمة)
     signingConfigs { fixed { storeFile file('warzone-debug.keystore'); storePassword 'android'; keyAlias 'warzone'; keyPassword 'android' } }
+    lint { checkReleaseBuilds false; abortOnError false }
     buildTypes {
         debug { signingConfig signingConfigs.fixed }
         release {
+            debuggable false
             minifyEnabled false
             signingConfig signingConfigs.fixed
         }

@@ -151,6 +151,31 @@ class Renderer {
         return false
     }
 
+    /** الخريطة الثابتة تُبنى مرة واحدة (كل الأوجه، بلا قصّ) وتُرسم من كرت الشاشة كل إطار: يوفّر معظم عمل المعالج. */
+    @JvmField val statics = FBuf(1 shl 18); @JvmField var staticId = -1; @JvmField var staticVer = 0
+    private fun aabbAll(b: Box, r: Float, g: Float, b2: Float) {
+        val x0 = b.x0; val x1 = b.x1; val y0 = b.y0; val y1 = b.y1; val z0 = b.z0; val z1 = b.z1
+        face(-1f, 0f, 0f, r, g, b2, 0, x0, y0, z0, x0, y0, z1, x0, y1, z1, x0, y1, z0)
+        face(1f, 0f, 0f, r, g, b2, 0, x1, y0, z1, x1, y0, z0, x1, y1, z0, x1, y1, z1)
+        face(0f, 0f, -1f, r, g, b2, 2, x1, y0, z0, x0, y0, z0, x0, y1, z0, x1, y1, z0)
+        face(0f, 0f, 1f, r, g, b2, 2, x0, y0, z1, x1, y0, z1, x1, y1, z1, x0, y1, z1)
+        face(0f, 1f, 0f, r, g, b2, 1, x0, y1, z1, x1, y1, z1, x1, y1, z0, x0, y1, z0)
+    }
+    fun ensureStatic(w: World) {
+        if (staticId == w.id && staticVer == w.hashCode()) return
+        val keep = layers[0]; layers[0] = statics; statics.clear(); val oz = zBias
+        val mm = w.m; beginWorld(mm)
+        for (b in mm.deco) { if (b.x1 == b.x0) continue; val c = mm.cols[b.k % mm.ncol]; aabbAll(b, c[0], c[1], c[2]) }
+        for (b in w.boxes) { val c = mm.cols[b.k % mm.ncol]; aabbAll(b, c[0], c[1], c[2]) }
+        val W2 = mm.W / 2 + 60; val D2 = mm.D / 2 + 60
+        val g = floatArrayOf(-W2, 0f, -D2, -W2, 0f, D2, W2, 0f, D2, W2, 0f, -D2); val uv = floatArrayOf(-W2, -D2, -W2, D2, W2, D2, W2, -D2)
+        val l = lightOf(0f, 1f, 0f); poly(g, 4, mm.ground[0] * l, mm.ground[1] * l, mm.ground[2] * l, true, uv)
+        layers[0] = keep; zBias = oz; staticId = w.id; staticVer = w.hashCode(); staticDirty = true
+    }
+    @JvmField var staticDirty = true
+    /** يجهّز الإطار: الخريطة الثابتة من الذاكرة المخزّنة؛ r.layers تحوي الديناميكي فقط. */
+    fun beginFrame(w: World, c: Cam) { reset(); setCam(c); ensureStatic(w); beginWorld(w.m) }
+
     fun world(w: World) {
         val mm = w.m; beginWorld(mm); cullHalf = tanf(cam.fov * 0.5f) * W.toFloat() / H * 1.05f + 0.2f
         for (b in mm.deco) { if (b.x1 == b.x0 || cull(b)) continue; val c = mm.cols[b.k % mm.ncol]; aabb(b, c[0], c[1], c[2]) }

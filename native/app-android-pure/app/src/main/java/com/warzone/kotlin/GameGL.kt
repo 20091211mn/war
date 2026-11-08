@@ -76,7 +76,7 @@ class GameGL(val g: Game, val ctl: Controls) : GLSurfaceView.Renderer {
         glGenBuffers(1, vbo, 0); val t = IntArray(1); glGenTextures(1, t, 0); tex = t[0]
         glBindTexture(GL_TEXTURE_2D, tex); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
-        hudBmp = null; last = 0L; cap = 0
+        hudBmp = null; last = 0L; cap = 0; sBuf = 0; g.r.staticDirty = true
         synchronized(g) { if (!ready) { g.modeCount = 1; g.menu = 1; g.nBots = 6; g.init(sw.coerceAtLeast(2), sh.coerceAtLeast(2)); hud = Hud(g, ctl); ready = true } }
     }
 
@@ -86,6 +86,20 @@ class GameGL(val g: Game, val ctl: Controls) : GLSurfaceView.Renderer {
         glBindTexture(GL_TEXTURE_2D, tex); GLUtils.texImage2D(GL_TEXTURE_2D, 0, hudBmp, 0)
     }
 
+    private var sBuf = 0; private var sN = 0
+    private fun bindAttribs() { val st = Renderer.STRIDE * 4
+        glEnableVertexAttribArray(aPos); glVertexAttribPointer(aPos, 3, GL_FLOAT, false, st, 0)
+        glEnableVertexAttribArray(aCol); glVertexAttribPointer(aCol, 3, GL_FLOAT, false, st, 12)
+        glEnableVertexAttribArray(aUv); glVertexAttribPointer(aUv, 2, GL_FLOAT, false, st, 24)
+        glEnableVertexAttribArray(aFlag); glVertexAttribPointer(aFlag, 1, GL_FLOAT, false, st, 32) }
+    /** الخريطة الثابتة: تُرفع إلى كرت الشاشة مرة واحدة فقط ثم تُرسم كل إطار بلا عمل معالج. */
+    private fun upload(b: FBuf, static: Boolean) {
+        if (b.n <= 0) return
+        if (sBuf == 0) { val t = IntArray(1); glGenBuffers(1, t, 0); sBuf = t[0] }
+        glBindBuffer(GL_ARRAY_BUFFER, sBuf)
+        if (g.r.staticDirty) { val fb = ByteBuffer.allocateDirect(b.n * 4).order(ByteOrder.nativeOrder()).asFloatBuffer(); fb.put(b.a, 0, b.n); fb.position(0); glBufferData(GL_ARRAY_BUFFER, b.n * 4, fb, GL_STATIC_DRAW); sN = b.n; g.r.staticDirty = false }
+        bindAttribs(); glDrawArrays(GL_TRIANGLES, 0, sN / Renderer.STRIDE)
+    }
     private fun upload(b: FBuf) {
         val n = b.n; if (n <= 0) return
         if (fbuf == null || cap < n) { cap = max(n, cap * 2).coerceAtLeast(1 shl 16); fbuf = ByteBuffer.allocateDirect(cap * 4).order(ByteOrder.nativeOrder()).asFloatBuffer() }
@@ -116,7 +130,7 @@ class GameGL(val g: Game, val ctl: Controls) : GLSurfaceView.Renderer {
                 tScn += (((SystemClock.elapsedRealtimeNanos() - t1) / 1e6f) - tScn) * 0.1f
             } catch (e: Throwable) { err = e.toString() + "\n" + e.stackTrace.take(6).joinToString("\n") { "  at " + it }; android.util.Log.e("WZ", "game error", e) }
             fpsAvg += ((1f / dt) - fpsAvg) * 0.05f
-            HudDiag.line = String.format("FPS %.0f  update %.1f ms  scene %.1f ms  tris %d", fpsAvg, tUpd, tScn, g.r.layers[0].triangleCount + g.r.layers[1].triangleCount)
+            HudDiag.line = String.format("FPS %.0f  update %.1f ms  scene %.1f ms  tris %d", fpsAvg, tUpd, tScn, g.r.statics.triangleCount + g.r.layers[0].triangleCount + g.r.layers[1].triangleCount)
             HudDiag.err = err
             val r = g.r; val m = r.m
             glViewport(0, 0, sw, sh); glDisable(GL_BLEND); glDisable(GL_CULL_FACE)
@@ -131,6 +145,7 @@ class GameGL(val g: Game, val ctl: Controls) : GLSurfaceView.Renderer {
                 glEnable(GL_DEPTH_TEST); glDepthFunc(GL_LEQUAL); glUseProgram(prog)
                 r.viewProj(vp, 0.05f, max(300f, r.fogF * 1.5f)); glUniformMatrix4fv(uVP, 1, false, vp, 0)
                 glUniform3f(uCam, r.cam.x, r.cam.y, r.cam.z); glUniform3f(uFog, r.fog[0], r.fog[1], r.fog[2]); glUniform2f(uFogR, r.fogN, r.fogF)
+                upload(r.statics, true)
                 upload(r.layers[0])
                 if (r.layers[1].n > 0) { glClear(GL_DEPTH_BUFFER_BIT); upload(r.layers[1]) }
                 glDisableVertexAttribArray(aPos); glDisableVertexAttribArray(aCol); glDisableVertexAttribArray(aUv); glDisableVertexAttribArray(aFlag)

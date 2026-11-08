@@ -197,7 +197,7 @@ class SceneBuilder(private val g: Game) {
             c.x = cx0 - fxw * D; c.y = fmax(0.5f, cy0 - fyw * D); c.z = cz0 - fzw * D; g.camX = c.x; g.camY = c.y; g.camZ = c.z
         }
         if (g.dn.on && me.alive) c = Cam(g.dn.x, g.dn.y, g.dn.z, g.dn.yaw, g.dn.pitch, 1.3f)
-        r.reset(); r.setCam(c); r.world(g.w)
+        r.beginFrame(g.w, c)
         val t = g.t
         for (v in g.vh) { val dx = v.x - c.x; val dz = v.z - c.z; val dd = sqrtf(dx * dx + dz * dz); if (dd < r.fogF) VehDraw.draw(r, v, dd) }
         for (s in g.shells) r.obb(s.x, s.y, s.z, 0.012f, 0.012f, 0.03f, t * 20 + s.x * 9, 0f, 0.85f, 0.62f, 0.15f, false, false)
@@ -265,7 +265,7 @@ class SceneBuilder(private val g: Game) {
     fun renderMenu() {
         mt += 0.016f; val showMap = if (g.menu == 1) g.menuSel else g.mapIdx
         if (g.w.id != showMap) g.w.load(showMap)
-        r.reset(); r.setCam(Cam(0f, 6f, 0f, mt * 0.2f, -0.15f, 1.2f)); r.world(g.w)
+        r.beginFrame(g.w, Cam(0f, 6f, 0f, mt * 0.2f, -0.15f, 1.2f))
         g.camMenuYaw = mt * 0.2f
     }
 }
