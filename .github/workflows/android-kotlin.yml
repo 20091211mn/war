@@ -20,10 +20,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.9
-      - name: Smoke test Kotlin engine (menu, 8 maps, play, render)
-        continue-on-error: true
-        run: gradle -p native/kotlin :core:test --tests com.warzone.core.SmokeTest --no-daemon -i 2>&1 | grep -E "SMOKE|FAILED|PASSED|Exception|AssertionError|at com.warzone" | head -40
-      - name: Build Kotlin app (Kotlin only, no C++)
+      - name: Test mobile layer (headless)
+        run: cd native/mobile && g++ -std=c++17 -O2 -pthread -o /tmp/mt mobiletest.cpp && /tmp/mt
+      - name: Build engine library (NDK)
+        run: bash native/app-android/build-native.sh
+      - name: Build Kotlin app
         run: gradle -p native/app-android assembleDebug --no-daemon
       - name: Collect APK
         run: cp native/app-android/app/build/outputs/apk/debug/app-debug.apk Warzone-kotlin.apk

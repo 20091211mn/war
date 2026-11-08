@@ -23,7 +23,5 @@ android {
             signingConfig signingConfigs.fixed
         }
     }
-}
-dependencies {
-    implementation project(':core')
+    sourceSets { main { jniLibs.srcDirs = ['src/main/jniLibs'] } }
 }

@@ -5,6 +5,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+void wz_set_crash_file(const char* path);          // يكتب سبب الانهيار الأصلي (إشارة + المرحلة) في ملف ليظهر في التشغيل التالي
 void wz_init(int screenW,int screenH,int cores);   // مرة واحدة
 void wz_set_screen(int screenW,int screenH);       // تغيّر حجم الشاشة (بنفس وحدات اللمس)
 void wz_touch(int action,int id,float x,float y);  // action: 0 ضغط ، 1 حركة ، 2 رفع ، 3 إلغاء الكل
