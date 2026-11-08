@@ -20,11 +20,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.9
-      - name: Test mobile layer (headless)
-        run: cd native/mobile && g++ -std=c++17 -O2 -pthread -o /tmp/mt mobiletest.cpp && /tmp/mt
-      - name: Build engine library (NDK)
-        run: bash native/app-android/build-native.sh
-      - name: Build Kotlin app
+      - name: Build Kotlin app (Kotlin only, no C++)
         run: gradle -p native/app-android assembleDebug --no-daemon
       - name: Collect APK
         run: cp native/app-android/app/build/outputs/apk/debug/app-debug.apk Warzone-kotlin.apk

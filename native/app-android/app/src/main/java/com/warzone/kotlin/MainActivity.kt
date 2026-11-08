@@ -1,89 +1,23 @@
 package com.warzone.kotlin
 
 import android.app.Activity
-import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Paint
-import android.graphics.Rect
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.opengl.GLSurfaceView
 import android.os.Build
 import android.os.Bundle
-import android.os.SystemClock
 import android.view.MotionEvent
-import android.view.SurfaceHolder
-import android.view.SurfaceView
 import android.view.View
 import android.view.WindowManager
+import com.warzone.core.Game
+import com.warzone.core.Sfx
 
-/** شاشة اللعبة: تعرض صورة المحرك وتمرّر اللمس. */
-class GameView(ctx: Context) : SurfaceView(ctx), SurfaceHolder.Callback {
-    @Volatile private var running = false
-    private var thread: Thread? = null
-    private var bmp: Bitmap? = null
-    private var bmpW = 0
-    private var bmpH = 0
-    private val paint = Paint().apply { isFilterBitmap = true }
-    private val src = Rect()
-    private val dst = Rect()
-
-    init { holder.addCallback(this); isFocusable = true }
-
-    override fun surfaceCreated(h: SurfaceHolder) {}
-    override fun surfaceChanged(h: SurfaceHolder, format: Int, w: Int, hh: Int) {
-        Native.init(w, hh, Runtime.getRuntime().availableProcessors())
-        Native.setScreen(w, hh)
-        startLoop()
-    }
-    override fun surfaceDestroyed(h: SurfaceHolder) { stopLoop(); Native.touch(3, 0, 0f, 0f) }
-
-    private fun startLoop() {
-        if (running) return
-        running = true
-        thread = Thread({
-            var last = SystemClock.elapsedRealtimeNanos()
-            while (running) {
-                val now = SystemClock.elapsedRealtimeNanos()
-                val dt = ((now - last) / 1e9).toFloat(); last = now
-                Native.frame(dt)
-                drawFrame()
-            }
-        }, "wz-render").apply { start() }
-    }
-    private fun stopLoop() { running = false; thread?.join(500); thread = null }
-
-    private var pix: java.nio.ByteBuffer? = null
-    private val wh = IntArray(2)
-    private fun drawFrame() {
-        val cap = 1920 * 1080 * 4
-        val buf = pix ?: java.nio.ByteBuffer.allocateDirect(cap).also { pix = it }
-        buf.clear()
-        if (Native.copyPixels(buf, wh) == 0) return
-        val w = wh[0]; val h = wh[1]
-        if (w <= 0 || h <= 0) return
-        if (bmp == null || bmpW != w || bmpH != h) { bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888); bmpW = w; bmpH = h }
-        buf.limit(w * h * 4); buf.position(0); bmp!!.copyPixelsFromBuffer(buf)
-        val c = try { holder.lockCanvas() } catch (e: Exception) { null } ?: return
-        try {
-            src.set(0, 0, w, h); dst.set(0, 0, c.width, c.height)
-            c.drawBitmap(bmp!!, src, dst, paint)
-        } finally { try { holder.unlockCanvasAndPost(c) } catch (e: Exception) {} }
-    }
-
-    override fun onTouchEvent(e: MotionEvent): Boolean {
-        when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> { val i = e.actionIndex; Native.touch(0, e.getPointerId(i), e.getX(i), e.getY(i)) }
-            MotionEvent.ACTION_MOVE -> for (i in 0 until e.pointerCount) Native.touch(1, e.getPointerId(i), e.getX(i), e.getY(i))
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> { val i = e.actionIndex; Native.touch(2, e.getPointerId(i), e.getX(i), e.getY(i)) }
-            MotionEvent.ACTION_CANCEL -> Native.touch(3, 0, 0f, 0f)
-        }
-        return true
-    }
-}
-
+/** اللعبة كلها Kotlin: المحرك (core) + OpenGL ES + لمس + صوت. بلا C++ وبلا WebView. */
 class MainActivity : Activity() {
-    private lateinit var view: GameView
+    private val game = Game()
+    private val ctl = Controls(game)
+    private lateinit var view: GLSurfaceView
     @Volatile private var audioRun = false
     private var audioThread: Thread? = null
 
@@ -91,7 +25,21 @@ class MainActivity : Activity() {
         super.onCreate(b)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or WindowManager.LayoutParams.FLAG_FULLSCREEN)
         if (Build.VERSION.SDK_INT >= 28) window.attributes.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-        view = GameView(this); setContentView(view); immersive()
+        view = object : GLSurfaceView(this) {
+            override fun onTouchEvent(e: MotionEvent): Boolean {
+                when (e.actionMasked) {
+                    MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> { val i = e.actionIndex; ctl.touchDown(e.getPointerId(i), e.getX(i), e.getY(i)) }
+                    MotionEvent.ACTION_MOVE -> for (i in 0 until e.pointerCount) ctl.touchMove(e.getPointerId(i), e.getX(i), e.getY(i))
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> { val i = e.actionIndex; ctl.touchUp(e.getPointerId(i)) }
+                    MotionEvent.ACTION_CANCEL -> ctl.releaseAll()
+                }
+                return true
+            }
+        }
+        view.setEGLContextClientVersion(2); view.setEGLConfigChooser(8, 8, 8, 8, 16, 0); view.preserveEGLContextOnPause = true
+        view.setRenderer(GameGL(game, ctl))
+        setContentView(view); immersive()
+        Thread { Sfx.initBuffers() }.start()
     }
     private fun immersive() {
         @Suppress("DEPRECATION")
@@ -99,8 +47,12 @@ class MainActivity : Activity() {
             View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
     }
     override fun onWindowFocusChanged(f: Boolean) { super.onWindowFocusChanged(f); if (f) immersive() }
-    override fun onResume() { super.onResume(); startAudio() }
-    override fun onPause() { super.onPause(); stopAudio(); Native.pause() }
+    override fun onResume() { super.onResume(); view.onResume(); startAudio() }
+    override fun onPause() {
+        super.onPause(); stopAudio(); ctl.releaseAll()
+        synchronized(game) { if (game.menu == 0 && !game.over) game.paused = true }
+        view.onPause()
+    }
 
     private fun startAudio() {
         if (audioRun) return
@@ -115,7 +67,7 @@ class MainActivity : Activity() {
                 .setTransferMode(AudioTrack.MODE_STREAM).setBufferSizeInBytes(maxOf(minBuf, frames * 4 * 4)).build()
             track.play()
             val buf = ShortArray(frames * 2)
-            while (audioRun) { Native.mix(buf, frames); track.write(buf, 0, buf.size) }
+            while (audioRun) { try { Sfx.mix(buf, frames) } catch (e: Throwable) { buf.fill(0) }; track.write(buf, 0, buf.size) }
             track.stop(); track.release()
         }, "wz-audio").apply { start() }
     }
