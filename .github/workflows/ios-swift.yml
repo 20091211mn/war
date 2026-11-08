@@ -1,0 +1,30 @@
+name: Build iOS Swift IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ipa:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test mobile layer (headless)
+        run: cd native/mobile && clang++ -std=c++17 -O2 -o /tmp/mt mobiletest.cpp && /tmp/mt
+      - name: Build Swift app
+        run: bash native/app-ios/build.sh
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Warzone-swift-ipa
+          path: native/app-ios/out/Warzone-swift.ipa
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Warzone (APK)
+          files: native/app-ios/out/Warzone-swift.ipa

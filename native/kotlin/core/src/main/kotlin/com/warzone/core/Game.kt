@@ -73,6 +73,10 @@ class Game {
     @JvmField var lastPh = 0f
     @JvmField var fovMul = 1f; @JvmField var hudK = 1f
     @JvmField var frameCount = 0
+    @JvmField val scene = SceneBuilder(this)
+    @JvmField var camMenuYaw = 0f
+    fun render() = scene.render()
+    fun renderMenu() = scene.renderMenu()
     private val use = Input()
     private val tmp2 = FloatArray(2)
 
