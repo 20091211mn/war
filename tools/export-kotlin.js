@@ -36,7 +36,7 @@ const gd=grab('GUNDEFS').map(a=>({mz:a[0],sy:a[1],np:a[2],p:a[3].slice(0,a[2]).f
 fs.writeFileSync(path.join(outDir,'weapons.json'),JSON.stringify({weapons:W,mount,wkind:wk,gundefs:gd}));
 // gun meshes
 const gm=fs.readFileSync(path.join(root,'native/src/gunmodels.h'),'utf8');
-function arr(name){ const m=new RegExp(name+'(?:\\[\\d+\\])?\\s*=\\s*\\{([^}]*)\\}').exec(gm); if(!m)throw new Error('gm '+name); return m[1].split(',').map(Number); }
+function arr(name){ const m=new RegExp(name+'(?:\\[\\d+\\])?\\s*=\\s*\\{([^}]*)\\}').exec(gm); if(!m)throw new Error('gm '+name); return m[1].split(',').map(s=>Number(s.trim().replace(/f$/i,''))); }
 for(const n of ['sniper','rifle','dmr','launcher']){
   const nv=+new RegExp(n+'_NV=(\\d+)').exec(gm)[1];
   const grp=arr(n+'_GRP'),lo=arr(n+'_LO'),rng=arr(n+'_RNG'),pos=arr(n+'_pos'),nor=arr(n+'_nor'),col=arr(n+'_col'),idx=arr(n+'_idx');

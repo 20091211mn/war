@@ -19,6 +19,7 @@ class SmokeTest {
                 if (cw > 0.05f) { inV++; val nx = cx / cw; val ny = cy / cw; mnx = minOf(mnx, nx); mxx = maxOf(mxx, nx); mny = minOf(mny, ny); mxy = maxOf(mxy, ny); mnw = minOf(mnw, cw) } }
             if (nan > 0) { val M = GameData.meshOf(wi); var fi = -1; for (i in 0 until L.vertexCount) { val o = i * Renderer.STRIDE; if (L.a[o].isNaN() || L.a[o + 1].isNaN() || L.a[o + 2].isNaN() || L.a[o + 3].isNaN()) { fi = i; break } }
                 val o = fi * Renderer.STRIDE; println("VMNAN wpn=$wi first=$fi vals=" + (0 until Renderer.STRIDE).joinToString(",") { L.a[o + it].toString() } + " mesh=" + (M != null) + " lo=" + M?.lo?.toList() + " rng=" + M?.rng?.toList() + " vx0=" + M?.vx?.get(0) + " nx0=" + M?.nx?.get(0) + " cr0=" + M?.cr?.get(0)) }
+            assertTrue(nan == 0, "NaN verts in viewmodel wpn=$wi")
             println("VM wpn=$wi alive=${g.e[0].alive} drive=${g.drive} verts=${L.vertexCount} nan=$nan inFront=$inV ndc x[$mnx,$mxx] y[$mny,$mxy] minW=$mnw")
         }
         println("SMOKE OK maps=${g.MAP_COUNT} tris=${g.r.layers[0].triangleCount}")
