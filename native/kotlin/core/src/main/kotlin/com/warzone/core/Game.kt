@@ -9,9 +9,10 @@ class Input {
     @JvmField var fire = false; @JvmField var ads = false; @JvmField var jump = false; @JvmField var crouch = false; @JvmField var reload = false; @JvmField var sprint = false
     @JvmField var swapP = false; @JvmField var swapN = false; @JvmField var grenade = false; @JvmField var drone = false; @JvmField var use = false
     @JvmField var start = false; @JvmField var confirm = false; @JvmField var back = false
+    @JvmField var pick = -1   // اختيار سلاح مباشر (عجلة الأسلحة): رقم السلاح أو -1
     fun set(o: Input) {
         tri = o.tri; seat = o.seat; c4 = o.c4; det = o.det; mx = o.mx; my = o.my; lx = o.lx; ly = o.ly; fire = o.fire; ads = o.ads; jump = o.jump; crouch = o.crouch
-        reload = o.reload; sprint = o.sprint; swapP = o.swapP; swapN = o.swapN; grenade = o.grenade; drone = o.drone; use = o.use; start = o.start; confirm = o.confirm; back = o.back
+        reload = o.reload; sprint = o.sprint; swapP = o.swapP; swapN = o.swapN; grenade = o.grenade; drone = o.drone; use = o.use; start = o.start; confirm = o.confirm; back = o.back; pick = o.pick
     }
     fun clear() { set(Input()) }
 }
@@ -432,6 +433,7 @@ class Game {
                 p.pitch = fmax(-1.2f, fmin(1.2f, p.pitch)); p.crouch = true; p.sprint = false; p.moving = false; lookIdle = 0f
                 if (inp.reload) reloadStart(p)
                 if ((inp.swapP && !prev.swapP) || (inp.swapN && !prev.swapN)) { prim = (prim + (if (inp.swapN && !prev.swapN) 1 else WEAPON_COUNT - 1)) % WEAPON_COUNT; giveWeapon(p, prim) }
+            else if (inp.pick in 0 until WEAPON_COUNT && inp.pick != prim) { prim = inp.pick; giveWeapon(p, prim) }
                 var trg = inp.fire; if (!p.mnt && !WEAPONS[p.wpn].autof && prev.fire) trg = false; updateWeapon(meI, dt, trg); return
             }
             p.pitch = fmax(-0.7f, fmin(0.5f, p.pitch)); p.crouch = false; p.sprint = false; p.moving = false; adsHeld = false; return
@@ -445,6 +447,7 @@ class Game {
         moveBody(w, p.b, vx, vz, dt, inp.jump, p.crouch); val mv = hypotf(p.b.x - ox, p.b.z - oz); p.moving = mv > 0.001f && p.b.onGround; p.phase += mv * 3.4f
         if (inp.reload) reloadStart(p)
         if ((inp.swapP && !prev.swapP) || (inp.swapN && !prev.swapN)) { prim = (prim + (if (inp.swapN && !prev.swapN) 1 else WEAPON_COUNT - 1)) % WEAPON_COUNT; giveWeapon(p, prim) }
+            else if (inp.pick in 0 until WEAPON_COUNT && inp.pick != prim) { prim = inp.pick; giveWeapon(p, prim) }
         var trig = inp.fire && !p.sprint; if (!WEAPONS[p.wpn].autof && prev.fire) trig = false
         updateWeapon(meI, dt, trig)
         run {

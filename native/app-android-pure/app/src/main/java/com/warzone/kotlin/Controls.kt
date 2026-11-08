@@ -7,7 +7,7 @@ import kotlin.math.*
 /** زر شاشة: دائرة (r>0) أو مستطيل (w,h). الإحداثيات بكسلات الشاشة. */
 class Btn(val id: Int, val x: Float, val y: Float, val r: Float, val label: String, val w: Float = 0f, val h: Float = 0f) {
     fun hit(px: Float, py: Float): Boolean = if (w > 0f) (px >= x - w / 2 && px <= x + w / 2 && py >= y - h / 2 && py <= y + h / 2)
-        else { val dx = px - x; val dy = py - y; val rr = r * 1.12f; dx * dx + dy * dy <= rr * rr }
+        else { val dx = px - x; val dy = py - y; val rr = r * 1.25f; dx * dx + dy * dy <= rr * rr }
 }
 
 object B {
@@ -16,7 +16,8 @@ object B {
     const val OK = 20; const val BACK = 21; const val SENS_UP = 22; const val SENS_DN = 23
     const val P_OPT = 24; const val P_MUZ = 25; const val P_GRIP = 26; const val P_MAG = 27
     const val ROW_MAP = 30; const val ROW_DIFF = 31; const val ROW_MODE = 32; const val START = 33
-    const val NB = 40
+    const val WEAPON = 15; const val W0 = 50
+    const val NB = 64
 }
 
 /** يحوّل اللمس إلى مدخلات اللعبة ويحمل تخطيط الأزرار (Kotlin فقط). */
@@ -29,6 +30,7 @@ class Controls(private val g: Game) {
     var sw = 1f; var sh = 1f
     var btns: List<Btn> = emptyList(); private set
     private var lastMode = -1
+    var wheelOpen = false; private var pickReq = -1
     val u get() = sh / 540f
     val moveStick: Pair<Float, Float>? get() { for (t in tc) if (t.id >= 0 && t.role == 1) return Pair(t.ox, t.oy); return null }
 
@@ -46,12 +48,19 @@ class Controls(private val g: Game) {
             R(B.P_OPT, w * 0.5f - 135 * u, h * 0.30f + 200 * u, 126f, 44f, "optic"); R(B.P_MUZ, w * 0.5f, h * 0.30f + 200 * u, 126f, 44f, "muzzle")
             R(B.P_GRIP, w * 0.5f + 135 * u, h * 0.30f + 200 * u, 126f, 44f, "grip"); R(B.P_MAG, w * 0.5f, h * 0.30f + 252 * u, 126f, 44f, "mag")
         } else {
-            A(B.FIRE, w - 130 * u, h - 140 * u, 62f, "FIRE"); A(B.ADS, w - 255 * u, h - 82 * u, 40f, "ADS"); A(B.JUMP, w - 72 * u, h - 270 * u, 38f, "JUMP")
-            A(B.CROUCH, w - 205 * u, h - 240 * u, 34f, "CROUCH"); A(B.RELOAD, w - 300 * u, h - 170 * u, 32f, "R")
-            A(B.GREN, w - 42 * u, 140 * u, 23f, "G"); A(B.USE, w - 42 * u, 190 * u, 23f, "CAR"); A(B.DRONE, w - 42 * u, 240 * u, 23f, "UAV")
-            A(B.C4, 42 * u, 200 * u, 23f, "C4"); A(B.DET, 42 * u, 250 * u, 23f, "DET"); A(B.SEAT, 42 * u, 300 * u, 23f, "SEAT")
-            A(B.PREV, w - 190 * u, 32 * u, 22f, "<"); A(B.NEXT, w - 140 * u, 32 * u, 22f, ">"); A(B.PAUSE, w / 2 + 125 * u, 28 * u, 20f, "II")
-            if (g.over) R(B.OK, w / 2, h - 90 * u, 200f, 56f, "OK")
+            // يمين: النار والتصويب والقفز والانبطاح والتعبئة — بلا تداخل
+            A(B.FIRE, w - 120 * u, h - 130 * u, 64f, "FIRE"); A(B.ADS, w - 236 * u, h - 70 * u, 40f, "ADS"); A(B.JUMP, w - 62 * u, h - 250 * u, 36f, "JUMP")
+            A(B.CROUCH, w - 196 * u, h - 200 * u, 34f, "CROUCH"); A(B.RELOAD, w - 290 * u, h - 140 * u, 32f, "R")
+            A(B.GREN, w - 46 * u, 150 * u, 25f, "G"); A(B.USE, w - 46 * u, 208 * u, 25f, "CAR")
+            // يسار: أدوات
+            A(B.C4, 44 * u, 170 * u, 25f, "C4"); A(B.DET, 44 * u, 228 * u, 25f, "DET"); A(B.SEAT, 44 * u, 286 * u, 25f, "SEAT"); A(B.DRONE, 44 * u, 344 * u, 25f, "UAV")
+            A(B.PAUSE, w / 2 + 150 * u, 30 * u, 20f, "II")
+            R(B.WEAPON, w / 2 + 10 * u, h - 44 * u, 250f, 66f, "weapon")
+            if (g.over) R(B.OK, w / 2, h - 110 * u, 200f, 56f, "OK")
+            if (wheelOpen) {
+                val tw = 196f; val th = 64f; val gx = 10f; val cx0 = w / 2 - (tw + gx) * u; val cy0 = h / 2 - (th + gx) * u - 6 * u
+                for (i in 0 until g.WEAPON_COUNT) R(B.W0 + i, cx0 + (i % 3) * (tw + gx) * u, cy0 + (i / 3) * (th + gx) * u, tw, th, "w$i")
+            }
         }
         btns = l
     }
@@ -69,9 +78,11 @@ class Controls(private val g: Game) {
         if (tc.any { it.id == id }) return
         val t = tc.firstOrNull { it.id < 0 } ?: return
         layout(); val b = hit(x, y)
+        if (wheelOpen) { t.id = id; t.role = 4; t.btn = 0; if (b != null && b.id >= B.W0 && b.id < B.W0 + 20) pickReq = b.id - B.W0; wheelOpen = false; return }
         t.id = id; t.x = x; t.y = y; t.ox = x; t.oy = y; t.btn = 0; t.role = 0
         if (b != null) {
             if (g.menu == 1 && (b.id == B.ROW_MAP || b.id == B.ROW_DIFF)) { menuTap(b, x); t.role = 4; return }
+            if (b.id == B.WEAPON) { t.role = 4; t.btn = 0; wheelOpen = true; return }
             t.role = 3; t.btn = b.id; held[b.id] = true
             if (b.id == B.ADS) adsL = !adsL else if (b.id == B.CROUCH) crL = !crL
             return
@@ -82,7 +93,7 @@ class Controls(private val g: Game) {
     }
     @Synchronized fun touchMove(id: Int, x: Float, y: Float) {
         val t = tc.firstOrNull { it.id == id } ?: return
-        if (t.role == 2) { pdx += x - t.x; pdy += y - t.y }
+        if (t.role == 2 || (t.role == 3 && t.btn == B.FIRE)) { pdx += x - t.x; pdy += y - t.y }
         else if (t.role == 1) { val R = 75f * u; var dx = (x - t.ox) / R; var dy = (y - t.oy) / R; val m = sqrt(dx * dx + dy * dy); if (m > 1) { dx /= m; dy /= m }; stX = dx; stY = -dy }
         t.x = x; t.y = y
     }
@@ -97,8 +108,8 @@ class Controls(private val g: Game) {
     /** مدخلات هذا الإطار. */
     @Synchronized fun build(): Input {
         val md = (if (g.menu != 0) 1 else 0) or (if (g.paused) 2 else 0) or (if (g.over) 4 else 0)
-        if (md != lastMode) { lastMode = md; releaseAll() }
-        val i = Input()
+        if (md != lastMode) { lastMode = md; releaseAll(); wheelOpen = false }
+        val i = Input(); i.pick = pickReq; pickReq = -1
         if (g.menu == 1) { i.confirm = held[B.START]; return i }
         if (g.paused) {
             i.start = held[B.PAUSE]; i.back = held[B.BACK]
@@ -111,7 +122,7 @@ class Controls(private val g: Game) {
         i.mx = sx; i.my = sy; i.sprint = sy > 0.85f && m > 0.95f
         i.fire = held[B.FIRE]; i.ads = adsL; i.jump = held[B.JUMP]; i.crouch = crL; i.reload = held[B.RELOAD]
         i.grenade = held[B.GREN]; i.tri = held[B.USE]; i.use = held[B.USE]; i.drone = held[B.DRONE]; i.c4 = held[B.C4]; i.det = held[B.DET]; i.seat = held[B.SEAT]
-        i.swapP = held[B.PREV]; i.swapN = held[B.NEXT]; i.start = held[B.PAUSE]; i.confirm = g.over && held[B.OK]
+        i.start = held[B.PAUSE]; i.confirm = g.over && held[B.OK]
         return i
     }
     /** دوران النظر المتراكم منذ آخر استدعاء (x يمين، y أعلى) بوحدات اللعبة. */

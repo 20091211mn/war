@@ -39,6 +39,7 @@ class Hud(private val g: Game, private val c: Controls) {
         }
         if (g.paused) pause(cv, w, h, u)
         controls(cv, w, h, u)
+        if (c.wheelOpen && !g.paused && g.menu == 0) wheel(cv, w, h, u)
     }
 
     private fun diag(cv: Canvas, w: Float, h: Float, u: Float) {
@@ -64,15 +65,9 @@ class Hud(private val g: Game, private val c: Controls) {
         panel(cv, 10 * u, 8 * u, 170 * u, 38 * u)
         p.style = Paint.Style.FILL; p.color = if (hp > 35) 0xFF42D66B.toInt() else 0xFFE23B3B.toInt(); rect.set(16 * u, 14 * u, (16 + 148 * hp / 100f) * u, 32 * u); cv.drawRoundRect(rect, 6f, 6f, p)
         text(cv, "${hp.toInt()}", 92 * u, 29 * u, 16 * u)
-        // الذخيرة
-        if (me.alive && g.drive < 0) {
-            val wd = g.WEAPONS[me.wpn]
-            text(cv, "${me.ammo}", w - 330 * u, h - 20 * u, 30 * u, if (me.ammo <= g.cap(me) / 4) 0xFFFF6060.toInt() else Color.WHITE, Paint.Align.RIGHT)
-            text(cv, "/ ${me.mags * g.cap(me)}", w - 326 * u, h - 20 * u, 17 * u, 0xFFB8C4D4.toInt(), Paint.Align.LEFT)
-            text(cv, wd.id.uppercase(), w - 330 * u, h - 52 * u, 15 * u, ACC, Paint.Align.RIGHT)
-            if (me.reloadT >= 0) text(cv, "إعادة التعبئة…", cx, cy + 60 * u, 20 * u, ACC)
-        }
-        if (g.drive >= 0 && g.drive < g.vh.size) { text(cv, "المركبة ${g.vh[g.drive].hp.toInt()}", w - 330 * u, h - 20 * u, 22 * u, ACC, Paint.Align.RIGHT) }
+        // الذخيرة والسلاح: بطاقة أسفل الشاشة (اضغطها لفتح عجلة الأسلحة)
+        if (me.alive && g.drive < 0) weaponCard(cv, w, h, u, me)
+        if (g.drive >= 0 && g.drive < g.vh.size) { text(cv, "المركبة ${g.vh[g.drive].hp.toInt()}", w / 2, h - 30 * u, 24 * u, ACC) }
         else if (g.nearVeh && me.alive) text(cv, "اضغط CAR لركوب المركبة", cx, h - 150 * u, 18 * u, ACC)
         if (!me.alive) text(cv, "أُصبت! عودة بعد ${max(0, me.respawn.toInt() + 1)}", cx, h * 0.45f, 28 * u, 0xFFFF6060.toInt())
         // الرسالة وسجل القتل
@@ -123,7 +118,7 @@ class Hud(private val g: Game, private val c: Controls) {
     private fun controls(cv: Canvas, w: Float, h: Float, u: Float) {
         if (g.menu == 1 || g.paused) return
         for (b in c.btns) {
-            if (b.w > 0f) { val l = b.x - b.w / 2; val t = b.y - b.h / 2; panel(cv, l, t, l + b.w, t + b.h, if (c.held[b.id]) 0xFFFFC85A.toInt() else ACC); text(cv, "OK", b.x, b.y + 8 * u, 22 * u, 0xFF1A1200.toInt()); continue }
+            if (b.w > 0f) { if (b.id == B.OK) { val l = b.x - b.w / 2; val t = b.y - b.h / 2; panel(cv, l, t, l + b.w, t + b.h, if (c.held[b.id]) 0xFFFFC85A.toInt() else ACC); text(cv, "OK", b.x, b.y + 8 * u, 22 * u, 0xFF1A1200.toInt()) }; continue }
             val on = c.held[b.id] || (b.id == B.ADS && c.adsL) || (b.id == B.CROUCH && c.crL)
             p.style = Paint.Style.FILL; p.color = (if (b.id == B.FIRE) 0xFFE23B3B else 0xFFDDE6F2).toInt(); p.alpha = if (on) 140 else 56; cv.drawCircle(b.x, b.y, b.r, p)
             p.style = Paint.Style.STROKE; p.strokeWidth = 2f * u; p.color = Color.WHITE; p.alpha = 140; cv.drawCircle(b.x, b.y, b.r, p); p.alpha = 255
@@ -131,5 +126,40 @@ class Hud(private val g: Game, private val c: Controls) {
         }
         c.moveStick?.let { (ox, oy) -> p.style = Paint.Style.STROKE; p.strokeWidth = 2f * u; p.color = Color.WHITE; p.alpha = 70; cv.drawCircle(ox, oy, 75 * u, p)
             p.style = Paint.Style.FILL; p.alpha = 100; cv.drawCircle(ox + c.stX * 75 * u, oy - c.stY * 75 * u, 26 * u, p); p.alpha = 255 }
+    }
+
+    private val maxDmg by lazy { g.WEAPONS.maxOf { it.dmg * max(1, it.pellets.coerceAtMost(4)) } }
+    private val maxRpm by lazy { g.WEAPONS.maxOf { it.rpm } }
+    private val maxRng by lazy { g.WEAPONS.maxOf { it.r1 } }
+    private fun bar(cv: Canvas, x: Float, y: Float, wd: Float, hh: Float, v: Float, col: Int) {
+        p.style = Paint.Style.FILL; p.color = 0x55FFFFFF; rect.set(x, y, x + wd, y + hh); cv.drawRoundRect(rect, hh / 2, hh / 2, p)
+        p.color = col; rect.set(x, y, x + wd * v.coerceIn(0.04f, 1f), y + hh); cv.drawRoundRect(rect, hh / 2, hh / 2, p)
+    }
+    private fun weaponCard(cv: Canvas, w: Float, h: Float, u: Float, me: com.warzone.core.Ent) {
+        val b = c.btns.firstOrNull { it.id == B.WEAPON } ?: return
+        val l = b.x - b.w / 2; val t = b.y - b.h / 2; val wd = g.WEAPONS[me.wpn]
+        panel(cv, l, t, l + b.w, t + b.h, 0xD0101822.toInt(), if (c.wheelOpen) ACC else 0x66FFFFFF)
+        text(cv, wd.id.uppercase(), l + 14 * u, t + 26 * u, 17 * u, ACC, Paint.Align.LEFT)
+        val low = me.ammo <= g.cap(me) / 4
+        text(cv, "${me.ammo}", l + b.w - 82 * u, t + 52 * u, 34 * u, if (low) 0xFFFF6060.toInt() else Color.WHITE, Paint.Align.RIGHT)
+        text(cv, "/ ${me.mags * g.cap(me)}", l + b.w - 76 * u, t + 52 * u, 16 * u, 0xFFB8C4D4.toInt(), Paint.Align.LEFT)
+        text(cv, "▲ تغيير", l + 14 * u, t + 52 * u, 12 * u, 0xFF8FA0B4.toInt(), Paint.Align.LEFT)
+        if (me.reloadT >= 0) text(cv, "إعادة التعبئة…", w / 2, h / 2 + 62 * u, 20 * u, ACC)
+    }
+    /** عجلة الأسلحة: شبكة 3×3 ببطاقات فيها الاسم وأشرطة الضرر والمعدل والمدى. */
+    private fun wheel(cv: Canvas, w: Float, h: Float, u: Float) {
+        p.style = Paint.Style.FILL; p.color = 0x99070B10.toInt(); cv.drawRect(0f, 0f, w, h, p)
+        text(cv, "اختر سلاحك", w / 2, h * 0.5f - 168 * u, 24 * u)
+        val cur = g.e[g.meI].wpn
+        for (bt in c.btns) { if (bt.id < B.W0 || bt.id >= B.W0 + g.WEAPON_COUNT) continue
+            val i = bt.id - B.W0; val wd = g.WEAPONS[i]; val l = bt.x - bt.w / 2; val t = bt.y - bt.h / 2; val sel = i == cur
+            panel(cv, l, t, l + bt.w, t + bt.h, if (sel) 0xE0463614.toInt() else 0xE0121A24.toInt(), if (sel) ACC else 0x55FFFFFF)
+            text(cv, wd.id.uppercase(), l + 12 * u, t + 24 * u, 16 * u, if (sel) ACC else Color.WHITE, Paint.Align.LEFT)
+            val bw = 96 * u; val bx = l + bt.w - bw - 10 * u
+            text(cv, "ضرر", bx - 6 * u, t + 19 * u, 9 * u, 0xFF9FB0C4.toInt(), Paint.Align.RIGHT); bar(cv, bx, t + 12 * u, bw, 7 * u, wd.dmg * max(1, wd.pellets.coerceAtMost(4)) / maxDmg, 0xFFE2573B.toInt())
+            text(cv, "معدل", bx - 6 * u, t + 35 * u, 9 * u, 0xFF9FB0C4.toInt(), Paint.Align.RIGHT); bar(cv, bx, t + 28 * u, bw, 7 * u, wd.rpm / maxRpm, 0xFFFFB02E.toInt())
+            text(cv, "مدى", bx - 6 * u, t + 51 * u, 9 * u, 0xFF9FB0C4.toInt(), Paint.Align.RIGHT); bar(cv, bx, t + 44 * u, bw, 7 * u, wd.r1 / maxRng, 0xFF42D66B.toInt())
+            text(cv, "${wd.mag}", l + 12 * u, t + 52 * u, 13 * u, 0xFFB8C4D4.toInt(), Paint.Align.LEFT)
+        }
     }
 }
