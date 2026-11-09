@@ -22,7 +22,7 @@ jobs:
           gradle-version: 8.9
       - name: Smoke test Kotlin engine (menu, 8 maps, play, render)
         continue-on-error: true
-        run: gradle -p native/kotlin :core:test --tests com.warzone.core.SmokeTest --no-daemon -i 2>&1 | grep -E "PERF|VM wpn|VMNAN|SMOKE|FAILED|PASSED|Exception|AssertionError|at com.warzone" | head -40
+        run: gradle -p native/kotlin :core:test --tests com.warzone.core.SmokeTest --no-daemon -i 2>&1 | grep -E "NET host|lanLoopback|PERF|VM wpn|VMNAN|SMOKE|FAILED|PASSED|Exception|AssertionError|at com.warzone" | head -40
       - name: Build Kotlin app (Kotlin only, no C++)
         run: gradle -p native/app-android-pure assembleRelease --no-daemon
       - name: Collect APK
