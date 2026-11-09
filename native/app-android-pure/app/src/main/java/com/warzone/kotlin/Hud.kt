@@ -28,6 +28,7 @@ class Hud(private val g: Game, private val c: Controls) {
         val u = h / 540f; c.layout()
         diag(cv, w, h, u)
         if (g.menu == 1) { menu(cv, w, h, u); return }
+        if (g.menu == 2) { lobby(cv, w, h, u); return }
         val me = g.e[g.meI]
         // وميض الضرر
         if (g.dmgFlash > 0) { p.style = Paint.Style.FILL; p.color = Color.argb((min(0.5f, g.dmgFlash) * 160).toInt(), 220, 0, 0); cv.drawRect(0f, 0f, w, h, p) }
@@ -90,6 +91,19 @@ class Hud(private val g: Game, private val c: Controls) {
         p.color = Color.WHITE; val tri = Path(); tri.moveTo(cx, cy - 6 * u); tri.lineTo(cx - 4 * u, cy + 4 * u); tri.lineTo(cx + 4 * u, cy + 4 * u); tri.close(); cv.drawPath(tri, p)
     }
 
+    private val MODES = arrayOf("لاعب واحد", "استضافة (LAN)", "انضمام (LAN)")
+    private fun lobby(cv: Canvas, w: Float, h: Float, u: Float) {
+        p.style = Paint.Style.FILL; p.color = 0xCC0B0F14.toInt(); cv.drawRect(0f, 0f, w, h, p)
+        text(cv, "الانضمام إلى لعبة LAN", w / 2, h * 0.16f, 28 * u)
+        val n = g.ns
+        if (n.hosts.isEmpty()) text(cv, if (n.status.isNotEmpty()) n.status else "جارٍ البحث عن مضيف على نفس الشبكة…", w / 2, h * 0.40f, 18 * u, 0xFFB8C4D4.toInt())
+        else if (n.status.isNotEmpty()) text(cv, n.status, w / 2, h * 0.23f, 16 * u, 0xFFFFC85A.toInt())
+        for (b in c.btns) { val l = b.x - b.w / 2; val t = b.y - b.h / 2
+            if (b.id >= B.H0 && b.id < B.H0 + 5) { val hs = n.hosts.getOrNull(b.id - B.H0) ?: continue
+                panel(cv, l, t, l + b.w, t + b.h, if (n.hostSel == b.id - B.H0) 0xFF3B82F6.toInt() else 0xDD18202C.toInt())
+                text(cv, "${hs.name} — ${MAPS[hs.map % MAPS.size]} — ${hs.players}/${hs.maxp}", b.x, b.y + 7 * u, 17 * u) }
+            else if (b.id == B.BACK) { panel(cv, l, t, l + b.w, t + b.h, if (c.held[B.BACK]) 0xFF3B82F6.toInt() else 0xDD18202C.toInt()); text(cv, "رجوع", b.x, b.y + 7 * u, 18 * u) } }
+    }
     private fun menu(cv: Canvas, w: Float, h: Float, u: Float) {
         p.style = Paint.Style.FILL; p.color = 0xB30B0F14.toInt(); cv.drawRect(0f, 0f, w, h, p)
         val cx = w * 0.30f
@@ -101,6 +115,7 @@ class Hud(private val g: Game, private val c: Controls) {
             when (b.id) {
                 B.ROW_MAP -> { panel(cv, l, t, l + b.w, t + b.h); text(cv, "◀  ${MAPS[g.menuSel % MAPS.size]}  ▶", b.x, b.y + 8 * u, 22 * u); text(cv, "الخريطة", b.x, t - 6 * u, 14 * u, 0xFF8090A0.toInt()) }
                 B.ROW_DIFF -> { panel(cv, l, t, l + b.w, t + b.h); text(cv, "◀  ${DIFF[g.diff % 3]}  ▶", b.x, b.y + 8 * u, 22 * u); text(cv, "الصعوبة", b.x, t - 6 * u, 14 * u, 0xFF8090A0.toInt()) }
+                B.ROW_MODE -> { panel(cv, l, t, l + b.w, t + b.h); text(cv, "◀  ${MODES[g.mode % 3]}  ▶", b.x, b.y + 8 * u, 22 * u); text(cv, "الوضع", b.x, t - 6 * u, 14 * u, 0xFF8090A0.toInt()) }
                 B.START -> { panel(cv, l, t, l + b.w, t + b.h, if (c.held[B.START]) 0xFFFFC85A.toInt() else ACC, 0xFFFFFFFF.toInt()); text(cv, "ابدأ اللعب", b.x, b.y + 9 * u, 26 * u, 0xFF1A1200.toInt()) }
             }
         }

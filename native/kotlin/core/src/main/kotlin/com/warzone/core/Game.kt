@@ -29,6 +29,8 @@ class Ent {
     @JvmField var lastX = 0f; @JvmField var lastZ = 0f; @JvmField var lastDmgT = 0f; @JvmField var lastHitBy = -1
     @JvmField var revealT = 0f; @JvmField var c4Left = 2; @JvmField var c4Refill = 0f
     @JvmField var name = ""; @JvmField var remote = false; @JvmField var gone = false; @JvmField var spawnSeq = 0
+    @JvmField var rin: NetIn? = null; @JvmField var rc4Init = false; @JvmField var rc4p = 0; @JvmField var rc4d = 0
+    @JvmField var tx = 0f; @JvmField var ty = 0f; @JvmField var tz = 0f; @JvmField var tyaw = 0f
 }
 
 class C4s(@JvmField val x: Float, @JvmField val y: Float, @JvmField val z: Float, @JvmField val team: Int, @JvmField val owner: Int)
@@ -63,8 +65,8 @@ class Game {
     @JvmField var prim = 0; @JvmField val prev = Input(); @JvmField var paused = false; @JvmField var msgT = 0f; @JvmField var msg = ""
     @JvmField val feed = Array(4) { "" }; @JvmField val feedT = FloatArray(4)
     @JvmField var menu = 1; @JvmField var menuSel = 0; @JvmField var menuRow = 0; @JvmField var mode = 0
-    @JvmField var modeCount = 1
-    @JvmField val meI = 0
+    @JvmField var modeCount = 3
+    @JvmField var meI = 0; @JvmField var role = 0; @JvmField val ns = NetState(); @JvmField var overT = 0f; @JvmField var netPc4 = false; @JvmField var netPdet = false
     @JvmField var spawnCtr = 0
     @JvmField var camX = 0f; @JvmField var camY = 3f; @JvmField var camZ = 0f
     @JvmField val c4s = ArrayList<C4s>(); @JvmField var pc4 = false; @JvmField var pdet = false
@@ -86,7 +88,7 @@ class Game {
     val MAP_COUNT get() = GameData.MAP_COUNT
 
     fun passenger() = drive >= 0 && gunner
-    fun nm(i: Int): String = if (i == meI) "YOU" else "BOT$i"
+    fun nm(i: Int): String = if (i == meI) "YOU" else if (i == 0 && role == 2) "HOST" else if (i < e.size && e[i].remote) "P$i" else "BOT$i"
     fun init(rw: Int, rh: Int) { GameData.load(); r.init(rw, rh); startMatch(mapIdx) }
     fun say(s: String) { msg = s; msgT = 2.5f }
     fun addFeed(s: String) { for (i in 3 downTo 1) { feed[i] = feed[i - 1]; feedT[i] = feedT[i - 1] }; feed[0] = s; feedT[0] = 5f }
@@ -99,6 +101,7 @@ class Game {
         dn.on = false; dnCd = 0f; grs.clear(); rks.clear(); vh = ArrayList(); drive = -1; puffs.clear()
         for (k in 0 until w.m.nv) vh.add(makeVeh(k))
         score[0] = 0; score[1] = 0; over = false; t = 0f; tr.clear()
+        if (role == 1) { ns.matchId = (ns.matchId + 1) and 255; ns.evq.clear(); for (c in ns.cli) if (c.on && c.ent in 0 until e.size) { val p = e[c.ent]; p.remote = true; p.bot = false; p.rin = null; p.rc4Init = false } }
         for (i in 0 until e.size) spawn(i)
     }
 
@@ -137,6 +140,7 @@ class Game {
     }
 
     fun hurt(vi: Int, ai: Int, dmg: Float, head: Boolean) {
+        if (role == 2) return
         val v = e[vi]; if (!v.alive || v.prot > 0) return
         v.hp -= dmg; v.lastHitBy = ai; v.lastDmgT = t
         if (vi == meI) { dmgFlash = 0.5f; Sfx.play(Sfx.HURT, 0.9f); if (ai >= 0 && ai != vi) { hitAng = atan2f(-(e[ai].b.x - v.b.x), -(e[ai].b.z - v.b.z)) - v.yaw; hitAngT = 1.2f } }
@@ -148,6 +152,7 @@ class Game {
                 Sfx.play(Sfx.KILL, 0.8f); streak++
                 if (head) say("تصويبة رأس!") else if (streak == 2) say("قتلتان متتاليتان") else if (streak == 3) say("ثلاث قتلات!") else if (streak == 5) say("سلسلة قتل!") else if (streak == 8) say("لا يمكن إيقافك!")
             }
+            if (role == 1 && ai >= 0 && ai != vi) { ns.evtId = (ns.evtId + 1) and 255; if (ns.evtId == 0) ns.evtId = 1; ns.evq.add(NetEvt(ns.evtId, ai, vi, if (head) 1 else 0)); if (ns.evq.size > 6) ns.evq.removeAt(0) }
             if (ai >= 0 && ai != vi) { val k = e[ai]; k.kills++; score[k.team]++; addFeed("${nm(ai)} > ${nm(vi)}${if (head) " HS" else ""}") }
             if (score[0] >= scoreLim || score[1] >= scoreLim) { over = true; winner = if (score[0] >= scoreLim) 0 else 1 }
         }
@@ -161,7 +166,7 @@ class Game {
         for (i in 0 until e.size) { if (!e[i].alive) continue; val dx = e[i].b.x - v.x; val dz = e[i].b.z - v.z; val dd = sqrtf(dx * dx + dz * dz); if (dd < 7f) hurt(i, by, 260 * powf(1 - dd / 7f, 1.1f), false) }
         if (by == meI) hitMark = 0.4f; say("دُمِّرت المركبة!")
     }
-    fun hurtVeh(v: Veh, amt: Float, by: Int) { if (v.dead || amt <= 0) return; v.hp -= amt; if (v.hp <= 0) explodeVeh(v, by) else if (v.hp < 150) v.burn = true }
+    fun hurtVeh(v: Veh, amt: Float, by: Int) { if (role == 2) return; if (v.dead || amt <= 0) return; v.hp -= amt; if (v.hp <= 0) explodeVeh(v, by) else if (v.hp < 150) v.burn = true }
     fun damageVeh(v: Veh, part: Int, d: Float, by: Int) {
         if (v.dead) return
         if (part >= 10) { val i = part - 10; if ((v.tires shr i) and 1 != 0) return; v.tireHp[i] -= d; if (v.tireHp[i] <= 0) v.tires = v.tires or (1 shl i); return }
@@ -323,7 +328,8 @@ class Game {
     }
 
     fun fire(i: Int) {
-        val p = e[i]; val d = if (p.mnt) GameData.mount!! else WEAPONS[p.wpn]; val ex = !p.mnt && isExpl(p.wpn)
+        val p = e[i]; if (role == 2) { p.cd = 60f / WEAPONS[p.wpn].rpm; return }
+        val d = if (p.mnt) GameData.mount!! else WEAPONS[p.wpn]; val ex = !p.mnt && isExpl(p.wpn)
         if (!(i == meI && !p.mnt && wAtt[p.wpn and 15].muz == 1)) p.revealT = 5f
         var aDm = 1f; var aHip = 1f; var aRv = 1f; var aRh = 1f; var aVol = 1f
         if (i == meI && !p.mnt) {
@@ -365,6 +371,7 @@ class Game {
             if (ex && rks.size < 8) { rks.add(Rk(p.b.x + dx * 0.9f, eyeY - 0.15f + dy * 0.9f, p.b.z + dz * 0.9f, dx, dy, dz, fmax(0.5f, best - 0.9f), 0f, i.toFloat())) }
             if (best < d.r1 * 1.39f) sparkAt(p.b.x + dx * best, eyeY + dy * best, p.b.z + dz * best, dx, dy, dz, if (hv >= 0) 0 else 5)
             if (tr.size < 64) tr.add(Tracer(p.b.x + dx * 0.5f, eyeY - 0.12f, p.b.z + dz * 0.5f, p.b.x + dx * best, eyeY + dy * best, p.b.z + dz * best, 0.09f))
+            if (role == 1 && ns.trOut.size < 12) ns.trOut.add(NetTr(p.b.x + dx * 0.5f, eyeY - 0.12f, p.b.z + dz * 0.5f, p.b.x + dx * best, eyeY + dy * best, p.b.z + dz * best))
         }
         if (i == meI) { p.rkP += d.recoilV * aRv * (if (ads) 0.6f else 1f) * 1.6f; p.rkY += (frand() - 0.5f) * d.recoilH * aRh * 3f }
     }
@@ -567,12 +574,20 @@ class Game {
     // ---- main update ----
     fun update(dt: Float, inp: Input) {
         frameCount++
+        if (role != 0 || menu == 2 || ns.joining) netPump(dt)
         if (menu == 1) {
             val up = inp.my > 0.5f && prev.my <= 0.5f; val dnn = inp.my < -0.5f && prev.my >= -0.5f; val rt = inp.mx > 0.5f && prev.mx <= 0.5f; val lf = inp.mx < -0.5f && prev.mx >= -0.5f
             if (up) menuRow = (menuRow + 2) % 3; if (dnn) menuRow = (menuRow + 1) % 3; val d = if (rt) 1 else if (lf) -1 else 0
             if (d != 0) { if (menuRow == 0) menuSel = (menuSel + d + MAP_COUNT) % MAP_COUNT else if (menuRow == 1) diff = (diff + d + 3) % 3 else mode = (mode + d + modeCount) % modeCount }
             if (msgT > 0) msgT -= dt
-            if ((inp.confirm && !prev.confirm) || (inp.start && !prev.start)) { fovMul = 1f; hudK = 1f; menu = 0; startMatch(menuSel) }
+            if ((inp.confirm && !prev.confirm) || (inp.start && !prev.start)) { fovMul = 1f; hudK = 1f; if (mode == 1) hostStart() else if (mode == 2) lobbyStart() else { menu = 0; startMatch(menuSel) } }
+            prev.set(inp); return
+        }
+        if (menu == 2) {
+            val up = inp.my > 0.5f && prev.my <= 0.5f; val dnn = inp.my < -0.5f && prev.my >= -0.5f; if (msgT > 0) msgT -= dt
+            if (ns.hosts.isNotEmpty()) { if (up) ns.hostSel = (ns.hostSel + ns.hosts.size - 1) % ns.hosts.size; if (dnn) ns.hostSel = (ns.hostSel + 1) % ns.hosts.size }
+            if (inp.confirm && !prev.confirm && !ns.joining && ns.hosts.isNotEmpty()) joinAddr(ns.hosts[ns.hostSel].addr)
+            if (inp.back && !prev.back) { netClose(); menu = 1 }
             prev.set(inp); return
         }
         if (inp.start && !prev.start) paused = !paused
@@ -580,10 +595,12 @@ class Game {
         if (paused) {
             if (inp.tri && !prev.tri) cycleAtt(0); if (inp.reload && !prev.reload) cycleAtt(1); if (inp.swapP && !prev.swapP) cycleAtt(2); if (inp.fire && !prev.fire) cycleAtt(3)
             if (inp.mx > 0.5f && prev.mx <= 0.5f) sens = fmin(2.5f, sens + 0.2f); if (inp.mx < -0.5f && prev.mx >= -0.5f) sens = fmax(0.3f, sens - 0.2f)
-            if (inp.back && !prev.back) { menu = 1; paused = false }
-            prev.set(inp); return
+            if (inp.back && !prev.back) { if (role != 0) netClose(); menu = 1; paused = false; prev.set(inp); return }
+            if (role == 0) { prev.set(inp); return }
+            use.clear()
         }
-        if (over) { if (inp.confirm && !prev.confirm && !paused) startMatch(mapIdx); prev.set(inp); return }
+        if (over && role != 2) { overT += dt; if ((inp.confirm && !prev.confirm && !paused) || (role == 1 && overT > 8f)) { overT = 0f; startMatch(mapIdx) }; prev.set(inp); return }
+        if (over) { prev.set(inp); for (q in tr) q.t -= dt; tr.removeAll { it.t <= 0 }; return }
         run {
             val m0 = e[meI]
             if (m0.alive && m0.moving && drive < 0 && !dn.on && (m0.phase / (if (m0.sprint) 2.2f else 2.8f)).toInt() != (lastPh / (if (m0.sprint) 2.2f else 2.8f)).toInt()) Sfx.play(Sfx.STEP, if (m0.crouch) 0.12f else 0.3f, 0f)
@@ -595,11 +612,20 @@ class Game {
         for (k in 0 until 4) if (feedT[k] > 0) feedT[k] -= dt
         for (k in sparks) { k.t -= dt; k.vy -= 9f * dt; k.x += k.vx * dt; k.y = fmax(0.02f, k.y + k.vy * dt); k.z += k.vz * dt }; sparks.removeAll { it.t <= 0 }
         updateDrone(dt, inp, use)
+        if (role == 2) {
+            val li = ns.lastIn; li.set(use)
+            if (use.c4 && !netPc4) ns.c4pCnt = (ns.c4pCnt + 1) and 255; if (use.det && !netPdet) ns.c4dCnt = (ns.c4dCnt + 1) and 255; netPc4 = use.c4; netPdet = use.det
+            for (p in e) if (p.prot > 0) p.prot -= dt
+            clientUpdate(dt, use)
+            for (o in e) if (o.revealT > 0) o.revealT -= dt
+            for (q in puffs) { q.t -= dt; q.y += q.vy * dt; q.sz += dt * 0.8f }; puffs.removeAll { it.t <= 0 }
+            prev.set(inp); return
+        }
         for (i in 0 until e.size) {
             val p = e[i]
             if (p.prot > 0) p.prot -= dt
             if (!p.alive) { p.respawn -= dt; if (p.respawn <= 0) spawn(i); continue }
-            if (i == meI) updatePlayer(dt, use) else updateBot(i, dt)
+            if (i == meI) updatePlayer(dt, use) else if (p.remote) updateRemote(i, dt) else updateBot(i, dt)
         }
         for (o in e) if (o.revealT > 0) o.revealT -= dt
         c4Tick(dt)

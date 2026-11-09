@@ -28,4 +28,23 @@ class SmokeTest {
             println("PERF update=${tu / N / 1000} us render=${tr / N / 1000} us tris=${g.r.statics.triangleCount}+${g.r.layers[0].triangleCount} vm=${g.r.layers[1].triangleCount} wpn=${g.e[g.meI].wpn}") }
         println("SMOKE OK maps=${g.MAP_COUNT} tris=${g.r.statics.triangleCount}+${g.r.layers[0].triangleCount}")
     }
+
+    @Test fun lanLoopback() {
+        val h = Game(); h.menu = 1; h.init(640, 360); h.mode = 1
+        val c = Game(); c.menu = 1; c.init(640, 360)
+        val ci = Input(); ci.confirm = true; h.update(1f / 60, ci); assertTrue(h.role == 1 && h.menu == 0, "host started")
+        assertTrue(c.joinIp("127.0.0.1"))
+        var ok = false
+        for (k in 0 until 400) {
+            val a = Input(); a.my = 1f; a.fire = k % 30 < 5; h.update(1f / 60, a)
+            val b = Input(); b.my = 1f; b.lx = 0.2f; b.fire = k % 40 < 5; c.update(1f / 60, b)
+            Thread.sleep(8)
+            if (c.role == 2 && c.menu == 0 && c.e.size == h.e.size && c.e[c.meI].alive && h.humans() >= 2) ok = true
+        }
+        println("NET host=${h.role} client=${c.role} slot=${c.meI} ents=${c.e.size}/${h.e.size} meAlive=${c.e.getOrNull(c.meI)?.alive} hostSeenByClient=${c.e[0].b.x}/${h.e[0].b.x} cliPosOnHost=${h.e.getOrNull(c.meI)?.b?.x}/${c.e.getOrNull(c.meI)?.b?.x}")
+        assertTrue(ok, "client joined and synced")
+        assertTrue(h.e[c.meI].remote, "slot remote on host")
+        val cx = c.e[c.meI].b.x; val hx = h.e[c.meI].b.x; assertTrue(Math.abs(cx - hx) < 3f, "client pos tracked on host $cx vs $hx")
+        c.netClose(); h.netClose()
+    }
 }

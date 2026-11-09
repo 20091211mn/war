@@ -16,7 +16,7 @@ object B {
     const val OK = 20; const val BACK = 21; const val SENS_UP = 22; const val SENS_DN = 23
     const val P_OPT = 24; const val P_MUZ = 25; const val P_GRIP = 26; const val P_MAG = 27
     const val ROW_MAP = 30; const val ROW_DIFF = 31; const val ROW_MODE = 32; const val START = 33
-    const val WEAPON = 15; const val W0 = 50
+    const val WEAPON = 15; const val W0 = 50; const val H0 = 70
     const val NB = 64
 }
 
@@ -30,7 +30,7 @@ class Controls(private val g: Game) {
     var sw = 1f; var sh = 1f
     var btns: List<Btn> = emptyList(); private set
     private var lastMode = -1
-    var wheelOpen = false; private var pickReq = -1
+    var wheelOpen = false; private var pickReq = -1; @Volatile private var lobbyConf = false
     val u get() = sh / 540f
     val moveStick: Pair<Float, Float>? get() { for (t in tc) if (t.id >= 0 && t.role == 1) return Pair(t.ox, t.oy); return null }
 
@@ -40,8 +40,11 @@ class Controls(private val g: Game) {
         fun R(id: Int, x: Float, y: Float, bw: Float, bh: Float, s: String) { l.add(Btn(id, x, y, 0f, s, bw * u, bh * u)) }
         if (g.menu == 1) {
             val cx = w * 0.30f
-            R(B.ROW_MAP, cx, h * 0.30f, 330f, 52f, "map"); R(B.ROW_DIFF, cx, h * 0.30f + 70 * u, 330f, 52f, "diff")
-            R(B.START, cx, h * 0.30f + 160 * u, 330f, 64f, "start")
+            R(B.ROW_MAP, cx, h * 0.26f, 330f, 52f, "map"); R(B.ROW_DIFF, cx, h * 0.26f + 70 * u, 330f, 52f, "diff"); R(B.ROW_MODE, cx, h * 0.26f + 140 * u, 330f, 52f, "mode")
+            R(B.START, cx, h * 0.26f + 232 * u, 330f, 64f, "start")
+        } else if (g.menu == 2) {
+            for (i in 0 until minOf(5, g.ns.hosts.size)) R(B.H0 + i, w * 0.5f, h * 0.30f + i * 62 * u, 420f, 54f, "host")
+            R(B.BACK, w * 0.5f, h - 56 * u, 220f, 50f, "back")
         } else if (g.paused) {
             R(B.PAUSE, w * 0.5f, h * 0.30f, 260f, 50f, "resume"); R(B.BACK, w * 0.5f, h * 0.30f + 64 * u, 260f, 50f, "menu")
             R(B.SENS_DN, w * 0.5f - 90 * u, h * 0.30f + 134 * u, 120f, 44f, "-"); R(B.SENS_UP, w * 0.5f + 90 * u, h * 0.30f + 134 * u, 120f, 44f, "+")
@@ -71,6 +74,7 @@ class Controls(private val g: Game) {
         when (b.id) {
             B.ROW_MAP -> g.menuSel = (g.menuSel + dir + g.MAP_COUNT) % g.MAP_COUNT
             B.ROW_DIFF -> g.diff = (g.diff + dir + 3) % 3
+            B.ROW_MODE -> g.mode = (g.mode + dir + g.modeCount) % g.modeCount
         }
     }
 
@@ -81,7 +85,8 @@ class Controls(private val g: Game) {
         if (wheelOpen) { t.id = id; t.role = 4; t.btn = 0; if (b != null && b.id >= B.W0 && b.id < B.W0 + 20) pickReq = b.id - B.W0; wheelOpen = false; return }
         t.id = id; t.x = x; t.y = y; t.ox = x; t.oy = y; t.btn = 0; t.role = 0
         if (b != null) {
-            if (g.menu == 1 && (b.id == B.ROW_MAP || b.id == B.ROW_DIFF)) { menuTap(b, x); t.role = 4; return }
+            if (g.menu == 1 && (b.id == B.ROW_MAP || b.id == B.ROW_DIFF || b.id == B.ROW_MODE)) { menuTap(b, x); t.role = 4; return }
+            if (g.menu == 2 && b.id >= B.H0 && b.id < B.H0 + 5) { g.ns.hostSel = b.id - B.H0; lobbyConf = true; t.role = 4; return }
             if (b.id == B.WEAPON) { t.role = 4; t.btn = 0; wheelOpen = true; return }
             t.role = 3; t.btn = b.id; held[b.id] = true
             if (b.id == B.ADS) adsL = !adsL else if (b.id == B.CROUCH) crL = !crL
@@ -111,6 +116,7 @@ class Controls(private val g: Game) {
         if (md != lastMode) { lastMode = md; releaseAll(); wheelOpen = false }
         val i = Input(); i.pick = pickReq; pickReq = -1
         if (g.menu == 1) { i.confirm = held[B.START]; return i }
+        if (g.menu == 2) { i.back = held[B.BACK]; i.confirm = lobbyConf; lobbyConf = false; return i }
         if (g.paused) {
             i.start = held[B.PAUSE]; i.back = held[B.BACK]
             i.mx = if (held[B.SENS_UP]) 1f else if (held[B.SENS_DN]) -1f else 0f

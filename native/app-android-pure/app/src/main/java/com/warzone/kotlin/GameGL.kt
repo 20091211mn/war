@@ -77,7 +77,7 @@ class GameGL(val g: Game, val ctl: Controls) : GLSurfaceView.Renderer {
         glBindTexture(GL_TEXTURE_2D, tex); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
         hudBmp = null; last = 0L; cap = 0; sBuf = 0; g.r.staticDirty = true
-        synchronized(g) { if (!ready) { g.modeCount = 1; g.menu = 1; g.nBots = 6; g.init(sw.coerceAtLeast(2), sh.coerceAtLeast(2)); hud = Hud(g, ctl); ready = true } }
+        synchronized(g) { if (!ready) { g.menu = 1; g.nBots = 6; g.init(sw.coerceAtLeast(2), sh.coerceAtLeast(2)); hud = Hud(g, ctl); ready = true } }
     }
 
     override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) {

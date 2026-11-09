@@ -49,10 +49,12 @@ class MainActivity : Activity() {
             View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
     }
     override fun onWindowFocusChanged(f: Boolean) { super.onWindowFocusChanged(f); if (f) immersive() }
-    override fun onResume() { super.onResume(); view.onResume(); startAudio() }
+    private var mcLock: android.net.wifi.WifiManager.MulticastLock? = null
+    override fun onResume() { super.onResume(); view.onResume(); startAudio()
+        try { val wm = applicationContext.getSystemService(android.content.Context.WIFI_SERVICE) as android.net.wifi.WifiManager; mcLock = wm.createMulticastLock("wz").apply { setReferenceCounted(false); acquire() } } catch (e: Throwable) {} }
     override fun onPause() {
-        super.onPause(); stopAudio(); ctl.releaseAll()
-        synchronized(game) { if (game.menu == 0 && !game.over) game.paused = true }
+        super.onPause(); stopAudio(); ctl.releaseAll(); try { mcLock?.release() } catch (e: Throwable) {}
+        synchronized(game) { if (game.menu == 0 && !game.over && game.role == 0) game.paused = true }
         view.onPause()
     }
 
