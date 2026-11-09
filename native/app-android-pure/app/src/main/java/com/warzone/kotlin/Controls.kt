@@ -59,7 +59,7 @@ class Controls(private val g: Game) {
             A(B.C4, 44 * u, 170 * u, 25f, "C4"); A(B.DET, 44 * u, 228 * u, 25f, "DET"); A(B.SEAT, 44 * u, 286 * u, 25f, "SEAT"); A(B.DRONE, 44 * u, 344 * u, 25f, "UAV")
             A(B.PAUSE, w / 2 + 150 * u, 30 * u, 20f, "II")
             R(B.WEAPON, w / 2 + 10 * u, h - 44 * u, 250f, 66f, "weapon")
-            if (g.over) R(B.OK, w / 2, h - 110 * u, 200f, 56f, "OK")
+            if (g.over) R(B.OK, w / 2, h - 40 * u, 200f, 52f, "OK")
             if (wheelOpen) {
                 val tw = 196f; val th = 64f; val gx = 10f; val cx0 = w / 2 - (tw + gx) * u; val cy0 = h / 2 - (th + gx) * u - 6 * u
                 for (i in 0 until g.WEAPON_COUNT) R(B.W0 + i, cx0 + (i % 3) * (tw + gx) * u, cy0 + (i / 3) * (th + gx) * u, tw, th, "w$i")
