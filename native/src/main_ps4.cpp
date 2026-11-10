@@ -205,7 +205,9 @@ static void gpuDraw(const std::vector<float>&v,const float*vp){
   size_t nv=v.size()/5; for(size_t o=0;o<nv;o+=60000){ size_t c=std::min<size_t>(60000,nv-o); c-=c%3; if(!c)break; glVertexAttribPointer(gpaP,3,GL_FLOAT,GL_FALSE,20,&v[o*5]); glVertexAttribPointer(gpaT,2,GL_FLOAT,GL_FALSE,20,&v[o*5+3]); glDrawArrays(GL_TRIANGLES,0,(GLsizei)c); } }
 static void gpuVP(const Renderer&r,float n,float f,float*o){ float P[16]={0},V[16]={0}; P[0]=2.f*r.focal/r.W; P[5]=2.f*r.focal/r.H; P[10]=(f+n)/(n-f); P[11]=-1; P[14]=2*f*n/(n-f);
   V[0]=r.rx;V[4]=0;V[8]=r.rz;V[12]=-(r.rx*r.cam.x+r.rz*r.cam.z); V[1]=r.ux;V[5]=r.uy;V[9]=r.uz;V[13]=-(r.ux*r.cam.x+r.uy*r.cam.y+r.uz*r.cam.z); V[2]=-r.fx;V[6]=-r.fy;V[10]=-r.fz;V[14]=r.fx*r.cam.x+r.fy*r.cam.y+r.fz*r.cam.z; V[15]=1; m4mul(P,V,o); }
-static void gpuFrame(Game&g,int frame,int vx=0,int vw=OUT_W){
+// شاشة منقسمة: مجسّم السلاح (آلاف المثلثات) يُولَّد كل إطارين لكل لاعب بالتناوب، وفي الإطار الآخر يُعاد رسم النسخة المخزّنة بمصفوفة الإسقاط القديمة نفسها (يبقى ملتصقاً بالكاميرا تماماً)
+static std::vector<float> gGunC[2]; static float gGunVP[2][16];
+static void gpuFrame(Game&g,int frame,int vx=0,int vw=OUT_W,int pI=-1,bool reuseVM=false){
   Renderer&r=g.r; for(int i=0;i<8;i++)glDisableVertexAttribArray(i); glViewport(vx,0,vw,OUT_H); if(vw<OUT_W){ glEnable(GL_SCISSOR_TEST); glScissor(vx,0,vw,OUT_H); } else glDisable(GL_SCISSOR_TEST); glDisable(GL_BLEND); glDisable(GL_CULL_FACE); glDepthMask(GL_TRUE); glClearColor(0.45f,0.55f,0.75f,1.f); glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
   glUseProgram(gpPg); glActiveTexture(GL_TEXTURE0); if(gpSam>=0)glUniform1i(gpSam,0); glEnableVertexAttribArray(gpaP); glEnableVertexAttribArray(gpaT);
   size_t nw=r.gv[0].size()/15,nvm=r.gv[1].size()/15;
@@ -227,7 +229,9 @@ static void gpuFrame(Game&g,int frame,int vx=0,int vw=OUT_W){
     if(gDepthBits>0){ glEnable(GL_BLEND); glBlendFunc(GL_DST_COLOR,GL_SRC_COLOR); glDepthMask(GL_FALSE); // نقش الشبكة: ضرب ×2 (النسيج = K/2)
       for(int L=0;L<3;L++)if(!r.gd[L].empty()){ glBindTexture(GL_TEXTURE_2D,gpDet[L]); gpuDraw(r.gd[L],vp); }
       glDepthMask(GL_TRUE); glDisable(GL_BLEND); glBindTexture(GL_TEXTURE_2D,gpPal); } }
-  if(nvm){ if(gDepthBits>0)glClear(GL_DEPTH_BUFFER_BIT); gpuVP(r,0.04f,12.f,vp); gpuDraw(r.gv[1],vp); }
+  if(pI>=0&&reuseVM){ if(!gGunC[pI].empty()){ if(gDepthBits>0)glClear(GL_DEPTH_BUFFER_BIT); gpuDraw(gGunC[pI],gGunVP[pI]); } }
+  else if(nvm){ if(gDepthBits>0)glClear(GL_DEPTH_BUFFER_BIT); gpuVP(r,0.04f,12.f,vp); gpuDraw(r.gv[1],vp); if(pI>=0){ gGunC[pI]=r.gv[1]; memcpy(gGunVP[pI],vp,sizeof vp); } }
+  else if(pI>=0)gGunC[pI].clear();
   if(frame<=3||frame%300==0)wzlog("gpuFrame %d world tris %d viewmodel tris %d err=0x%x",frame,(int)nw,(int)nvm,(unsigned)glGetError());
   for(int i=0;i<8;i++)glDisableVertexAttribArray(i); r.gv[0].clear(); r.gv[1].clear(); for(int L=0;L<3;L++)r.gd[L].clear(); glDisable(GL_SCISSOR_TEST);
 }
@@ -237,8 +241,9 @@ static void splitRender(Game&g,std::vector<uint32_t>&upb,int frame){
   for(int pI=0;pI<2;pI++){
     if(pI)g.lsx();
     memset(r.fb.data(),0,(size_t)HW*WZ_IH*4); std::fill(r.rowD.begin(),r.rowD.end(),0);
-    r.W=HW; g.render(); r.flush();
-    gpuFrame(g,frame,pI*HW,HW);
+    const bool reuseVM=((frame+pI)&1)&&!gGunC[pI].empty(); g.skipVM=reuseVM; // نصف تكلفة المجسّم
+    r.W=HW; g.render(); r.flush(); g.skipVM=false;
+    gpuFrame(g,frame,pI*HW,HW,pI,reuseVM);
     for(int y=0;y<WZ_IH;y++){ uint32_t*ub=&upb[(size_t)y*WZ_IW+pI*HW]; if(r.rowD[y]){ const uint32_t*sr=&r.fb[(size_t)y*HW]; for(int i=0;i<HW;i++){ uint32_t p=sr[i]; ub[i]=(p&0xFF00FF00u)|((p>>16)&0xFFu)|((p&0xFFu)<<16); } } else memset(ub,0,(size_t)HW*4); }
     r.W=WZ_IW;
     if(pI)g.lsx();

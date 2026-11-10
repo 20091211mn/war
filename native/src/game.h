@@ -532,6 +532,7 @@ struct Game{
   bool jetStep(Jet&J,float dt,float rc,float pc,float yc,float thd,bool ab); void jetAI(int j,float dt); void jetGun(int j,int aim=-1); float jetSpeed(const Jet&J)const{ return sqrtf(J.vx*J.vx+J.vy*J.vy+J.vz*J.vz); }
   void airCam(Cam&c); void airDraw(const Cam&c); void airHud(int sc); bool projP(float x,float y,float z,int&X,int&Y,float&zc); void jetSay(const char*s){snprintf(jetMsg,48,"%s",s);jetMsgT=2.5f;} int myJet()const{ return (air&&meI>=0&&meI<(int)entJet.size())?entJet[meI]:-1; }
   int modeCount=5; int nLocal=1,act=0; bool coop=true; Input in2; LS ls2; int vpass=0; float fovMul=1.f,hudK=1.f;
+  bool skipVM=false; // PS4 شاشة منقسمة: تخطّي توليد مجسّم السلاح في هذا الإطار
   void lsx(){ if(nLocal<2)return; LS&o=ls2; std::swap(meI,o.meI);std::swap(drive,o.drive);std::swap(gren,o.gren);std::swap(prim,o.prim);std::swap(streak,o.streak);std::swap(glCnt,o.glCnt);
     std::swap(lookIdle,o.lookIdle);std::swap(hitMark,o.hitMark);std::swap(dmgFlash,o.dmgFlash);std::swap(hitAng,o.hitAng);std::swap(hitAngT,o.hitAngT);std::swap(dnCd,o.dnCd);std::swap(dnSpot,o.dnSpot);std::swap(msgT,o.msgT);std::swap(optZ,o.optZ);
     std::swap(camX,o.camX);std::swap(camY,o.camY);std::swap(camZ,o.camZ);std::swap(nearVeh,o.nearVeh);std::swap(pdn,o.pdn);std::swap(pfireD,o.pfireD);std::swap(pg,o.pg);std::swap(gunner,o.gunner);std::swap(pSeat,o.pSeat);
@@ -575,7 +576,7 @@ struct Game{
   void drawGunAt(float ox,float oy,float oz,float yaw,float pitch,int wi,float flash,bool lit,float k,const GAtt*at=nullptr,bool hideOptic=false){
     const GunDef&g=GUNDEFS[wi]; GAtt a=at?*at:GAtt(); if(hideOptic)a.optic=0; const RPose*R=rlp; float rl=R?R->rz:0.f; r.obbRoll=rl; // أثناء التصويب عبر المنظار: لا نرسم جسم المنظار كي لا يحجب الرؤية
     auto part=[&](float x,float y,float z,float sx,float sy,float sz,const float*c){float o[3];{float xx=x,yy=y; if(rl!=0){float c_=cosf(rl),s_=sinf(rl); xx=x*c_-y*s_; yy=x*s_+y*c_;} Renderer::rot(yaw,pitch,xx,yy,z,o);}r.obb(ox+o[0],oy+o[1],oz+o[2],sx*.5f,sy*.5f,sz*.5f,yaw,pitch,c[0]*k,c[1]*k,c[2]*k,true,lit);};
-    const bool awm=gmodOf(wi)!=nullptr&&(vmMinD>0||[&]{ float dx=ox-r.cam.x,dy=oy-r.cam.y,dz=oz-r.cam.z; return dx*dx+dy*dy+dz*dz<20.f*20.f; }()); // بعيد: مكعبات بدل الموديل المفصّل (يوفّر الكثير من المثلثات)
+    const bool awm=gmodOf(wi)!=nullptr&&(vmMinD>0||[&]{ float dx=ox-r.cam.x,dy=oy-r.cam.y,dz=oz-r.cam.z; return dx*dx+dy*dy+dz*dz<5.f*5.f; }()); // بعيد: مكعبات بدل الموديل المفصّل (يوفّر الكثير من المثلثات)
     if(awm){ static const float one[3]={1,1,1}, fast[3]={1.5f,0.95f,0.5f}; drawAwmGroup(wi,0,ox,oy,oz,yaw,pitch,rl,0,k,lit,one); if(!(R&&R->hideRear))drawAwmGroup(wi,3,ox,oy,oz,yaw,pitch,rl,0,k,lit,one); drawAwmGroup(wi,2,ox,oy,oz,yaw,pitch,rl,R?R->bolt:0.f,k,lit,one); if(!(R&&R->hideMag))drawAwmGroup(wi,1,ox,oy,oz,yaw,pitch,rl,0,k,lit,a.mag==2?fast:one); if(R&&R->hasRocket)drawAwmGroup(wi,1,ox,oy,oz,yaw,pitch,rl,R->rk[2],k,lit,one,R->rk[0],R->rk[1]); }
     if(!awm)for(int i=0;i<g.np;i++){float c[3];gcol(g.p[i].c,c); if(R&&R->hideRear&&i!=0&&g.p[i].z-g.p[i].sz*0.5f>0.1f)continue; float dz=(R&&(i==R->shiftIdx||i==R->shiftIdx2))?R->shiftV:0.f; part(g.p[i].x,g.p[i].y,g.p[i].z+dz,g.p[i].sx,g.p[i].sy,g.p[i].sz,c);}
     float cb[3],cd[3]; gcol('b',cb); gcol('d',cd);
@@ -660,7 +661,7 @@ struct Game{
     for(auto&k:sparks){ float a=std::min<float>(1.f,k.t*5.f); r.obb(k.x,k.y,k.z,0.025f,0.025f,0.025f,0,0,1.f,0.7f*a+0.2f,0.2f,false,false); }
 
     // مجسّم السلاح (نفس قطع نسخة أندرويد)
-    if(me.alive&&(drive<0||passenger())&&!dn.on&&myJet()<0&&!(adsHeld&&(zoomOf(me)>=2.f||(gmodOf(me.wpn)&&me.wpn!=8)))){ r.flush(); r.zBias=1000.f; const GunDef&g=GUNDEFS[me.wpn]; float k=adsHeld?1.f:0.f; float top=g.sy;
+    if(!skipVM&&me.alive&&(drive<0||passenger())&&!dn.on&&myJet()<0&&!(adsHeld&&(zoomOf(me)>=2.f||(gmodOf(me.wpn)&&me.wpn!=8)))){ r.flush(); r.zBias=1000.f; const GunDef&g=GUNDEFS[me.wpn]; float k=adsHeld?1.f:0.f; float top=g.sy;
       static float bob=0; bob+=me.moving?(me.sprint?0.17f:0.11f):0; float bx=sinf(bob)*0.008f*(me.moving?1:0),by=fabsf(cosf(bob))*0.008f*(me.moving?1:0);
       float x=0.17f*(1-k)+0*k+bx,y=-0.17f*(1-k)+(-top-0.002f)*k+by,z=-0.33f*(1-k)-0.36f*k; float kick=me.flash>0?0.045f:0.f; z+=kick; float rx=kick*1.2f,ry=0.07f*(1-k); y+=sinf(t*1.7f)*0.0025f*(1-k*0.7f); x+=sinf(t*0.9f)*0.0015f;
       RPose RP; bool inRl=false; if(me.reloadT>=0){ float tt=std::min<float>(1.f,me.reloadT/(WEAPONS[me.wpn].reload*me.relM)); int wk=WKIND[me.wpn%WEAPON_COUNT]; RL::pose(GUNDEFS[me.wpn],wk<=1,wk==7,tt,RP,isExpl(me.wpn)); inRl=true; x+=RP.x; y+=RP.y; z+=RP.z; rx+=RP.rx; ry+=RP.ry; }

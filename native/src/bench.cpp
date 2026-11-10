@@ -1,5 +1,6 @@
 #include "game.h"
 #include <chrono>
+static double g_flushMs=0;
 static double ms(std::chrono::steady_clock::time_point a,std::chrono::steady_clock::time_point b){return std::chrono::duration<double,std::milli>(b-a).count();}
 int main(int argc,char**argv){ int mi=argc>1?atoi(argv[1]):0; int th=argc>2?atoi(argv[2]):1; int W=argc>3?atoi(argv[3]):1920; srand(7);
   Game g; g.r.startThreads(th); g.nBots=7; g.menu=0; g.mapIdx=mi; g.init(W,W*9/16); Input in; double tj=0,tf=0,th_=0; int N=0;

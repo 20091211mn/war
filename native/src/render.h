@@ -145,7 +145,8 @@ struct Renderer {
       const float*P[3]={a,b,c}; float rad=0; for(int i=0;i<3;i++){ float ex=P[i][0]-cam.x-cx,ey=P[i][1]-cam.y-cy,ez=P[i][2]-cam.z-cz; rad=std::max(rad,sqrtf(ex*ex+ey*ey+ez*ez)); }
       float e2=0; for(int i=0;i<3;i++){ const float*p0=P[i],*p1=P[(i+1)%3]; float ex=p0[0]-p1[0],ey=p0[1]-p1[1],ez=p0[2]-p1[2]; e2=std::max(e2,ex*ex+ey*ey+ez*ez); }
       bool grad=(d-rad<fogF)&&(d+rad>fogN);
-      if(grad&&dep<7&&e2>14.f*14.f){ float m0[5],m1[5],m2[5]; for(int i=0;i<5;i++){ m0[i]=(a[i]+b[i])*.5f; m1[i]=(b[i]+c[i])*.5f; m2[i]=(c[i]+a[i])*.5f; }
+      const float sub=std::max(14.f,(fogF-fogN)*0.1f); // خرائط الضباب البعيد (قاعدة جوية): لا نُقسّم الأرض الضخمة إلى ملايين المثلثات
+      if(grad&&dep<7&&e2>sub*sub){ float m0[5],m1[5],m2[5]; for(int i=0;i<5;i++){ m0[i]=(a[i]+b[i])*.5f; m1[i]=(b[i]+c[i])*.5f; m2[i]=(c[i]+a[i])*.5f; }
         gpuTri(a,m0,m2,r,g,bl,useFog,det,dep+1); gpuTri(m0,b,m1,r,g,bl,useFog,det,dep+1); gpuTri(m2,m1,c,r,g,bl,useFog,det,dep+1); gpuTri(m0,m1,m2,r,g,bl,useFog,det,dep+1); return; }
       f=(d-fogN)/(fogF-fogN+1e-9f); f=f<0?0:f>1?1:f; }
     float R=r+(fog[0]-r)*f,G=g+(fog[1]-g)*f,B=bl+(fog[2]-bl)*f;
