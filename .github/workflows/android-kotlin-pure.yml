@@ -21,12 +21,24 @@ jobs:
         with:
           gradle-version: 8.9
       - name: Smoke test Kotlin engine (menu, 8 maps, play, render)
-        continue-on-error: true
-        run: gradle -p native/kotlin :core:test --tests com.warzone.core.SmokeTest --no-daemon -i 2>&1 | grep -E "NET host|lanLoopback|PERF|VM wpn|VMNAN|SMOKE|FAILED|PASSED|Exception|AssertionError|at com.warzone" | head -40
+        run: gradle -p native/kotlin :core:test --tests com.warzone.core.SmokeTest --no-daemon -i 2>&1 | tee /tmp/kt.log | grep -E "NET host|PERF|SMOKE|AIR |FAILED|AssertionError|at com.warzone" | head -30; test ${PIPESTATUS[0]} -eq 0
+      - name: Prepare signing key (secrets if present, otherwise default key)
+        env:
+          KS_B64: ${{ secrets.WZ_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KS_B64" ]; then echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/wz-release.jks"; echo "WZ_KEYSTORE_FILE=$RUNNER_TEMP/wz-release.jks" >> "$GITHUB_ENV"; echo "Signing with your release key"; else echo "No WZ_KEYSTORE_BASE64 secret: using default key"; fi
       - name: Build Kotlin app (Kotlin only, no C++)
+        env:
+          WZ_KEYSTORE_PASSWORD: ${{ secrets.WZ_KEYSTORE_PASSWORD }}
+          WZ_KEY_ALIAS: ${{ secrets.WZ_KEY_ALIAS }}
+          WZ_KEY_PASSWORD: ${{ secrets.WZ_KEY_PASSWORD }}
         run: gradle -p native/app-android-pure assembleRelease --no-daemon
       - name: Collect APK
         run: cp native/app-android-pure/app/build/outputs/apk/release/app-release.apk Warzone-kotlin-pure.apk
+      - name: Verify APK signature
+        run: |
+          AS=$(ls $ANDROID_HOME/build-tools/*/apksigner | sort -V | tail -1)
+          "$AS" verify --verbose --print-certs Warzone-kotlin-pure.apk | grep -E "Verifies|Signer #1 certificate (DN|SHA-256)|Number of signers|v[0-9]" | head
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:

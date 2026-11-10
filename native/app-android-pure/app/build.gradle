@@ -15,14 +15,20 @@ android {
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = '17' }
     // مفتاح توقيع ثابت: كل بناء يُثبَّت فوق السابق كتحديث (بدل مفتاح عشوائي جديد كل مرة يمنع التحديث فتبقى النسخة القديمة)
-    signingConfigs { fixed { storeFile file('warzone-debug.keystore'); storePassword 'android'; keyAlias 'warzone'; keyPassword 'android' } }
+    // توقيع تلقائي: إن وُجدت أسرار المفتاح (WZ_KEYSTORE_FILE...) يُوقَّع بمفتاح الإصدار الخاص بك، وإلا بالمفتاح الثابت الافتراضي
+    signingConfigs {
+        fixed { storeFile file('warzone-debug.keystore'); storePassword 'android'; keyAlias 'warzone'; keyPassword 'android' }
+        if (System.getenv('WZ_KEYSTORE_FILE')) {
+            release { storeFile file(System.getenv('WZ_KEYSTORE_FILE')); storePassword System.getenv('WZ_KEYSTORE_PASSWORD'); keyAlias System.getenv('WZ_KEY_ALIAS'); keyPassword System.getenv('WZ_KEY_PASSWORD') }
+        }
+    }
     lint { checkReleaseBuilds false; abortOnError false }
     buildTypes {
         debug { signingConfig signingConfigs.fixed }
         release {
             debuggable false
             minifyEnabled false
-            signingConfig signingConfigs.fixed
+            signingConfig System.getenv('WZ_KEYSTORE_FILE') ? signingConfigs.release : signingConfigs.fixed
         }
     }
 }
