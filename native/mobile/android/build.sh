@@ -16,7 +16,7 @@ for abi in arm64-v8a armeabi-v7a; do
   echo "built $abi: $(stat -c %s "$OUT/stage/lib/$abi/libwarzone.so") bytes"
 done
 # أيقونة
-ICON="$HERE/../../../public/icon-512.png"; for d in "mdpi:48" "hdpi:72" "xhdpi:96" "xxhdpi:144" "xxxhdpi:192"; do n=${d%%:*}; px=${d##*:}; mkdir -p "$OUT/res/mipmap-$n"; convert "$ICON" -resize ${px}x${px} "$OUT/res/mipmap-$n/ic_launcher.png" 2>/dev/null || cp "$ICON" "$OUT/res/mipmap-$n/ic_launcher.png"; done
+ICON="$HERE/../../icon-512.png"; for d in "mdpi:48" "hdpi:72" "xhdpi:96" "xxhdpi:144" "xxxhdpi:192"; do n=${d%%:*}; px=${d##*:}; mkdir -p "$OUT/res/mipmap-$n"; convert "$ICON" -resize ${px}x${px} "$OUT/res/mipmap-$n/ic_launcher.png" 2>/dev/null || cp "$ICON" "$OUT/res/mipmap-$n/ic_launcher.png"; done
 "$BT/aapt2" compile --dir "$OUT/res" -o "$OUT/res.zip"
 "$BT/aapt2" link -o "$OUT/base.apk" -I "$PLAT/android.jar" --manifest "$HERE/AndroidManifest.xml" --min-sdk-version 26 --target-sdk-version 33 "$OUT/res.zip"
 (cd "$OUT/stage" && zip -qr ../base.apk lib)

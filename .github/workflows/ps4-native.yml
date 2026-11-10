@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['native/**', 'shared/**', 'tools/export-native.js', '.github/workflows/ps4-native.yml']
+    paths: ['native/**', 'tools/data/**', 'tools/export-native.js', '.github/workflows/ps4-native.yml']
 
 permissions:
   contents: write
@@ -34,7 +34,6 @@ jobs:
       - name: Host sanity test (software renderer + bots)
         run: |
           cd native/src && g++ -O2 -std=c++17 -pthread -o /tmp/hl headless.cpp && /tmp/hl 0 10 && /tmp/hl 4 10 && g++ -O2 -std=c++17 -pthread -o /tmp/st splittest.cpp && /tmp/st 0 1 && /tmp/st 2 0 && g++ -O2 -std=c++17 -pthread -o /tmp/nt nettest.cpp && /tmp/nt
-          cd ../.. && (PORT=3000 node server/server.js > /tmp/srv.log 2>&1 &) && sleep 2 && cd native/src && g++ -O2 -std=c++17 -pthread -o /tmp/acl acltest.cpp && /tmp/acl
       - name: Download OpenOrbis toolchain
         env:
           GH_TOKEN: ${{ github.token }}

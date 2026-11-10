@@ -1,23 +1,12 @@
 {
-  "name": "warzone-lan",
-  "version": "1.0.0",
-  "description": "Warzone LAN - لعبة تصويب ثلاثية الأبعاد (أحمر ضد أزرق) للجوال، بدون أي اعتماديات خارجية",
+  "name": "warzone-native",
+  "version": "2.0.0",
+  "description": "Warzone - لعبة تصويب ثلاثية الأبعاد (أحمر ضد أزرق) أصلية: PS4 / iOS / Android (Kotlin)",
   "type": "module",
-  "main": "server/server.js",
   "scripts": {
-    "start": "node server/server.js",
-    "test": "node test/test-maps.js && node test/test-physics.js && node test/test-stairs.js && node test/test-vehicles.js && node test/test-tank.js && node test/test-c4.js && node test/test-extras.js && node test/test-weapons.js && node test/test-server.js",
-    "build:www": "node tools/build-www.js"
+    "export:native": "node tools/export-native.js",
+    "export:kotlin": "node tools/export-kotlin.js"
   },
-  "engines": {
-    "node": ">=18"
-  },
-  "license": "MIT",
-  "devDependencies": {
-    "@capacitor/android": "^6.1.2",
-    "@capacitor/cli": "^6.1.2",
-    "@capacitor/core": "^6.1.2",
-    "@capacitor/ios": "^6.1.2",
-    "esbuild": "^0.21.5"
-  }
+  "engines": { "node": ">=18" },
+  "license": "MIT"
 }

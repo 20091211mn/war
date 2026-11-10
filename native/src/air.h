@@ -150,7 +150,7 @@ inline void Game::airDraw(const Cam&c){
     {-2.2f,-0.1f,5.9f,1.3f,0.06f,0.9f,0},{2.2f,-0.1f,5.9f,1.3f,0.06f,0.9f,0},{-1.0f,1.5f,5.1f,0.06f,1.1f,1.1f,1},{1.0f,1.5f,5.1f,0.06f,1.1f,1.1f,1},{0,0,6.2f,0.6f,0.55f,0.5f,3} };
   for(int j=0;j<(int)jets.size();j++){ const Jet&J=jets[j]; if(!J.alive)continue; float dx=J.x-c.x,dz=J.z-c.z; if(dx*dx+dz*dz>r.fogF*r.fogF)continue;
     float cr=cosf(J.roll),sr=sinf(J.roll); r.obbRoll=J.roll; float tc[3]={J.team?0.2f:0.85f,J.team?0.4f:0.18f,J.team?0.9f:0.18f};
-    for(const Pt&p:P){ float lx=p.x*cr-p.y*sr,ly=p.x*sr+p.y*cr; float o[3]; Renderer::rot(J.yaw,J.pitch,lx,ly,p.z,o); const float*col=p.col==1?tc:p.col==2?(const float[3]){0.12f,0.2f,0.3f}:p.col==3?(const float[3]){0.1f,0.1f,0.11f}:(const float[3]){0.48f,0.52f,0.57f};
+    for(const Pt&p:P){ float lx=p.x*cr-p.y*sr,ly=p.x*sr+p.y*cr; float o[3]; Renderer::rot(J.yaw,J.pitch,lx,ly,p.z,o); static const float CG[3]={0.48f,0.52f,0.57f},CC[3]={0.12f,0.2f,0.3f},CE[3]={0.1f,0.1f,0.11f}; const float*col=p.col==1?tc:p.col==2?CC:p.col==3?CE:CG;
       r.obb(J.x+o[0],J.y+o[1],J.z+o[2],p.hx,p.hy,p.hz,J.yaw,J.pitch,col[0],col[1],col[2]); }
     if(J.ab>0.3f){ float o[3]; Renderer::rot(J.yaw,J.pitch,0,0,7.2f,o); r.obb(J.x+o[0],J.y+o[1],J.z+o[2],0.35f,0.35f,0.9f*J.ab,J.yaw,J.pitch,1.f,0.6f,0.15f,false,false); }
     r.obbRoll=0; }

@@ -21,7 +21,7 @@ struct Mobile{
   // ---------- تهيئة ----------
   void start(int screenW,int screenH,int cores){
     sw=std::max(1,screenW); sh=std::max(1,screenH); baseH=std::min(540,std::max(360,sh)); H=baseH; W=calcW(H);
-    g.modeCount=4; g.menu=1; g.nBots=6; g.r.startThreads(std::max(1,std::min(4,cores-1)));
+    g.modeCount=3; g.menu=1; g.nBots=6; g.r.startThreads(std::max(1,std::min(4,cores-1)));
     g.init(W,H); out.assign((size_t)W*H,0); started=true;
   }
   int calcW(int h)const{ int w=(int)(h*(float)sw/sh+0.5f); w=std::max(h,std::min((int)(h*2.4f),w)); return (w+1)&~1; }
