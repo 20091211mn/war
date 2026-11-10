@@ -36,6 +36,8 @@ struct Mobile{
       A(M_OK,w-110*u,h-110*u,48,"OK"); A(M_BACK,w-235*u,h-72*u,34,"BACK");
       if(g.paused&&!g.menu){ A(P_OPT,w-60*u,150*u,30,"OPTIC"); A(P_MUZ,w-60*u,215*u,30,"MUZZLE"); A(P_GRIP,w-60*u,280*u,30,"GRIP"); A(P_MAG,w-60*u,345*u,30,"MAG"); }
       return; }
+    if(g.air&&g.myJet()>=0){ A(B_FIRE,w-120*u,h-130*u,64,"GUN"); A(B_ADS,w-236*u,h-70*u,40,"BURN"); A(B_JUMP,w-62*u,h-250*u,36,"THR+"); A(B_CROUCH,w-196*u,h-200*u,34,"THR-"); A(B_USE,w-46*u,150*u,25,"EXIT");
+      A(B_PREV,w-190*u,32*u,22,"<"); A(B_NEXT,w-140*u,32*u,22,">"); A(B_PAUSE,w/2+125*u,28*u,20,"II"); if(g.over)A(M_OK,w/2,h-120*u,46,"OK"); return; }
     A(B_FIRE,w-120*u,h-130*u,64,"FIRE"); A(B_ADS,w-236*u,h-70*u,40,"ADS"); A(B_JUMP,w-62*u,h-250*u,36,"JUMP"); A(B_CROUCH,w-196*u,h-200*u,34,"CROUCH"); A(B_RELOAD,w-290*u,h-140*u,32,"R");
     A(B_GREN,w-46*u,150*u,25,"G"); A(B_USE,w-46*u,208*u,25,"CAR");
     A(B_C4,44*u,200*u,25,"C4"); A(B_DET,44*u,258*u,25,"DET"); A(B_SEAT,44*u,316*u,25,"SEAT"); A(B_DRONE,44*u,374*u,25,"UAV");
@@ -50,7 +52,7 @@ struct Mobile{
     if(g.wheelOpen){ int sc2=g.hudSc(); for(int i=0;i<WEAPON_COUNT;i++){ int rx,ry,rw,rh; g.wheelRect(i,sc2,rx,ry,rw,rh); if(x>=rx&&x<=rx+rw&&y>=ry&&y<=ry+rh){ pickReq=i; break; } } g.wheelOpen=false; t->id=id; t->role=4; t->btn=0; return; }
     t->id=id; t->x=x; t->y=y; t->ox=x; t->oy=y; t->btn=0; t->role=0;
     if(b==B_WEAPON){ g.wheelOpen=true; t->role=4; return; }
-    if(b){ t->role=3; t->btn=b; held[b]=true; if(b==B_ADS)adsL=!adsL; else if(b==B_CROUCH)crL=!crL; return; }
+    if(b){ t->role=3; t->btn=b; held[b]=true; if(b==B_ADS)adsL=!adsL; else if(b==B_CROUCH&&!(g.air&&g.myJet()>=0))crL=!crL; return; }
     if(g.menu||g.paused)return;
     bool haveMove=false; for(auto&q:tc)if(q.id>=0&&q.role==1)haveMove=true;
     if(x<W*0.38f&&!haveMove){ t->role=1; stX=stY=0; } else t->role=2;
@@ -76,7 +78,7 @@ struct Mobile{
       return in; }
     float sx=stX,sy=stY,m=sqrtf(sx*sx+sy*sy); const float D=0.14f; if(m<D){sx=sy=0;} else { float k=std::min(1.f,(m-D)/(1-D)); sx=sx/m*k; sy=sy/m*k; }
     in.mx=sx; in.my=sy; in.sprint=sy>0.85f&&m>0.95f;
-    in.fire=held[B_FIRE]; in.ads=adsL; in.jump=held[B_JUMP]; in.crouch=crL; in.reload=held[B_RELOAD];
+    in.fire=held[B_FIRE]; in.ads=adsL; in.jump=held[B_JUMP]; in.crouch=(g.air&&g.myJet()>=0)?held[B_CROUCH]:crL; in.reload=held[B_RELOAD];
     in.grenade=held[B_GREN]; in.tri=held[B_USE]; in.use=held[B_USE]; in.drone=held[B_DRONE]; in.c4=held[B_C4]; in.det=held[B_DET]; in.seat=held[B_SEAT];
     in.swapP=held[B_PREV]; in.swapN=held[B_NEXT]; in.start=held[B_PAUSE]; in.confirm=g.over&&held[M_OK];
     return in; }
