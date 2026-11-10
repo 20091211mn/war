@@ -186,6 +186,21 @@ class SceneBuilder(private val g: Game) {
     }
 
     /** Camera used for the last frame (also read by HUD for projections). */
+    private val JP = floatArrayOf(0f,0f,0.5f,0.95f,0.8f,4.8f,0f, 0f,0f,-5.6f,0.75f,0.62f,1.4f,0f, 0f,-0.05f,-7.3f,0.4f,0.35f,0.7f,0f, 0f,0.85f,-2.6f,0.5f,0.38f,1.5f,2f,
+        -1f,-0.1f,-2.2f,0.4f,0.5f,1.5f,0f, 1f,-0.1f,-2.2f,0.4f,0.5f,1.5f,0f, -2.9f,-0.2f,1.4f,1.9f,0.07f,2.1f,0f, 2.9f,-0.2f,1.4f,1.9f,0.07f,2.1f,0f,
+        -5f,-0.2f,2.6f,1f,0.06f,1.2f,0f, 5f,-0.2f,2.6f,1f,0.06f,1.2f,0f, -2.2f,-0.1f,5.9f,1.3f,0.06f,0.9f,0f, 2.2f,-0.1f,5.9f,1.3f,0.06f,0.9f,0f,
+        -1f,1.5f,5.1f,0.06f,1.1f,1.1f,1f, 1f,1.5f,5.1f,0.06f,1.1f,1.1f,1f, 0f,0f,6.2f,0.6f,0.55f,0.5f,3f)
+    private val jo = FloatArray(3)
+    fun drawJets(c: Cam) {
+        for (J in g.jets) { if (!J.alive) continue; val dx = J.x - c.x; val dz = J.z - c.z; if (dx * dx + dz * dz > r.fogF * r.fogF) continue
+            val cr = cosf(J.roll); val sr = sinf(J.roll); r.obbRoll = J.roll; val t0 = if (J.team != 0) 0.2f else 0.85f; val t1 = if (J.team != 0) 0.4f else 0.18f; val t2 = if (J.team != 0) 0.9f else 0.18f
+            for (k in 0 until 15) { val b = k * 7; val px = JP[b]; val py = JP[b + 1]; val lx = px * cr - py * sr; val ly = px * sr + py * cr; r.rot(J.yaw, J.pitch, lx, ly, JP[b + 2], jo)
+                val cc = JP[b + 6].toInt(); val R: Float; val G: Float; val B: Float
+                when (cc) { 1 -> { R = t0; G = t1; B = t2 }; 2 -> { R = 0.12f; G = 0.2f; B = 0.3f }; 3 -> { R = 0.1f; G = 0.1f; B = 0.11f }; else -> { R = 0.48f; G = 0.52f; B = 0.57f } }
+                r.obb(J.x + jo[0], J.y + jo[1], J.z + jo[2], JP[b + 3], JP[b + 4], JP[b + 5], J.yaw, J.pitch, R, G, B, true, true) }
+            if (J.ab > 0.3f) { r.rot(J.yaw, J.pitch, 0f, 0f, 7.2f, jo); r.obb(J.x + jo[0], J.y + jo[1], J.z + jo[2], 0.35f, 0.35f, 0.9f * J.ab, J.yaw, J.pitch, 1f, 0.6f, 0.15f, false, false) }
+            r.obbRoll = 0f }
+    }
     fun render() {
         val me = g.e[g.meI]; val eyeH = if (me.alive) (me.b.y + (if (me.crouch) PK.eyec else PK.eye)) else me.b.y + 0.6f
         var fov = 1.3f * g.fovMul; if (g.adsHeld && me.alive) { fov = 1.3f * g.fovMul / g.zoomOf(me) }
@@ -196,6 +211,8 @@ class SceneBuilder(private val g: Game) {
             val tw2 = raycastMap(g.w, cx0, cy0, cz0, -fxw, -fyw, -fzw, D); D = fmin(D, tw2 - 0.3f); D = fmax(if (v.type == 1) 6.5f else 1.5f, D)
             c.x = cx0 - fxw * D; c.y = fmax(0.5f, cy0 - fyw * D); c.z = cz0 - fzw * D; g.camX = c.x; g.camY = c.y; g.camZ = c.z
         }
+        if (g.air && g.myJet() >= 0 && me.alive) { val J = g.jets[g.myJet()]; val cp = cosf(J.pitch); val fx = -sinf(J.yaw) * cp; val fy = sinf(J.pitch); val fz = -cosf(J.yaw) * cp
+            c = Cam(J.x - fx * 26f, fmax(2.5f, J.y - fy * 26f + 7f), J.z - fz * 26f, J.yaw, J.pitch * 0.9f - 0.12f, 1.3f * g.fovMul); g.camX = c.x; g.camY = c.y; g.camZ = c.z }
         if (g.dn.on && me.alive) c = Cam(g.dn.x, g.dn.y, g.dn.z, g.dn.yaw, g.dn.pitch, 1.3f)
         r.beginFrame(g.w, c)
         val t = g.t
@@ -215,8 +232,9 @@ class SceneBuilder(private val g: Game) {
             if (q.fire) r.obb(q.x, q.y, q.z, q.sz * .4f, q.sz * .4f, q.sz * .4f, 0f, 0f, 1.0f, 0.55f * k + 0.2f, 0.1f, false, false)
             else r.obb(q.x, q.y, q.z, q.sz * .5f, q.sz * .5f, q.sz * .5f, 0f, 0f, 0.12f + 0.1f * k, 0.12f + 0.1f * k, 0.12f + 0.1f * k, false, false)
         }
+        if (g.air) drawJets(c)
         for (i in 0 until g.e.size) {
-            if ((i == g.meI && !g.dn.on) || g.e[i].gone) continue; val a = g.e[i]; val dx = a.b.x - c.x; val dz = a.b.z - c.z
+            if ((i == g.meI && !g.dn.on) || g.e[i].gone || (g.air && g.entJet.getOrElse(i) { -1 } >= 0)) continue; val a = g.e[i]; val dx = a.b.x - c.x; val dz = a.b.z - c.z
             if (dx * dx + dz * dz > r.fogF * r.fogF || (dx * dx + dz * dz < 0.5f && i != g.meI)) continue
             drawAvatar(a, sqrtf(dx * dx + dz * dz))
         }
@@ -229,7 +247,7 @@ class SceneBuilder(private val g: Game) {
         }
         for (k in g.sparks) { val a = fmin(1f, k.t * 5f); r.obb(k.x, k.y, k.z, 0.025f, 0.025f, 0.025f, 0f, 0f, 1f, 0.7f * a + 0.2f, 0.2f, false, false) }
         // first-person gun
-        if (me.alive && (g.drive < 0 || g.passenger()) && !g.dn.on && !(g.adsHeld && (g.zoomOf(me) >= 2f || (GameData.meshOf(me.wpn) != null && me.wpn != 8)))) {
+        if (me.alive && !(g.air && g.myJet() >= 0) && (g.drive < 0 || g.passenger()) && !g.dn.on && !(g.adsHeld && (g.zoomOf(me) >= 2f || (GameData.meshOf(me.wpn) != null && me.wpn != 8)))) {
             r.zBias = 1000f; val gd = GameData.gundefs[me.wpn]; val k = if (g.adsHeld) 1f else 0f; val top = gd.sy
             bob += if (me.moving) (if (me.sprint) 0.17f else 0.11f) else 0f
             val bx = sinf(bob) * 0.008f * (if (me.moving) 1 else 0); val by = fabsf(cosf(bob)) * 0.008f * (if (me.moving) 1 else 0)

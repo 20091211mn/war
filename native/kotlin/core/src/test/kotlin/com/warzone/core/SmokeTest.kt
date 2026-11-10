@@ -47,4 +47,22 @@ class SmokeTest {
         val cx = c.e[c.meI].b.x; val hx = h.e[c.meI].b.x; assertTrue(Math.abs(cx - hx) < 3f, "client pos tracked on host $cx vs $hx")
         c.netClose(); h.netClose()
     }
+
+    @Test fun airWar() {
+        val g = Game(); g.modeCount = 1; g.menu = 1; g.init(640, 360); g.menu = 0; g.startMatch(8)
+        assertTrue(g.air && g.jets.size >= 16, "air active jets=${g.jets.size}")
+        val dt = 1f / 60
+        for (k in 0 until 60 * 120) { g.update(dt, Input()); if (k % 120 == 0) g.render()
+            for (J in g.jets) assertTrue(!J.x.isNaN() && !J.y.isNaN() && !J.z.isNaN(), "NaN jet at $k") }
+        val j0 = g.myJet(); println("AIR score=${g.score[0]}/${g.score[1]} myJet=$j0 jets=${g.jets.count { it.alive }}")
+        // الإقلاع: طائرة اللاعب على المدرج
+        g.startMatch(8); val me = g.e[g.meI]
+        val sj = g.jetNew(me.team, false, 0); val S = g.jets[sj]; S.x = me.b.x + 5f; S.z = me.b.z; S.y = 0f; S.gnd = true; S.spare = false
+        // اجعل اللاعب راكباً على أرض: اخرج ثم ادخل
+        var jj = g.myJet(); val e1 = Input(); e1.tri = true
+        // الخروج من الطائرة الجوية (قفز) ثم نزول RPG
+        g.update(dt, e1); assertTrue(g.myJet() < 0 && me.mags == 5, "exited with RPG mags=${me.mags}")
+        for (k in 0 until 10) g.update(dt, Input())
+        println("AIR exit ok rpg=${g.WEAPONS[me.wpn].id}")
+    }
 }

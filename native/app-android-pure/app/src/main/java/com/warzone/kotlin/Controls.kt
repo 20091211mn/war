@@ -50,6 +50,10 @@ class Controls(private val g: Game) {
             R(B.SENS_DN, w * 0.5f - 90 * u, h * 0.30f + 134 * u, 120f, 44f, "-"); R(B.SENS_UP, w * 0.5f + 90 * u, h * 0.30f + 134 * u, 120f, 44f, "+")
             R(B.P_OPT, w * 0.5f - 135 * u, h * 0.30f + 200 * u, 126f, 44f, "optic"); R(B.P_MUZ, w * 0.5f, h * 0.30f + 200 * u, 126f, 44f, "muzzle")
             R(B.P_GRIP, w * 0.5f + 135 * u, h * 0.30f + 200 * u, 126f, 44f, "grip"); R(B.P_MAG, w * 0.5f, h * 0.30f + 252 * u, 126f, 44f, "mag")
+        } else if (g.air && g.myJet() >= 0) {
+            A(B.FIRE, w - 120 * u, h - 130 * u, 64f, "GUN"); A(B.ADS, w - 236 * u, h - 70 * u, 40f, "BURN"); A(B.JUMP, w - 62 * u, h - 250 * u, 36f, "THR+")
+            A(B.CROUCH, w - 196 * u, h - 200 * u, 34f, "THR-"); A(B.USE, w - 46 * u, 150 * u, 28f, "EXIT"); A(B.PAUSE, w / 2 + 150 * u, 30 * u, 20f, "II")
+            if (g.over) R(B.OK, w / 2, h - 40 * u, 200f, 52f, "OK")
         } else {
             // يمين: النار والتصويب والقفز والانبطاح والتعبئة — بلا تداخل
             A(B.FIRE, w - 120 * u, h - 130 * u, 64f, "FIRE"); A(B.ADS, w - 236 * u, h - 70 * u, 40f, "ADS"); A(B.JUMP, w - 62 * u, h - 250 * u, 36f, "JUMP")
@@ -89,7 +93,7 @@ class Controls(private val g: Game) {
             if (g.menu == 2 && b.id >= B.H0 && b.id < B.H0 + 5) { g.ns.hostSel = b.id - B.H0; lobbyConf = true; t.role = 4; return }
             if (b.id == B.WEAPON) { t.role = 4; t.btn = 0; wheelOpen = true; return }
             t.role = 3; t.btn = b.id; held[b.id] = true
-            if (b.id == B.ADS) adsL = !adsL else if (b.id == B.CROUCH) crL = !crL
+            if (b.id == B.ADS) adsL = !adsL else if (b.id == B.CROUCH && !(g.air && g.myJet() >= 0)) crL = !crL
             return
         }
         if (g.menu != 0 || g.paused) return
@@ -126,7 +130,7 @@ class Controls(private val g: Game) {
         var sx = stX; var sy = stY; val m = sqrt(sx * sx + sy * sy); val D = 0.14f
         if (m < D) { sx = 0f; sy = 0f } else { val k = min(1f, (m - D) / (1 - D)); sx = sx / m * k; sy = sy / m * k }
         i.mx = sx; i.my = sy; i.sprint = sy > 0.85f && m > 0.95f
-        i.fire = held[B.FIRE]; i.ads = adsL; i.jump = held[B.JUMP]; i.crouch = crL; i.reload = held[B.RELOAD]
+        i.fire = held[B.FIRE]; i.ads = adsL; i.jump = held[B.JUMP]; i.crouch = if (g.air && g.myJet() >= 0) held[B.CROUCH] else crL; i.reload = held[B.RELOAD]
         i.grenade = held[B.GREN]; i.tri = held[B.USE]; i.use = held[B.USE]; i.drone = held[B.DRONE]; i.c4 = held[B.C4]; i.det = held[B.DET]; i.seat = held[B.SEAT]
         i.start = held[B.PAUSE]; i.confirm = g.over && held[B.OK]
         return i

@@ -66,6 +66,8 @@ class Game {
     @JvmField val feed = Array(4) { "" }; @JvmField val feedT = FloatArray(4)
     @JvmField var menu = 1; @JvmField var menuSel = 0; @JvmField var menuRow = 0; @JvmField var mode = 0
     @JvmField var modeCount = 3
+    @JvmField var air = false; @JvmField val jets = ArrayList<Jet>(); @JvmField var entJet = IntArray(0); @JvmField val airPrev = Input()
+    @JvmField var footT = 0f; @JvmField var jetMsg = ""; @JvmField var jetMsgT = 0f; @JvmField var rpgIdx = 8
     @JvmField var meI = 0; @JvmField var role = 0; @JvmField val ns = NetState(); @JvmField var overT = 0f; @JvmField var netPc4 = false; @JvmField var netPdet = false
     @JvmField var spawnCtr = 0
     @JvmField var camX = 0f; @JvmField var camY = 3f; @JvmField var camZ = 0f
@@ -95,14 +97,16 @@ class Game {
 
     fun startMatch(idx: Int) {
         mapIdx = idx % MAP_COUNT; w.load(mapIdx)
-        val total = 1 + nBots * 2 - 1
+        val total = if (idx % MAP_COUNT == 8 && role == 0) 16 else 1 + nBots * 2 - 1
         e = ArrayList(total); for (i in 0 until total) e.add(Ent()); c4s.clear()
         for (i in 0 until total) { val p = e[i]; p.bot = i > 0; p.team = if (i == 0) 0 else (if (i and 1 != 0) 1 else 0); p.name = nm(i); p.wpn = if (i == 0) prim else rand() % WEAPON_COUNT }
         dn.on = false; dnCd = 0f; grs.clear(); rks.clear(); vh = ArrayList(); drive = -1; puffs.clear()
         for (k in 0 until w.m.nv) vh.add(makeVeh(k))
         score[0] = 0; score[1] = 0; over = false; t = 0f; tr.clear()
         if (role == 1) { ns.matchId = (ns.matchId + 1) and 255; ns.evq.clear(); for (c in ns.cli) if (c.on && c.ent in 0 until e.size) { val p = e[c.ent]; p.remote = true; p.bot = false; p.rin = null; p.rc4Init = false } }
-        for (i in 0 until e.size) spawn(i)
+        air = mapIdx == 8 && role == 0
+        if (air) airInit() else { jets.clear(); entJet = IntArray(0) }
+        if (!air) for (i in 0 until e.size) spawn(i)
     }
 
     fun zoomOf(p: Ent): Float = if (optZ > 0 && p === e[meI]) optZ else WEAPONS[p.wpn].zoom
@@ -153,8 +157,8 @@ class Game {
                 if (head) say("تصويبة رأس!") else if (streak == 2) say("قتلتان متتاليتان") else if (streak == 3) say("ثلاث قتلات!") else if (streak == 5) say("سلسلة قتل!") else if (streak == 8) say("لا يمكن إيقافك!")
             }
             if (role == 1 && ai >= 0 && ai != vi) { ns.evtId = (ns.evtId + 1) and 255; if (ns.evtId == 0) ns.evtId = 1; ns.evq.add(NetEvt(ns.evtId, ai, vi, if (head) 1 else 0)); if (ns.evq.size > 6) ns.evq.removeAt(0) }
-            if (ai >= 0 && ai != vi) { val k = e[ai]; k.kills++; score[k.team]++; addFeed("${nm(ai)} > ${nm(vi)}${if (head) " HS" else ""}") }
-            if (score[0] >= scoreLim || score[1] >= scoreLim) { over = true; winner = if (score[0] >= scoreLim) 0 else 1 }
+            if (!air && ai >= 0 && ai != vi) { val k = e[ai]; k.kills++; score[k.team]++; addFeed("${nm(ai)} > ${nm(vi)}${if (head) " HS" else ""}") }
+            if (!air && (score[0] >= scoreLim || score[1] >= scoreLim)) { over = true; winner = if (score[0] >= scoreLim) 0 else 1 }
         }
     }
 
@@ -319,6 +323,7 @@ class Game {
 
     fun isExpl(wi: Int) = WEAPONS[wi].id == "rpg"
     fun explosionAt(gx: Float, gy: Float, gz: Float, by: Int, R: Float, pd: Float, vd: Float) {
+        if (air) for (j in jets.indices) { val J = jets[j]; if (!J.alive || J.team == e[by].team) continue; val dd = sqrtf((J.x - gx) * (J.x - gx) + (J.y + 1 - gy) * (J.y + 1 - gy) + (J.z - gz) * (J.z - gz)); if (dd < R + 8f) jetHurt(j, pd * 1.3f * (1f - dd / (R + 8f)) + 40f, by, false) }
         for (i in 0 until e.size) {
             if (!e[i].alive) continue; if (i != by && e[i].team == e[by].team) continue
             val ex = e[i].b.x - gx; val ey = e[i].b.y + 0.9f - gy; val ez = e[i].b.z - gz; val dd = sqrtf(ex * ex + ey * ey + ez * ez); if (dd < R) hurt(i, by, pd * powf(1f - dd / R, 1.2f), false)
@@ -359,6 +364,8 @@ class Game {
                 if (j == i || !e[j].alive || e[j].team == p.team) continue
                 val h = rayPlayer(e[j].b.x, e[j].b.y, e[j].b.z, e[j].crouch, p.b.x, eyeY, p.b.z, dx, dy, dz, best); if (h.ok && h.t < best) { best = h.t; hv = j; hh = h.head }
             }
+            if (air) for (jj in jets.indices) { val T = jets[jj]; if (!T.alive || T.team == p.team) continue; val px = T.x - p.b.x; val py = T.y + 1 - eyeY; val pz = T.z - p.b.z; val tc = px * dx + py * dy + pz * dz; if (tc < 0 || tc >= best) continue
+                val qx = px - dx * tc; val qy = py - dy * tc; val qz = pz - dz * tc; if (qx * qx + qy * qy + qz * qz < 45f) { best = tc; hv = -1 } }
             run {
                 var vhit: Veh? = null; var vpart = 0
                 for (v in vh) {
@@ -579,6 +586,7 @@ class Game {
             val up = inp.my > 0.5f && prev.my <= 0.5f; val dnn = inp.my < -0.5f && prev.my >= -0.5f; val rt = inp.mx > 0.5f && prev.mx <= 0.5f; val lf = inp.mx < -0.5f && prev.mx >= -0.5f
             if (up) menuRow = (menuRow + 2) % 3; if (dnn) menuRow = (menuRow + 1) % 3; val d = if (rt) 1 else if (lf) -1 else 0
             if (d != 0) { if (menuRow == 0) menuSel = (menuSel + d + MAP_COUNT) % MAP_COUNT else if (menuRow == 1) diff = (diff + d + 3) % 3 else mode = (mode + d + modeCount) % modeCount }
+            if (menuSel == 8) mode = 0
             if (msgT > 0) msgT -= dt
             if ((inp.confirm && !prev.confirm) || (inp.start && !prev.start)) { fovMul = 1f; hudK = 1f; if (mode == 1) hostStart() else if (mode == 2) lobbyStart() else { menu = 0; startMatch(menuSel) } }
             prev.set(inp); return
@@ -621,15 +629,15 @@ class Game {
             for (q in puffs) { q.t -= dt; q.y += q.vy * dt; q.sz += dt * 0.8f }; puffs.removeAll { it.t <= 0 }
             prev.set(inp); return
         }
-        for (i in 0 until e.size) {
+        if (air) airUpdate(dt, use) else for (i in 0 until e.size) {
             val p = e[i]
             if (p.prot > 0) p.prot -= dt
             if (!p.alive) { p.respawn -= dt; if (p.respawn <= 0) spawn(i); continue }
             if (i == meI) updatePlayer(dt, use) else if (p.remote) updateRemote(i, dt) else updateBot(i, dt)
         }
-        for (o in e) if (o.revealT > 0) o.revealT -= dt
+        if (!air) for (o in e) if (o.revealT > 0) o.revealT -= dt
         c4Tick(dt)
-        updateVeh(dt, use)
+        if (!air) updateVeh(dt, use)
         prev.set(inp)
     }
 }

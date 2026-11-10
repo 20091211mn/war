@@ -11,7 +11,7 @@ class Hud(private val g: Game, private val c: Controls) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     private val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.DEFAULT_BOLD; color = Color.WHITE }
     private val rect = RectF()
-    private val MAPS = arrayOf("المستودع", "أطلال الصحراء", "شارع المدينة", "القاعدة القطبية", "صحراء الشاص", "أهرامات الجيزة", "المدينة القديمة", "ميناء الإسكندرية")
+    private val MAPS = arrayOf("المستودع", "أطلال الصحراء", "شارع المدينة", "القاعدة القطبية", "صحراء الشاص", "أهرامات الجيزة", "المدينة القديمة", "ميناء الإسكندرية", "قاعدة جوية F-35")
     private val DIFF = arrayOf("سهل", "عادي", "صعب")
     private val RED = 0xFFE23B3B.toInt(); private val BLUE = 0xFF3B82F6.toInt(); private val ACC = 0xFF35D6FF.toInt()
 
@@ -47,7 +47,8 @@ class Hud(private val g: Game, private val c: Controls) {
     private fun hud(cv: Canvas, w: Float, h: Float, u: Float, me: com.warzone.core.Ent) {
         // التصويب
         val cx = w / 2; val cy = h / 2
-        if (me.alive && g.drive < 0 || g.passenger()) {
+        if (g.air) airHud(cv, w, h, u, me)
+        if (me.alive && !(g.air && g.myJet() >= 0) && (g.drive < 0 || g.passenger())) {
             p.style = Paint.Style.STROKE; p.strokeWidth = 2.2f * u; p.color = if (g.hitMark > 0) 0xFFFF4040.toInt() else 0xCCFFFFFF.toInt()
             val s = 9f * u; val gp = (4f + (if (me.moving) 3f else 0f) + (if (me.flash > 0) 3f else 0f)) * u
             cv.drawLine(cx - s - gp, cy, cx - gp, cy, p); cv.drawLine(cx + gp, cy, cx + s + gp, cy, p); cv.drawLine(cx, cy - s - gp, cx, cy - gp, p); cv.drawLine(cx, cy + gp, cx, cy + s + gp, p)
@@ -108,10 +109,43 @@ class Hud(private val g: Game, private val c: Controls) {
                 text(cv, g.nm(i) + (if (i == best) "  MVP" else ""), x0 + 2 * u, y + 16 * u, 14 * u, if (me2) ACC else Color.WHITE, Paint.Align.LEFT)
                 text(cv, "${g.e[i].kills}", x1 - 70 * u, y + 16 * u, 14 * u, Color.WHITE, Paint.Align.RIGHT); text(cv, "${g.e[i].deaths}", x1, y + 16 * u, 14 * u, 0xFF8FA0B4.toInt(), Paint.Align.RIGHT); y += 25 * u } }
     }
+    private fun airHud(cv: Canvas, w: Float, h: Float, u: Float, me: com.warzone.core.Ent) {
+        val cx = w / 2
+        if (g.jetMsgT > 0) text(cv, g.jetMsg, cx, h / 3 + 14 * u, 18 * u, ACC)
+        if (!me.alive || g.over) return
+        val j = g.myJet()
+        if (j < 0) {
+            for (J in g.jets) { if (!J.alive || J.pilot >= 0 || J.team != me.team || !J.gnd) continue
+                val d = hypot(J.x - me.b.x, J.z - me.b.z); if (d < 18f && g.jetSpeed(J) < 8f) { text(cv, "زر EXIT: ركوب الطائرة", cx, h * 0.62f, 18 * u, ACC); break } }
+            return
+        }
+        val J = g.jets[j]; val s = g.jetSpeed(J); val r = g.r
+        fun proj(x: Float, y: Float, z: Float, o: FloatArray): Boolean {
+            val ddx = x - r.cam.x; val ddy = y - r.cam.y; val ddz = z - r.cam.z; val zc = ddx * r.fx + ddy * r.fy + ddz * r.fz; if (zc < 1f) return false
+            val xc = ddx * r.rx + ddz * r.rz; val yc = ddx * r.ux + ddy * r.uy + ddz * r.uz
+            o[0] = w / 2 + xc / zc * r.focal * (w / r.W); o[1] = h / 2 - yc / zc * r.focal * (h / r.H); o[2] = zc; return true
+        }
+        val o = FloatArray(3)
+        p.style = Paint.Style.STROKE; p.strokeWidth = 2f * u
+        for (k in g.jets.indices) { val T = g.jets[k]; if (!T.alive || k == j) continue; if (!proj(T.x, T.y, T.z, o)) continue
+            if (o[0] < 10 || o[0] > w - 10 || o[1] < 10 || o[1] > h - 10) continue
+            val en = T.team != J.team; p.color = if (en) 0xFFFF4A4A.toInt() else 0xFF60E080.toInt()
+            val h2 = min(14 * u, max(3 * u, 28f * r.focal / o[2] / 3f)); cv.drawRect(o[0] - h2, o[1] - h2, o[0] + h2, o[1] + h2, p)
+            if (en) text(cv, "${o[2].toInt()}m", o[0], o[1] + h2 + 12 * u, 11 * u, p.color) }
+        if (s > 5f && proj(J.x + J.vx * 3f, J.y + J.vy * 3f, J.z + J.vz * 3f, o)) { p.color = 0xFF80FF80.toInt(); cv.drawCircle(o[0], o[1], 6 * u, p); cv.drawLine(o[0] - 12 * u, o[1], o[0] - 6 * u, o[1], p); cv.drawLine(o[0] + 6 * u, o[1], o[0] + 12 * u, o[1], p); cv.drawLine(o[0], o[1] - 12 * u, o[0], o[1] - 6 * u, p) }
+        val px = cx - 90 * u; val py = h - 74 * u; panel(cv, px, py, px + 180 * u, py + 44 * u)
+        text(cv, "${(s * 3.6f).toInt()} km/h", px + 50 * u, py + 28 * u, 16 * u); text(cv, "${J.y.toInt()} m", px + 138 * u, py + 28 * u, 16 * u)
+        bar(cv, px, py - 12 * u, 180 * u, 7 * u, J.th, if (J.ab > 0.5f) 0xFFFF8A20.toInt() else ACC)
+        text(cv, "HEI ${J.gun}", px + 180 * u + 36 * u, py + 26 * u, 14 * u, if (J.gun > 60) Color.WHITE else 0xFFFF6060.toInt())
+        if (J.stall) text(cv, "STALL", cx, h / 2 - 34 * u, 26 * u, 0xFFFF4040.toInt()) else if (J.y < 45f && J.vy < -4f && !J.gnd) text(cv, "PULL UP", cx, h / 2 - 34 * u, 26 * u, 0xFFFF4040.toInt())
+        if (abs(J.x) > g.w.m.W * 0.5f || abs(J.z) > g.w.m.D * 0.5f) text(cv, "عد إلى منطقة القتال", cx, h / 2 - 60 * u, 16 * u, 0xFFFFC040.toInt())
+        if (J.gnd && s < 10f) text(cv, "EXIT: النزول من الطائرة", cx, h * 0.62f, 14 * u, 0xFFAAB4C0.toInt())
+    }
+
     private fun radar(cv: Canvas, w: Float, u: Float, me: com.warzone.core.Ent) {
         val R = 52f * u; val cx = w - R - 70 * u; val cy = R + 8 * u
         p.style = Paint.Style.FILL; p.color = 0x990B0F14.toInt(); cv.drawCircle(cx, cy, R, p); p.style = Paint.Style.STROKE; p.color = 0x66FFFFFF; p.strokeWidth = 1.5f; cv.drawCircle(cx, cy, R, p)
-        val sc = R / 50f; val cs = cos(me.yaw); val sn = sin(me.yaw)
+        val sc = R / (if (g.air) 700f else 50f); val cs = cos(me.yaw); val sn = sin(me.yaw)
         p.style = Paint.Style.FILL
         for (i in g.e.indices) { val o = g.e[i]; if (i == g.meI || !o.alive || o.gone) continue
             val show = o.team == me.team || o.revealT > 0 || o.reveal > 0; if (!show) continue
