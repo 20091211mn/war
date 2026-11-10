@@ -150,7 +150,7 @@ class Hud(private val g: Game, private val c: Controls) {
         val sc = R / (if (g.air) 700f else 50f); val cs = cos(me.yaw); val sn = sin(me.yaw)
         p.style = Paint.Style.FILL
         for (i in g.e.indices) { val o = g.e[i]; if (i == g.meI || !o.alive || o.gone) continue
-            val show = o.team == me.team || o.revealT > 0 || o.reveal > 0; if (!show) continue
+            val show = o.team == me.team || o.revealT > 0 || o.reveal > 0 || g.air; if (!show) continue
             val dx = o.b.x - me.b.x; val dz = o.b.z - me.b.z; val rx = dx * cs - dz * sn; val rz = dx * sn + dz * cs
             val px = cx + rx * sc; val py = cy + rz * sc; if ((px - cx) * (px - cx) + (py - cy) * (py - cy) > R * R) continue
             p.color = if (o.team == 0) RED else BLUE; cv.drawCircle(px, py, 3f * u, p) }

@@ -65,4 +65,25 @@ class SmokeTest {
         for (k in 0 until 10) g.update(dt, Input())
         println("AIR exit ok rpg=${g.WEAPONS[me.wpn].id}")
     }
+
+    @Test fun fuzzAllMaps() {
+        val rnd = java.util.Random(7)
+        for (m in 0 until GameData.let { Game().also { it.menu = 1; it.init(160, 90) }.MAP_COUNT }) {
+            val g = Game(); g.modeCount = 1; g.menu = 1; g.init(160, 90); g.menu = 0; g.diff = rnd.nextInt(3); g.startMatch(m)
+            val inp = Input()
+            for (f in 0 until 60 * 30) {
+                if (f % 20 == 0) {
+                    inp.mx = (rnd.nextInt(21) - 10) / 10f; inp.my = (rnd.nextInt(21) - 10) / 10f; inp.lx = (rnd.nextInt(21) - 10) / 4f; inp.ly = (rnd.nextInt(21) - 10) / 8f
+                    inp.fire = rnd.nextInt(3) == 0; inp.ads = rnd.nextInt(4) == 0; inp.jump = rnd.nextInt(5) == 0; inp.crouch = rnd.nextInt(6) == 0; inp.sprint = rnd.nextInt(4) == 0
+                    inp.reload = rnd.nextInt(8) == 0; inp.grenade = rnd.nextInt(12) == 0; inp.drone = rnd.nextInt(40) == 0; inp.c4 = rnd.nextInt(15) == 0; inp.det = rnd.nextInt(15) == 0
+                    inp.tri = rnd.nextInt(6) == 0; inp.use = rnd.nextInt(6) == 0; inp.seat = rnd.nextInt(10) == 0; inp.swapP = rnd.nextInt(10) == 0; inp.swapN = rnd.nextInt(10) == 0
+                    inp.pick = if (rnd.nextInt(4) == 0) rnd.nextInt(g.WEAPON_COUNT) else -1
+                } else { inp.tri = false; inp.swapP = false; inp.swapN = false; inp.pick = -1; inp.grenade = false; inp.c4 = false; inp.det = false }
+                g.update(1f / 60, inp); if (f % 30 == 0) g.render()
+                for (p in g.e) assertTrue(!p.b.x.isNaN() && !p.b.y.isNaN() && !p.b.z.isNaN() && !p.hp.isNaN(), "NaN ent map $m frame $f")
+                for (J in g.jets) assertTrue(!J.x.isNaN() && !J.y.isNaN() && !J.vx.isNaN(), "NaN jet map $m frame $f")
+                if (g.over) { inp.confirm = true; g.update(1f / 60, inp); inp.confirm = false }
+            }
+        }
+    }
 }
