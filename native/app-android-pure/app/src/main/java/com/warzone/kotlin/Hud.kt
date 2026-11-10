@@ -2,6 +2,8 @@ package com.warzone.kotlin
 
 import android.graphics.*
 import com.warzone.core.Game
+import com.warzone.core.myJet
+import com.warzone.core.jetSpeed
 import kotlin.math.*
 
 object HudDiag { @Volatile var line = ""; @Volatile var err: String? = null }

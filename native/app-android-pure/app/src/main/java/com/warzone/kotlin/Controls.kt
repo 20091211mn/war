@@ -1,6 +1,8 @@
 package com.warzone.kotlin
 
 import com.warzone.core.Game
+import com.warzone.core.myJet
+import com.warzone.core.jetSpeed
 import com.warzone.core.Input
 import kotlin.math.*
 
