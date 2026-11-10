@@ -18,7 +18,7 @@
 #include <chrono>
 
 enum { PORT_GAME=9330, PORT_BEACON=9331, NET_VER=3 };
-enum { T_HELLO=1, T_WELCOME=2, T_INPUT=3, T_SNAP=4, T_BYE=5, T_BEACON=6 };
+enum { T_HELLO=1, T_WELCOME=2, T_INPUT=3, T_SNAP=4, T_BYE=5, T_BEACON=6, T_PROBE=7 };
 
 #pragma pack(push,1)
 struct NetHello{uint8_t t,ver;};

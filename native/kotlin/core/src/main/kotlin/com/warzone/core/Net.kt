@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 /** بروتوكول LAN (UDP) نفسه المستخدم في PS4 وآيفون (NET_VER=3) — فيدخل أي إصدار على أي إصدار. */
 object NetC {
     const val PORT_GAME = 9330; const val PORT_BEACON = 9331; const val NET_VER = 3
-    const val T_HELLO = 1; const val T_WELCOME = 2; const val T_INPUT = 3; const val T_SNAP = 4; const val T_BYE = 5; const val T_BEACON = 6
+    const val T_HELLO = 1; const val T_WELCOME = 2; const val T_INPUT = 3; const val T_SNAP = 4; const val T_BYE = 5; const val T_BEACON = 6; const val T_PROBE = 7
     const val SZ_INPUT = 45; const val SZ_ENT = 44; const val SZ_VEH = 24; const val SZ_C4 = 14; const val SZ_EVT = 4; const val SZ_TR = 24; const val SZ_HEAD = 16; const val SZ_BEACON = 20
     fun buf(n: Int): ByteBuffer = ByteBuffer.allocate(n).order(ByteOrder.LITTLE_ENDIAN)
     fun wrap(d: ByteArray): ByteBuffer = ByteBuffer.wrap(d).order(ByteOrder.LITTLE_ENDIAN)
@@ -64,7 +64,7 @@ class NetState {
     @JvmField var c4pCnt = 0; @JvmField var c4dCnt = 0
     @JvmField val evq = ArrayList<NetEvt>(); @JvmField val trOut = ArrayList<NetTr>()
     @JvmField val cli = Array(8) { Cli() }; @JvmField val hosts = ArrayList<HostEnt>(); @JvmField var hostSel = 0
-    @JvmField var myIp: ByteArray? = null
+    @JvmField var myIp: ByteArray? = null; @JvmField var sweepIdx = 0; @JvmField var ipT = 0f
     @JvmField val lastIn = Input()
     @JvmField var status = ""
 }

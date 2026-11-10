@@ -20,8 +20,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.9
-      - name: Smoke test Kotlin engine (menu, 8 maps, play, render)
-        run: gradle -p native/kotlin :core:test --tests com.warzone.core.SmokeTest --no-daemon -i 2>&1 | tee /tmp/kt.log | grep -E "NET host|PERF|SMOKE|AIR |FAILED|AssertionError|at com.warzone" | head -30; test ${PIPESTATUS[0]} -eq 0
+      - name: Build C++ cross-platform LAN peer (same code as PS4/iOS)
+        run: g++ -O2 -std=c++17 -pthread -o /tmp/lancross native/src/lancross.cpp
+      - name: Smoke test Kotlin engine (menu, 9 maps, play, render, LAN Kotlin<->C++)
+        env:
+          WZ_CROSS: /tmp/lancross
+        run: gradle -p native/kotlin :core:test --tests com.warzone.core.SmokeTest --no-daemon -i 2>&1 | tee /tmp/kt.log | grep -E "NET host|CROSS|PROBE|PERF|SMOKE|AIR |FAILED|AssertionError|at com.warzone" | head -30; test ${PIPESTATUS[0]} -eq 0
       - name: Prepare signing key (secrets if present, otherwise default key)
         env:
           KS_B64: ${{ secrets.WZ_KEYSTORE_BASE64 }}

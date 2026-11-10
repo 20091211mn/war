@@ -45,6 +45,13 @@ class SmokeTest {
         assertTrue(ok, "client joined and synced")
         assertTrue(h.e[c.meI].remote, "slot remote on host")
         val cx = c.e[c.meI].b.x; val hx = h.e[c.meI].b.x; assertTrue(Math.abs(cx - hx) < 3f, "client pos tracked on host $cx vs $hx")
+        // المسح المباشر: المضيف يردّ على T_PROBE بإشارة (beacon) تلقائياً
+        java.net.DatagramSocket().use { ds -> ds.soTimeout = 20
+            ds.send(java.net.DatagramPacket(byteArrayOf(7, 3), 2, java.net.InetAddress.getByName("127.0.0.1"), 9330))
+            var got = false; val buf = ByteArray(64)
+            for (k in 0 until 100) { if (got) break; h.update(1f / 60, Input()); try { val p = java.net.DatagramPacket(buf, buf.size); ds.receive(p); if (p.length >= 4 && buf[0].toInt() == 6) got = true } catch (_: Exception) {} }
+            println("PROBE reply=$got"); assertTrue(got, "host answers probe")
+        }
         c.netClose(); h.netClose()
     }
 
@@ -85,5 +92,38 @@ class SmokeTest {
                 if (g.over) { inp.confirm = true; g.update(1f / 60, inp); inp.confirm = false }
             }
         }
+    }
+
+    private fun crossBin(): String? = System.getenv("WZ_CROSS")?.takeIf { java.io.File(it).canExecute() }
+
+    /** مضيف C++ حقيقي (كود PS4/iOS) ← عميل Kotlin (أندرويد) */
+    @Test fun crossCppHostKotlinClient() {
+        val bin = crossBin() ?: return
+        val pr = ProcessBuilder(bin, "host").redirectErrorStream(true).start()
+        try {
+            Thread.sleep(1500)
+            val c = Game(); c.menu = 1; c.init(640, 360); assertTrue(c.joinIp("127.0.0.1"))
+            var ok = 0
+            for (k in 0 until 600) { val b = Input(); b.my = 1f; c.update(1f / 60, b); Thread.sleep(16); if (c.role == 2 && c.menu == 0 && c.e.size >= 2 && c.e[c.meI].alive) ok++ }
+            println("CROSS kotlinClient->cppHost role=${c.role} slot=${c.meI} ents=${c.e.size} ok=$ok")
+            assertTrue(ok > 200, "kotlin client joined C++ host and stayed synced ok=$ok")
+            c.netClose()
+        } finally { pr.destroyForcibly() }
+    }
+
+    /** مضيف Kotlin ← عميل C++ حقيقي */
+    @Test fun crossKotlinHostCppClient() {
+        val bin = crossBin() ?: return
+        Thread.sleep(1500)
+        val h = Game(); h.menu = 1; h.init(640, 360); h.mode = 1; val ci = Input(); ci.confirm = true; h.update(1f / 60, ci); assertTrue(h.role == 1)
+        val pr = ProcessBuilder(bin, "join").redirectErrorStream(true).start()
+        try {
+            var ok = 0
+            for (k in 0 until 900) { h.update(1f / 60, Input()); Thread.sleep(16); if (h.humans() >= 2) ok++; if (ok > 300) break }
+            val out = try { pr.inputStream.bufferedReader().let { if (pr.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) it.readText() else "" } } catch (_: Exception) { "" }
+            println("CROSS cppClient->kotlinHost ok=$ok out=${out.trim()}")
+            assertTrue(ok > 200, "C++ client joined kotlin host ok=$ok")
+            h.netClose()
+        } finally { pr.destroyForcibly() }
     }
 }

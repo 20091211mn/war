@@ -14,6 +14,19 @@ final class AudioOut {
     private var unit: AudioUnit?
     private var running = false
 
+    private init() {
+        // مكالمة هاتفية / Siri / إعادة ضبط خدمة الصوت: كان الصوت يتوقف نهائياً بعدها
+        NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] n in
+            guard let self = self, let raw = n.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt, let t = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+            if t == .began { self.stop() } else { self.start() }
+        }
+        NotificationCenter.default.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self = self else { return }
+            if let au = self.unit { AudioOutputUnitStop(au); AudioUnitUninitialize(au); AudioComponentInstanceDispose(au) }
+            self.unit = nil; self.running = false; self.start()
+        }
+    }
+
     func start() {
         if running { return }
         if unit == nil {

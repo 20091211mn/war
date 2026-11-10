@@ -16,7 +16,7 @@ fun Game.hostStart() {
     role = 1; meI = 0; for (c in n.cli) { c.on = false; c.ent = -1 }
     menu = 0; fovMul = 1f; hudK = 1f; startMatch(menuSel); say("استضافة لعبة LAN — بانتظار اللاعبين"); msgT = 8f; n.snapT = 0f; n.beaconT = 0f
 }
-fun Game.lobbyStart() { val n = ns; n.beaconRx.open(NetC.PORT_BEACON, true); menu = 2; n.hosts.clear(); n.hostSel = 0; n.joining = false; n.status = "" }
+fun Game.lobbyStart() { val n = ns; n.myIp = NetC.localIp(); n.beaconRx.open(NetC.PORT_BEACON, true); menu = 2; n.hosts.clear(); n.hostSel = 0; n.joining = false; n.status = "" }
 fun Game.joinAddr(a: InetAddress) { val n = ns; n.sock.open(0, false); n.hostAddr = a; n.joining = true; n.joinT = 0f; n.retryT = 1f; n.status = "جارٍ الاتصال…" }
 fun Game.joinIp(ip: String): Boolean = try { joinAddr(InetAddress.getByName(ip)); true } catch (e: Exception) { false }
 
@@ -106,6 +106,8 @@ fun Game.netPump(dt: Float) {
                 val wl = NetC.buf(4); wl.put(NetC.T_WELCOME.toByte())
                 if (ci >= 0) { n.cli[ci].last = 0f; wl.put(n.cli[ci].ent.toByte()); wl.put(mapIdx.toByte()); wl.put(e.size.toByte()) } else { wl.put((-1).toByte()); wl.put(0); wl.put(0) }
                 n.sock.send(pk.addr, pk.port, wl.array())
+            } else if (ty == NetC.T_PROBE) { // ردّ مباشر على مسح العميل: يعمل حيث يُمنع البث (iOS)
+                val bc = NetC.buf(NetC.SZ_BEACON); bc.put(NetC.T_BEACON.toByte()); bc.put(mapIdx.toByte()); bc.put(humans().toByte()); bc.put(8); val nm0 = "LAN HOST".toByteArray(); bc.put(nm0, 0, minOf(15, nm0.size)); n.sock.send(pk.addr, pk.port, bc.array())
             } else if (ty == NetC.T_BYE && ci >= 0) { val p = e[n.cli[ci].ent]; p.remote = false; p.bot = true; addFeed("${nm(n.cli[ci].ent)} غادر"); n.cli[ci].on = false; n.cli[ci].ent = -1 }
             else if (ty == NetC.T_INPUT && ci >= 0 && pk.n >= NetC.SZ_INPUT) {
                 n.cli[ci].last = 0f; val b = NetC.wrap(pk.d); b.position(2); val seq = NetC.u16(b); val p = e[n.cli[ci].ent]; val cur = p.rin
@@ -136,6 +138,11 @@ fun Game.netPump(dt: Float) {
                 b.putFloat(0f); b.putFloat(0f); b.putFloat(0f); b.putFloat(0f); b.put(0); b.put(n.c4pCnt.toByte()); b.put(n.c4dCnt.toByte()); n.hostAddr?.let { n.sock.send(it, NetC.PORT_GAME, b.array()) } } }
     }
     if (menu == 2 && n.beaconRx.ready()) {
+        n.ipT -= dt; if (n.ipT <= 0f || n.myIp == null) { n.ipT = 3f; n.myIp = NetC.localIp() }
+        val me = n.myIp
+        if (me != null && !n.joining) { val pr = NetC.buf(2); pr.put(NetC.T_PROBE.toByte()); pr.put(NetC.NET_VER.toByte()); val arr = pr.array()
+            for (k in 0 until 10) { n.sweepIdx = n.sweepIdx % 254 + 1; if (n.sweepIdx == (me[3].toInt() and 255)) continue
+                try { n.beaconRx.send(InetAddress.getByAddress(byteArrayOf(me[0], me[1], me[2], n.sweepIdx.toByte())), NetC.PORT_GAME, arr) } catch (_: Exception) {} } } // مسح مباشر للشبكة
         while (true) { val pk = n.beaconRx.recv() ?: break; if (pk.n < NetC.SZ_BEACON || pk.d[0].toInt() != NetC.T_BEACON) continue
             val map = pk.d[1].toInt() and 255; val pl = pk.d[2].toInt() and 255; val mx = pk.d[3].toInt() and 255; var nl = 4; while (nl < 20 && pk.d[nl].toInt() != 0) nl++; val name = String(pk.d, 4, nl - 4)
             var f = false; for (h in n.hosts) if (h.addr == pk.addr) { h.map = map; h.players = pl; h.seen = 0f; f = true }
