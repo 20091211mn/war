@@ -58,7 +58,7 @@ struct Game{
   void addFeed(const std::string&s){for(int i=3;i>0;i--){feed[i]=feed[i-1];feedT[i]=feedT[i-1];}feed[0]=s;feedT[0]=5;}
   void startMatch(int idx){
     mapIdx=idx%MAP_COUNT; w.load(mapIdx); e.assign(1+nBots*2+ (0),Ent()); // لاعب + فريقان
-    int nbA=(mapIdx==8&&role==0&&nLocal==1)?8:nBots; int total=1+nbA*2-1; e.assign(total,Ent()); c4s.clear();
+    int nbA=(mapIdx==8&&role==0&&nLocal==1)?8:nBots; int total=(duel&&nLocal==2&&role==0)?2:1+nbA*2-1; e.assign(total,Ent()); c4s.clear();
     for(int i=0;i<total;i++){Ent&p=e[i];p.bot=i>0;p.team=(i==0)?0:((i&1)?1:0);snprintf(p.name,16,"%s",nm(i).c_str());p.wpn=i==0?prim:rand()%WEAPON_COUNT;}
     if(role==1)for(auto&c:cli)if(c.on&&c.ent>0&&c.ent<total){ e[c.ent].remote=true; e[c.ent].bot=false; }
     dn.on=false; dnCd=0; grs.clear(); rks.clear(); vh.clear(); drive=-1; puffs.clear(); if(role<=1)for(int k=0;k<w.m->nv;k++)vh.push_back(makeVeh(k));
@@ -474,7 +474,7 @@ struct Game{
       if(d){ if(menuRow==0)menuSel=(menuSel+d+MAP_COUNT)%MAP_COUNT; else if(menuRow==1)diff=(diff+d+3)%3; else mode=(mode+d+modeCount)%modeCount; }
       if(msgT>0)msgT-=dt;
       if(((in.confirm&&!prev.confirm)||(in.start&&!prev.start))&&menuSel==8&&mode>=1&&mode<=2){ say("خريطة الطيران للاعب الواحد فقط"); prev=in; return; }
-      if((in.confirm&&!prev.confirm)||(in.start&&!prev.start)){ if(mode==0||mode>=3){ nLocal=mode>=3?2:1; coop=mode!=4; fovMul=nLocal==2?1.12f:1.f; hudK=nLocal==2?0.8f:1.f; menu=0;role=0;meI=0;startMatch(menuSel);} else { nLocal=1; fovMul=hudK=1.f; if(mode==1)hostStart(); else lobbyStart(); } }
+      if((in.confirm&&!prev.confirm)||(in.start&&!prev.start)){ if(mode==0||mode>=3){ nLocal=mode>=3?2:1; coop=(mode!=4&&mode!=5); duel=(mode==5); fovMul=nLocal==2?1.12f:1.f; hudK=nLocal==2?0.8f:1.f; menu=0;role=0;meI=0;startMatch(menuSel);} else { nLocal=1; duel=false; fovMul=hudK=1.f; if(mode==1)hostStart(); else lobbyStart(); } }
       prev=in; return; }
     if(menu==3){ netStartStep(); if(in.back&&!prev.back){ netClose(); menu=1; } prev=in; return; }
     if(menu==2){
@@ -531,7 +531,7 @@ struct Game{
   void airInit(); void airUpdate(float dt,const Input&in); void airSpawn(int i); int jetNew(int team,bool airborne,int slot); void jetHurt(int j,float dmg,int by,bool inc); void jetDie(int j,int by);
   bool jetStep(Jet&J,float dt,float rc,float pc,float yc,float thd,bool ab); void jetAI(int j,float dt); void jetGun(int j,int aim=-1); float jetSpeed(const Jet&J)const{ return sqrtf(J.vx*J.vx+J.vy*J.vy+J.vz*J.vz); }
   void airCam(Cam&c); void airDraw(const Cam&c); void airHud(int sc); bool projP(float x,float y,float z,int&X,int&Y,float&zc); void jetSay(const char*s){snprintf(jetMsg,48,"%s",s);jetMsgT=2.5f;} int myJet()const{ return (air&&meI>=0&&meI<(int)entJet.size())?entJet[meI]:-1; }
-  int modeCount=5; int nLocal=1,act=0; bool coop=true; Input in2; LS ls2; int vpass=0; float fovMul=1.f,hudK=1.f;
+  int modeCount=6; bool duel=false; int nLocal=1,act=0; bool coop=true; Input in2; LS ls2; int vpass=0; float fovMul=1.f,hudK=1.f;
   bool skipVM=false; // PS4 شاشة منقسمة: تخطّي توليد مجسّم السلاح في هذا الإطار
   void lsx(){ if(nLocal<2)return; LS&o=ls2; std::swap(meI,o.meI);std::swap(drive,o.drive);std::swap(gren,o.gren);std::swap(prim,o.prim);std::swap(streak,o.streak);std::swap(glCnt,o.glCnt);
     std::swap(lookIdle,o.lookIdle);std::swap(hitMark,o.hitMark);std::swap(dmgFlash,o.dmgFlash);std::swap(hitAng,o.hitAng);std::swap(hitAngT,o.hitAngT);std::swap(dnCd,o.dnCd);std::swap(dnSpot,o.dnSpot);std::swap(msgT,o.msgT);std::swap(optZ,o.optZ);
@@ -827,8 +827,8 @@ struct Game{
       if(msgT>0)textC(W/2,cy+ch-34*sc,msg,sc,0xFFFF6060);
       textC(W/2,cy+ch-16*sc,"D-pad: تحديد    X: انضمام    O: رجوع",sm,C_MUT); return; }
     static const char*MN[9]={"المستودع","أطلال الصحراء","شارع المدينة","القاعدة القطبية","صحراء الشاص","أهرامات الجيزة","المدينة القديمة","ميناء الإسكندرية","قاعدة جوية F-35"};
-    const char*dn[3]={"سهل","عادي","صعب"},*md[5]={"ضد البوتات","استضافة LAN","انضمام LAN","لاعبان: تعاون ضد البوتات","لاعبان: ضد بعض"};
-    const char*go[5]={"العب منفردًا ضد البوتات","استضف لعبة شبكة محلية","انضم إلى لعبة شبكة محلية","ابدأ لاعبين على نفس الجهاز (تعاون)","ابدأ لاعبين على نفس الجهاز (ضد بعض)"};
+    const char*dn[3]={"سهل","عادي","صعب"},*md[6]={"ضد البوتات","استضافة LAN","انضمام LAN","لاعبان: تعاون ضد البوتات","لاعبان: ضد بعض","لاعبان: مبارزة (بدون بوتات)"};
+    const char*go[6]={"العب منفردًا ضد البوتات","استضف لعبة شبكة محلية","انضم إلى لعبة شبكة محلية","ابدأ لاعبين على نفس الجهاز (تعاون)","ابدأ لاعبين على نفس الجهاز (ضد بعض)","ابدأ مبارزة: أنت وصاحبك فقط بدون بوتات"};
     int rh=20*sc,gap=6*sc,pad=12*sc,cw=W*45/100,ch=pad*2+3*(rh+gap)+rh+8*sc+6*sc+10*sc,cx=W/16,cy=(H-ch)/2+4*sc;
     card(cx,cy,cw,ch,sc); rect(cx+8*sc,cy,cw/2-8*sc,2*sc,0xFFE23B3B); rect(cx+cw/2,cy,cw/2-8*sc,2*sc,0xFF3B82F6);
     auto sel_=[&](int i,const char*label,const char*val,uint32_t col){ int y=cy+pad+i*(rh+gap),x=cx+pad,w2=cw-pad*2; bool sel=menuRow==i; rrect(x,y,w2,rh,6*sc,sel?col:C_LINE); rrect(x+1,y+1,w2-2,rh-2,6*sc-1,sel?C_BTNH:C_BTN);
