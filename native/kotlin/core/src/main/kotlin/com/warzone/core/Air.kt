@@ -13,7 +13,7 @@ class Jet {
 
 private fun clampA(v: Float, lo: Float, hi: Float): Float = if (v < lo) lo else if (v > hi) hi else v
 private fun wrapPiA(a0: Float): Float { var a = a0; while (a > 3.14159f) a -= 6.28318f; while (a < -3.14159f) a += 6.28318f; return a }
-private fun fr(): Float = frand()
+private fun fr(): Float = Rnd.frand()
 
 fun Game.jetSpeed(J: Jet): Float = sqrtf(J.vx * J.vx + J.vy * J.vy + J.vz * J.vz)
 fun Game.myJet(): Int = if (air && meI >= 0 && meI < entJet.size) entJet[meI] else -1
