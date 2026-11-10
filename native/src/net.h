@@ -30,7 +30,7 @@ struct NetC4{float x,y,z;uint8_t team,owner;};
 struct NetEvt{uint8_t id,killer,victim,head;};
 struct NetTr{float x0,y0,z0,x1,y1,z1;};
 struct NetSnapHead{uint8_t t,map,matchId,n,over,winner;int16_t s0,s1;uint8_t nEvt,nTr;uint16_t seq;uint8_t nVeh;uint8_t nC4;};
-struct NetBeacon{uint8_t t,map,players,maxp;char name[16];};
+struct NetBeacon{uint8_t t,map,players,maxp;char name[16];uint8_t lim5,mins,bots,style;}; // أول 20 بايت قديمة؛ الأربعة الأخيرة (حد النقاط/5، الدقائق، البوتات، النمط) اختيارية
 #pragma pack(pop)
 
 struct Pkt{uint8_t d[1400];int n=0;sockaddr_in from;};

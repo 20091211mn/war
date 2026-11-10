@@ -25,7 +25,7 @@ struct Input{
 static float frand(){return (float)rand()/(float)RAND_MAX;}
 
 struct Ent{
-  bool mnt=false; int mvi=-1; // رامي الرشاش المثبّت على الشاص (مقعد الصندوق الخلفي)
+  bool off=false; /* خانة فارغة في غرفة بلا بوتات */ bool mnt=false; int mvi=-1; // رامي الرشاش المثبّت على الشاص (مقعد الصندوق الخلفي)
   Body b; float yaw=0,pitch=0; int team=0; bool bot=true,alive=false,crouch=false,sprint=false,moving=false;
   float magM=1,relM=1,reveal=0,hp=100,prot=0,respawn=0,phase=0,flash=0,cd=0,reloadT=-1,rkP=0,rkY=0;
   int wpn=0,ammo=0,mags=0,kills=0,deaths=0;
@@ -51,19 +51,20 @@ struct Game{
   int role=0,meI=0; uint8_t matchId=0,spawnCtr=0,evtId=0,lastEvt=0; std::vector<NetEvt> evq; uint16_t netSeq=0;
   Udp sock,beaconRx,beaconTx; float snapT=0,inT=0,beaconT=0,srvSilence=0,joinT=0; uint32_t myIp=0; int sweepIdx=0; float ipT=0; char ipTxt[24]={0}; bool joining=false; sockaddr_in hostAddr; Input lastIn;
   std::vector<NetTr> trOut; struct Cli{bool on=false;sockaddr_in a;int ent=-1;float last=0;}; Cli cli[8];
-  struct HostEnt{sockaddr_in a;uint8_t map,players,maxp;char name[16];float seen;}; std::vector<HostEnt> hosts; int hostSel=0;
+  struct HostEnt{sockaddr_in a;uint8_t map,players,maxp,lim5=6,mins=0,bots=0,style=0;char name[16];float seen;}; std::vector<HostEnt> hosts; int hostSel=0;
   std::string nm(int i)const{ char b[16]; if(nLocal==2&&i>=0&&i<2){ snprintf(b,16,"P%d",i+1); return b; } if(i==meI)return "YOU"; if(i==0)return "HOST"; if(i<(int)e.size()&&e[i].remote)snprintf(b,16,"P%d",i); else snprintf(b,16,"BOT%d",i); return b; }
   void init(int rw,int rh){ r.init(rw,rh); startMatch(mapIdx); }
   void say(const char*s){snprintf(msg,64,"%s",s);msgT=2.5f;}
   void addFeed(const std::string&s){for(int i=3;i>0;i--){feed[i]=feed[i-1];feedT[i]=feedT[i-1];}feed[0]=s;feedT[0]=5;}
   void startMatch(int idx){
     mapIdx=idx%MAP_COUNT; w.load(mapIdx); e.assign(1+nBots*2+ (0),Ent()); // لاعب + فريقان
-    int nbA=(mapIdx==8&&role==0&&nLocal==1)?8:nBots; int total=(duel&&nLocal==2&&role==0)?2:1+nbA*2-1; e.assign(total,Ent()); c4s.clear();
+    int nbA=(mapIdx==8&&role==0&&nLocal==1)?8:nBots; int total=(duel&&nLocal==2&&role==0)?2:1+nbA*2-1; if(roomOn&&role==1)total=rmMaxE(); e.assign(total,Ent()); c4s.clear();
     for(int i=0;i<total;i++){Ent&p=e[i];p.bot=i>0;p.team=(i==0)?0:((i&1)?1:0);snprintf(p.name,16,"%s",nm(i).c_str());p.wpn=i==0?prim:rand()%WEAPON_COUNT;}
     if(role==1)for(auto&c:cli)if(c.on&&c.ent>0&&c.ent<total){ e[c.ent].remote=true; e[c.ent].bot=false; }
     dn.on=false; dnCd=0; grs.clear(); rks.clear(); vh.clear(); drive=-1; puffs.clear(); if(role<=1)for(int k=0;k<w.m->nv;k++)vh.push_back(makeVeh(k));
     matchId++; evq.clear(); score[0]=score[1]=0;over=false;t=0;tr.clear();
     for(auto&p:e)spawn(p);
+    if(roomOn&&role==1){ int nb=rmBotsE(); for(int i=1;i<total;i++)if(i>nb&&!e[i].remote){ e[i].bot=false; e[i].off=true; e[i].alive=false; e[i].respawn=1e9f; } }
     air=(mapIdx==8&&role==0&&nLocal==1); if(air)airInit(); else { jets.clear(); entJet.clear(); }
     if(nLocal==2&&role==0&&e.size()>1){ if(act)lsx(); ls2=LS(); ls2.meI=1; ls2.prim=prim; for(int k=0;k<16;k++)ls2.wAtt[k]=wAtt[k]; e[1].bot=false; e[1].remote=false; e[1].team=coop?0:1; snprintf(e[1].name,16,"P2"); snprintf(e[0].name,16,"P1"); lsx(); spawn(e[1]); lsx(); }
   }
@@ -314,6 +315,7 @@ struct Game{
     else if(netGoal==2){ menu=2; hosts.clear(); hostSel=0; joining=false; }
     else { hostAddr=pendJoin; joining=true; joinT=0; menu=2; NetHello h{T_HELLO,NET_VER}; sock.send(hostAddr,&h,sizeof h); }
   }
+  void fillBeacon(NetBeacon&bc)const{ memset(&bc,0,sizeof bc); bc.t=T_BEACON;bc.map=mapIdx;bc.players=(uint8_t)humans(); if(roomOn){ bc.maxp=(uint8_t)e.size(); snprintf(bc.name,16,"%s",rmNameOf(rmName)); bc.lim5=(uint8_t)(scoreLim/5); bc.mins=(uint8_t)(timeLim/60); bc.bots=(uint8_t)rmBotsE(); bc.style=(uint8_t)rmStyle; } else { bc.maxp=8; snprintf(bc.name,16,"LAN HOST"); bc.lim5=6; } }
   void hostStart(){ netBegin(1); }
   void lobbyStart(){ netBegin(2); }
   void joinAddr(const sockaddr_in&a){ pendJoin=a; netBegin(3); }
@@ -321,13 +323,13 @@ struct Game{
   int assignSlot(){
     int hc[2]={0,0}; for(auto&p:e)if(p.remote)hc[p.team]++; hc[0]+=1; // المضيف في الأحمر
     int pref=hc[0]<=hc[1]?0:1;
-    for(int pass=0;pass<2;pass++)for(int i=1;i<(int)e.size();i++){ Ent&p=e[i]; if(!p.remote&&p.bot&&p.team==(pass?1-pref:pref))return i; }
+    for(int pk=0;pk<2;pk++)for(int pass=0;pass<2;pass++)for(int i=1;i<(int)e.size();i++){ Ent&p=e[i]; if(p.remote)continue; if(pk==0?!p.off:!(p.bot&&!p.off))continue; if(p.team==(pass?1-pref:pref))return i; } // الخانات الفارغة أولاً ثم البوتات
     return -1;
   }
   void packSnap(){
     uint8_t buf[1400]; NetSnapHead h; h.t=T_SNAP;h.map=mapIdx;h.matchId=matchId;h.n=(uint8_t)e.size();h.over=over;h.winner=winner;h.s0=score[0];h.s1=score[1];h.seq=++netSeq; h.nVeh=(uint8_t)std::min<size_t>(8,vh.size()); h.nC4=(uint8_t)std::min<size_t>(6,c4s.size());
     int ne=(int)e.size(); h.nEvt=(uint8_t)evq.size(); h.nTr=(uint8_t)trOut.size(); int off=sizeof h; memcpy(buf,&h,off);
-    for(int i=0;i<ne;i++){ const Ent&p=e[i]; NetEnt n; n.x=p.b.x;n.y=p.b.y;n.z=p.b.z;n.yaw=p.yaw;n.pitch=p.pitch;n.flash=p.flash;n.phase=p.phase;n.reloadT=p.reloadT;n.hp=(int16_t)p.hp;
+    for(int i=0;i<ne;i++){ const Ent&p=e[i]; NetEnt n; n.x=p.b.x;n.y=p.b.y;n.z=p.b.z;n.yaw=p.yaw;n.pitch=p.pitch;n.flash=p.flash;n.phase=p.phase;n.reloadT=p.reloadT;n.hp=p.off?(int16_t)-1:(int16_t)p.hp;
       n.flags=(p.alive?1:0)|(p.crouch?2:0)|(p.moving?4:0)|(p.sprint?8:0)|(p.team?16:0)|((p.remote||i==0)?32:0)|(p.prot>0?64:0)|(p.revealT>0?128:0); n.wpn=p.wpn;n.ammo=p.ammo;n.mags=p.mags;n.spawnSeq=p.spawnSeq;n.kills=p.kills;n.deaths=p.deaths;n.c4=(uint8_t)p.c4Left; memcpy(buf+off,&n,sizeof n);off+=sizeof n; }
     for(auto&v:evq){memcpy(buf+off,&v,sizeof v);off+=sizeof v;}
     for(auto&q:trOut){memcpy(buf+off,&q,sizeof q);off+=sizeof q;} trOut.clear();
@@ -342,7 +344,7 @@ struct Game{
     if(h.matchId!=matchId){ matchId=h.matchId; tr.clear(); evq.clear(); lastEvt=h.nEvt?lastEvt:lastEvt; }
     over=h.over;winner=h.winner;score[0]=h.s0;score[1]=h.s1; int off=sizeof h;
     for(int i=0;i<h.n;i++){ NetEnt n; memcpy(&n,pk.d+off,sizeof n); off+=sizeof n; Ent&p=e[i];
-      p.team=(n.flags&16)?1:0; if(n.flags&128)p.revealT=5.f; p.remote=(n.flags&32)&&i!=0; bool al=n.flags&1; p.kills=n.kills;p.deaths=n.deaths; snprintf(p.name,16,"%s",nm(i).c_str());
+      p.team=(n.flags&16)?1:0; if(n.flags&128)p.revealT=5.f; p.remote=(n.flags&32)&&i!=0; bool al=n.flags&1; p.kills=n.kills;p.deaths=n.deaths; p.off=(n.hp==-1&&!al); snprintf(p.name,16,"%s",nm(i).c_str());
       if(i==meI){
         p.c4Left=n.c4; if(n.hp<p.hp&&al)dmgFlash=0.5f; p.hp=n.hp;
         if(n.spawnSeq!=p.spawnSeq||(al&&!p.alive)){ p.spawnSeq=n.spawnSeq; p.b.x=n.x;p.b.y=n.y;p.b.z=n.z;p.b.vy=0;p.yaw=n.yaw;p.pitch=0;p.crouch=false; prim=n.wpn; p.wpn=n.wpn; }
@@ -368,16 +370,16 @@ struct Game{
     if(role==1){
       while(sock.recv(pk)){ if(pk.n<2)continue; uint8_t ty=pk.d[0];
         int ci=-1; for(int k=0;k<8;k++)if(cli[k].on&&cli[k].a.sin_addr.s_addr==pk.from.sin_addr.s_addr&&cli[k].a.sin_port==pk.from.sin_port)ci=k;
-        if(ty==T_HELLO){ if(ci<0){ for(int k=0;k<8&&ci<0;k++)if(!cli[k].on){ int en=assignSlot(); if(en<0)break; ci=k; cli[k].on=true;cli[k].a=pk.from;cli[k].ent=en; Ent&p=e[en]; p.remote=true;p.bot=false; spawn(p); snprintf(p.name,16,"%s",nm(en).c_str()); char b[40];snprintf(b,40,"%s JOINED",nm(en).c_str());addFeed(b);} }
+        if(ty==T_HELLO){ if(ci<0){ for(int k=0;k<8&&ci<0;k++)if(!cli[k].on){ int en=assignSlot(); if(en<0)break; ci=k; cli[k].on=true;cli[k].a=pk.from;cli[k].ent=en; Ent&p=e[en]; p.remote=true;p.bot=false;p.off=false; spawn(p); snprintf(p.name,16,"%s",nm(en).c_str()); char b[40];snprintf(b,40,"%s JOINED",nm(en).c_str());addFeed(b);} }
           if(ci>=0){ cli[ci].last=0; NetWelcome wl{T_WELCOME,(uint8_t)cli[ci].ent,(uint8_t)mapIdx,(uint8_t)e.size()}; sock.send(pk.from,&wl,sizeof wl); }
           else { NetWelcome wl{T_WELCOME,255,0,0}; sock.send(pk.from,&wl,sizeof wl); } }
-        else if(ty==T_PROBE){ NetBeacon bc; memset(&bc,0,sizeof bc); bc.t=T_BEACON;bc.map=mapIdx;bc.players=(uint8_t)humans();bc.maxp=8; snprintf(bc.name,16,"LAN HOST"); sock.send(pk.from,&bc,sizeof bc); }
-        else if(ty==T_BYE&&ci>=0){ Ent&p=e[cli[ci].ent]; p.remote=false;p.bot=true; char b[40];snprintf(b,40,"%s LEFT",nm(cli[ci].ent).c_str());addFeed(b); cli[ci]=Cli(); }
+        else if(ty==T_PROBE){ NetBeacon bc; fillBeacon(bc); sock.send(pk.from,&bc,sizeof bc); }
+        else if(ty==T_BYE&&ci>=0){ Ent&p=e[cli[ci].ent]; p.remote=false;p.bot=true; if(roomOn&&rmBotsE()==0){ p.bot=false;p.off=true;p.alive=false;p.respawn=1e9f; } char b[40];snprintf(b,40,"%s LEFT",nm(cli[ci].ent).c_str());addFeed(b); cli[ci]=Cli(); }
         else if(ty==T_INPUT&&ci>=0&&pk.n>=(int)sizeof(NetInput)){ cli[ci].last=0; NetInput in; memcpy(&in,pk.d,sizeof in); if((int16_t)(in.seq-e[cli[ci].ent].rin.seq)>0||e[cli[ci].ent].rin.t==0)e[cli[ci].ent].rin=in; }
       }
-      for(auto&c:cli)if(c.on){ c.last+=dt; if(c.last>5.f){ Ent&p=e[c.ent]; p.remote=false;p.bot=true; c=Cli(); } }
+      for(auto&c:cli)if(c.on){ c.last+=dt; if(c.last>5.f){ Ent&p=e[c.ent]; p.remote=false;p.bot=true; if(roomOn&&rmBotsE()==0){ p.bot=false;p.off=true;p.alive=false;p.respawn=1e9f; } c=Cli(); } }
       snapT+=dt; if(snapT>=0.05f){snapT=0;packSnap();}
-      beaconT+=dt; if(beaconT>=1.f){ beaconT=0; NetBeacon bc; memset(&bc,0,sizeof bc); bc.t=T_BEACON;bc.map=mapIdx;bc.players=(uint8_t)humans();bc.maxp=8; snprintf(bc.name,16,"LAN HOST");
+      beaconT+=dt; if(beaconT>=1.f){ beaconT=0; NetBeacon bc; fillBeacon(bc);
         beaconTx.send(mkAddr(htonl(INADDR_BROADCAST),PORT_BEACON),&bc,sizeof bc); uint32_t sub=(myIp&0x00FFFFFFu)|0xFF000000u; if(myIp)beaconTx.send(mkAddr(sub,PORT_BEACON),&bc,sizeof bc); }
     } else if(role==2||joining){
       while(sock.recv(pk)){ if(pk.n<1)continue; uint8_t ty=pk.d[0];
@@ -391,9 +393,9 @@ struct Game{
     }
     if(menu==2&&beaconRx.ready()){ ipT-=dt; if(ipT<=0||!myIp){ ipT=3.f; myIp=localIp(); }
       if(myIp&&!joining){ NetHello pr{T_PROBE,NET_VER}; for(int k=0;k<10;k++){ sweepIdx=sweepIdx%254+1; uint32_t t=(myIp&0x00FFFFFFu)|((uint32_t)sweepIdx<<24); if(t!=myIp)beaconRx.send(mkAddr(t,PORT_GAME),&pr,sizeof pr); } } // مسح مباشر (unicast) للشبكة: يعمل حتى حيث يُمنع البث (iOS)
-      while(beaconRx.recv(pk)){ if(pk.n<(int)sizeof(NetBeacon)||pk.d[0]!=T_BEACON)continue; NetBeacon bc; memcpy(&bc,pk.d,sizeof bc); bool f=false;
-        for(auto&h:hosts)if(h.a.sin_addr.s_addr==pk.from.sin_addr.s_addr){h.map=bc.map;h.players=bc.players;h.seen=0;f=true;}
-        if(!f){ HostEnt he; he.a=mkAddr(pk.from.sin_addr.s_addr,PORT_GAME); he.map=bc.map;he.players=bc.players;he.maxp=bc.maxp;memcpy(he.name,bc.name,16);he.name[15]=0;he.seen=0; hosts.push_back(he);} }
+      while(beaconRx.recv(pk)){ if(pk.n<20||pk.d[0]!=T_BEACON)continue; NetBeacon bc; memset(&bc,0,sizeof bc); memcpy(&bc,pk.d,std::min<size_t>((size_t)pk.n,sizeof bc)); if(!bc.lim5)bc.lim5=6; bool f=false;
+        for(auto&h:hosts)if(h.a.sin_addr.s_addr==pk.from.sin_addr.s_addr){h.map=bc.map;h.players=bc.players;h.maxp=bc.maxp;h.lim5=bc.lim5;h.mins=bc.mins;h.bots=bc.bots;h.style=bc.style;h.seen=0;f=true;}
+        if(!f){ HostEnt he; he.a=mkAddr(pk.from.sin_addr.s_addr,PORT_GAME); he.map=bc.map;he.players=bc.players;he.maxp=bc.maxp;he.lim5=bc.lim5;he.mins=bc.mins;he.bots=bc.bots;he.style=bc.style;memcpy(he.name,bc.name,16);he.name[15]=0;he.seen=0; hosts.push_back(he);} }
       for(auto&h:hosts)h.seen+=dt; hosts.erase(std::remove_if(hosts.begin(),hosts.end(),[](HostEnt&h){return h.seen>4.f;}),hosts.end()); if(hostSel>=(int)hosts.size())hostSel=std::max(0,(int)hosts.size()-1); }
   }
   // لاعب بعيد (على المضيف): تطبيق آخر حالة وصلت منه
@@ -474,13 +476,20 @@ struct Game{
       if(d){ if(menuRow==0)menuSel=(menuSel+d+MAP_COUNT)%MAP_COUNT; else if(menuRow==1)diff=(diff+d+3)%3; else mode=(mode+d+modeCount)%modeCount; }
       if(msgT>0)msgT-=dt;
       if(((in.confirm&&!prev.confirm)||(in.start&&!prev.start))&&menuSel==8&&mode>=1&&mode<=2){ say("خريطة الطيران للاعب الواحد فقط"); prev=in; return; }
-      if((in.confirm&&!prev.confirm)||(in.start&&!prev.start)){ if(mode==0||mode>=3){ nLocal=mode>=3?2:1; coop=(mode!=4&&mode!=5); duel=(mode==5); fovMul=nLocal==2?1.12f:1.f; hudK=nLocal==2?0.8f:1.f; menu=0;role=0;meI=0;startMatch(menuSel);} else { nLocal=1; duel=false; fovMul=hudK=1.f; if(mode==1)hostStart(); else lobbyStart(); } }
+      if((in.confirm&&!prev.confirm)||(in.start&&!prev.start)){ if(mode==0||mode>=3){ roomOn=false; scoreLim=30; timeLim=0; nLocal=mode>=3?2:1; coop=(mode!=4&&mode!=5); duel=(mode==5); fovMul=nLocal==2?1.12f:1.f; hudK=nLocal==2?0.8f:1.f; menu=0;role=0;meI=0;startMatch(menuSel);} else { nLocal=1; duel=false; fovMul=hudK=1.f; if(mode==1){ roomOn=false; menu=4; rmRow=0; } else lobbyStart(); } }
+      prev=in; return; }
+    if(menu==4){ // إعداد الغرفة
+      bool up=in.my>0.5f&&prev.my<=0.5f,dn=in.my<-0.5f&&prev.my>=-0.5f,rt=in.mx>0.5f&&prev.mx<=0.5f,lf=in.mx<-0.5f&&prev.mx>=-0.5f;
+      if(up)rmRow=(rmRow+5)%6; if(dn)rmRow=(rmRow+1)%6; int d=rt?1:lf?-1:0;
+      if(d){ switch(rmRow){ case 0:rmName=(rmName+d+8)%8;break; case 1:rmMaxI=(rmMaxI+d+7)%7;break; case 2:rmLimI=(rmLimI+d+4)%4;break; case 3:rmMinI=(rmMinI+d+4)%4;break; case 4:rmBotI=(rmBotI+d+4)%4;break; default:rmStyle=(rmStyle+d+2)%2; } }
+      if(in.back&&!prev.back){ menu=1; prev=in; return; }
+      if((in.confirm&&!prev.confirm)||(in.start&&!prev.start)){ roomOn=true; roomApply(); hostStart(); }
       prev=in; return; }
     if(menu==3){ netStartStep(); if(in.back&&!prev.back){ netClose(); menu=1; } prev=in; return; }
     if(menu==2){
       netPump(dt); if(msgT>0)msgT-=dt;
       bool up=in.my>0.5f&&prev.my<=0.5f,dn=in.my<-0.5f&&prev.my>=-0.5f; if(up&&hostSel>0)hostSel--; if(dn&&hostSel+1<(int)hosts.size())hostSel++;
-      if(in.confirm&&!prev.confirm&&!joining&&!hosts.empty())joinAddr(hosts[hostSel].a);
+      if(in.confirm&&!prev.confirm&&!joining&&!hosts.empty()){ scoreLim=hosts[hostSel].lim5*5; timeLim=hosts[hostSel].mins*60; roomOn=false; joinAddr(hosts[hostSel].a); }
       if(in.back&&!prev.back){ netClose(); menu=1; }
       prev=in; return; }
     if(in.start&&!prev.start)paused=!paused;
@@ -494,7 +503,7 @@ struct Game{
     if(over&&role==2){ prev=in; return; }
     { Ent&m0=e[meI]; static float lastPh=0; if(m0.alive&&m0.moving&&drive<0&&!dn.on&&(int)(m0.phase/(m0.sprint?2.2f:2.8f))!=(int)(lastPh/(m0.sprint?2.2f:2.8f)))SFX::play(SFX::STEP,m0.crouch?0.12f:0.3f,0); lastPh=m0.phase;
       SFX::engSpeed.store(drive>=0&&drive<(int)vh.size()?fabsf(vh[drive].speed):-1.f); SFX::droneVol.store(dn.on?1.f:0.f); }
-    t+=dt; updateGren(dt,in); if(msgT>0)msgT-=dt; if(hitMark>0)hitMark-=dt; if(dmgFlash>0)dmgFlash-=dt; if(hitAngT>0)hitAngT-=dt; if(wsT>0)wsT-=dt;
+    t+=dt; if(role!=2&&timeLim>0&&!over&&t>=timeLim){ over=true; winner=score[0]>=score[1]?0:1; } updateGren(dt,in); if(msgT>0)msgT-=dt; if(hitMark>0)hitMark-=dt; if(dmgFlash>0)dmgFlash-=dt; if(hitAngT>0)hitAngT-=dt; if(wsT>0)wsT-=dt;
     for(auto&q:tr)q.t-=dt; tr.erase(std::remove_if(tr.begin(),tr.end(),[](Tracer&q){return q.t<=0;}),tr.end());
     for(int k=0;k<4;k++)if(feedT[k]>0)feedT[k]-=dt;
     for(auto&k:sparks){ k.t-=dt; k.vy-=9.f*dt; k.x+=k.vx*dt; k.y=std::max<float>(0.02f,k.y+k.vy*dt); k.z+=k.vz*dt; } sparks.erase(std::remove_if(sparks.begin(),sparks.end(),[](Spark&k){return k.t<=0;}),sparks.end());
@@ -509,6 +518,7 @@ struct Game{
     if(air)airUpdate(dt,airIn); else for(int i=0;i<(int)e.size();i++){ Ent&p=e[i];
       if(nLocal==2&&i==ls2.meI)continue;
       if(p.prot>0)p.prot-=dt;
+      if(p.off&&!p.remote)continue;
       if(!p.alive){ p.respawn-=dt; if(p.respawn<=0){spawn(p);} continue; }
       if(i==meI)updatePlayer(dt,use); else if(p.remote)updateRemote(i,dt); else updateBot(i,dt);
     }
@@ -531,7 +541,15 @@ struct Game{
   void airInit(); void airUpdate(float dt,const Input&in); void airSpawn(int i); int jetNew(int team,bool airborne,int slot); void jetHurt(int j,float dmg,int by,bool inc); void jetDie(int j,int by);
   bool jetStep(Jet&J,float dt,float rc,float pc,float yc,float thd,bool ab); void jetAI(int j,float dt); void jetGun(int j,int aim=-1); float jetSpeed(const Jet&J)const{ return sqrtf(J.vx*J.vx+J.vy*J.vy+J.vz*J.vz); }
   void airCam(Cam&c); void airDraw(const Cam&c); void airHud(int sc); bool projP(float x,float y,float z,int&X,int&Y,float&zc); void jetSay(const char*s){snprintf(jetMsg,48,"%s",s);jetMsgT=2.5f;} int myJet()const{ return (air&&meI>=0&&meI<(int)entJet.size())?entJet[meI]:-1; }
-  int modeCount=6; bool duel=false; int nLocal=1,act=0; bool coop=true; Input in2; LS ls2; int vpass=0; float fovMul=1.f,hudK=1.f;
+  int modeCount=6; bool duel=false;
+  // ---- إعداد الغرفة (استضافة LAN) ----
+  bool roomOn=false; int rmName=0,rmMaxI=6,rmLimI=2,rmMinI=0,rmBotI=2,rmStyle=0,rmRow=0,timeLim=0; // rmMaxI: 2..8 = 2+rmMaxI؛ البوتات {0,2,4,6}
+  static const char*rmNameOf(int i){ static const char*N[8]={"Falcon","Lion","Wolf","Eagle","Tiger","Cobra","Viper","Shark"}; return N[i&7]; }
+  static int rmLimV(int i){ static const int L[4]={10,20,30,50}; return L[i&3]; }
+  static int rmMinV(int i){ static const int M[4]={0,5,10,15}; return M[i&3]; }
+  int rmMaxE()const{ return rmStyle==1?2:2+rmMaxI; }
+  int rmBotsE()const{ static const int B[4]={0,2,4,6}; return rmStyle==1?0:std::min(B[rmBotI&3],rmMaxE()-1); }
+  void roomApply(){ scoreLim=rmLimV(rmLimI); timeLim=rmMinV(rmMinI)*60; } int nLocal=1,act=0; bool coop=true; Input in2; LS ls2; int vpass=0; float fovMul=1.f,hudK=1.f;
   bool skipVM=false; // PS4 شاشة منقسمة: تخطّي توليد مجسّم السلاح في هذا الإطار
   void lsx(){ if(nLocal<2)return; LS&o=ls2; std::swap(meI,o.meI);std::swap(drive,o.drive);std::swap(gren,o.gren);std::swap(prim,o.prim);std::swap(streak,o.streak);std::swap(glCnt,o.glCnt);
     std::swap(lookIdle,o.lookIdle);std::swap(hitMark,o.hitMark);std::swap(dmgFlash,o.dmgFlash);std::swap(hitAng,o.hitAng);std::swap(hitAngT,o.hitAngT);std::swap(dnCd,o.dnCd);std::swap(dnSpot,o.dnSpot);std::swap(msgT,o.msgT);std::swap(optZ,o.optZ);
@@ -735,7 +753,7 @@ struct Game{
     // ---- شريط النتيجة والوقت (أعلى الوسط) ----
     { int pw=70*sc,ph=15*sc,px=W/2-pw/2,py=3*sc; rrect(px,py,pw,ph,ph/2,0xFF0B0F14,0.78f);
       snprintf(b,64,"%d",score[0]); textC(px+14*sc,py+ph/2-4*sc,b,sc,0xFFE23B3B); snprintf(b,64,"%d",score[1]); textC(px+pw-14*sc,py+ph/2-4*sc,b,sc,0xFF3B82F6);
-      int secs=std::max(0,600-(int)t); snprintf(b,64,"%d:%02d",secs/60,secs%60); textC(W/2,py+ph/2-4*sc,b,sc,0xFFE8EEF6); }
+      int secs=std::max(0,(timeLim>0?timeLim:600)-(int)t); snprintf(b,64,"%d:%02d",secs/60,secs%60); textC(W/2,py+ph/2-4*sc,b,sc,0xFFE8EEF6); }
     // ---- رادار دائري (أعلى اليسار) ----
     int R=30*sc,rcx=8*sc+R,rcy=8*sc+R; float fxw=-sinf(me.yaw),fzw=-cosf(me.yaw),rxw=cosf(me.yaw),rzw=-sinf(me.yaw);
     r.flush(); for(int j=-R;j<=R;j++){ int xo=(int)sqrtf((float)(R*R-j*j)+0.5f); int in2=(R-sc)*(R-sc)-j*j; int xi=in2>0?(int)sqrtf((float)in2):-1; int Y=rcy+j;
@@ -819,11 +837,21 @@ struct Game{
     char b[96]; int sm=std::max(1,sc-1);
 
     if(menu==3){ int cw=W*6/10,ch=H/2,cx=(W-cw)/2,cy=(H-ch)/2; card(cx,cy,cw,ch,sc); textC(W/2,cy+ch/2-18*sc,"جارٍ تشغيل الشبكة…",sc*2,C_TXT); snprintf(b,96,"STEP: %s",netWhat); textC(W/2,cy+ch/2+10*sc,b,sc,C_ACC); textC(W/2,cy+ch-16*sc,"O: إلغاء",sm,C_MUT); return; }
+    if(menu==4){ // شاشة إعداد الغرفة
+      const char*L[6]={"اسم الغرفة","أقصى لاعبين","حد النقاط","الوقت","البوتات","النمط"}; char v[6][40];
+      snprintf(v[0],40,"%s",rmNameOf(rmName)); snprintf(v[1],40,"%d",rmMaxE()); snprintf(v[2],40,"%d",rmLimV(rmLimI)); if(rmMinV(rmMinI))snprintf(v[3],40,"%d min",rmMinV(rmMinI)); else snprintf(v[3],40,"بلا حد");
+      if(rmBotsE()==0)snprintf(v[4],40,"بدون بوتات"); else snprintf(v[4],40,"%d",rmBotsE()); snprintf(v[5],40,"%s",rmStyle?"مبارزة 1 ضد 1":"فرق");
+      int rh=20*sc,gap=6*sc,pad=12*sc,cw=W*52/100,ch=pad*2+6*(rh+gap)+rh+14*sc,cx=(W-cw)/2,cy=(H-ch)/2;
+      card(cx,cy,cw,ch,sc); rect(cx+8*sc,cy,cw/2-8*sc,2*sc,0xFFE23B3B); rect(cx+cw/2,cy,cw/2-8*sc,2*sc,0xFF3B82F6);
+      for(int k=0;k<6;k++){ int y=cy+pad+k*(rh+gap),x=cx+pad,w2=cw-pad*2; bool sel=rmRow==k; uint32_t col=k&1?0xFF3B82F6:0xFFE23B3B; rrect(x,y,w2,rh,6*sc,sel?col:C_LINE); rrect(x+1,y+1,w2-2,rh-2,6*sc-1,sel?C_BTNH:C_BTN);
+        int ty=y+rh/2-4*sc; text(x+w2-8*sc-tw(L[k],sc),ty,L[k],sc,C_MUT); textC(x+w2*3/10,ty,v[k],sc,sel?C_TXT:0xFFB8C4D4); if(sel){ text(x+8*sc,ty,"◀",sc,col); text(x+w2*11/20,ty,"▶",sc,col); } }
+      btn(cx+pad,cy+pad+6*(rh+gap)+2*sc,cw-pad*2,rh+4*sc,sc,"أنشئ الغرفة وابدأ",false,true);
+      textC(W/2,cy+ch+8*sc,"D-pad: اختيار    X: إنشاء    O: رجوع",std::max(1,sc-1),0xFF607080); return; }
     if(menu==2){
       int cw=W*6/10,ch=H*7/10,cx=(W-cw)/2,cy=(H-ch)/2; card(cx,cy,cw,ch,sc); textC(W/2,cy+10*sc,"انضم إلى لعبة شبكة محلية",sc*2,C_TXT);
       if(joining)textC(W/2,H/2,"جارٍ الاتصال…",sc*2,C_ACC);
       else if(hosts.empty())textC(W/2,H/2-6*sc,"جارٍ البحث عن ألعاب على شبكتك…",sc,C_MUT);
-      else for(int i=0;i<(int)hosts.size();i++){ snprintf(b,96,"%s   MAP %d   %d/%d",hosts[i].name,hosts[i].map+1,hosts[i].players,hosts[i].maxp); btn(cx+10*sc,cy+40*sc+i*24*sc,cw-20*sc,20*sc,sc,b,i==hostSel,false); }
+      else for(int i=0;i<(int)hosts.size();i++){ snprintf(b,96,"%s  MAP %d  %d/%d  %dK%s%s",hosts[i].name,hosts[i].map+1,hosts[i].players,hosts[i].maxp,hosts[i].lim5*5,hosts[i].mins?"  TIME":"",hosts[i].style?"  DUEL":(hosts[i].bots?"  BOTS":"")); btn(cx+10*sc,cy+40*sc+i*24*sc,cw-20*sc,20*sc,sc,b,i==hostSel,false); }
       if(msgT>0)textC(W/2,cy+ch-34*sc,msg,sc,0xFFFF6060);
       textC(W/2,cy+ch-16*sc,"D-pad: تحديد    X: انضمام    O: رجوع",sm,C_MUT); return; }
     static const char*MN[9]={"المستودع","أطلال الصحراء","شارع المدينة","القاعدة القطبية","صحراء الشاص","أهرامات الجيزة","المدينة القديمة","ميناء الإسكندرية","قاعدة جوية F-35"};
