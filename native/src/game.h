@@ -47,7 +47,21 @@ struct Game{
   int prim=0; Input prev; bool paused=false; float msgT=0; char msg[64]={0}; int shotsFeed[4]={-1,-1,-1,-1}; std::string feed[4]; float feedT[4]={};
   int netGoal=0,netSt=0,netPhase=0; const char*netWhat=""; sockaddr_in pendJoin;
 
-  int menu=1,menuSel=0,menuRow=0,mode=0; int qApplied=-1; bool qChanged=false; static constexpr int MROWS=6; // menu: 1 رئيسية ، 2 ردهة الانضمام
+  int menu=1,menuSel=0,menuRow=0,mode=0; int qApplied=-1; bool qChanged=false;
+  // ---- لمس مباشر للقوائم: مناطق تُملأ أثناء الرسم ثم تُترجم لنبضة إدخال واحدة ----
+  struct UiHit{int x,y,w,h,kind,idx;}; std::vector<UiHit> hits; struct Tap{int mx=0; bool confirm=false,back=false,start=false,tri=false,reload=false,swapP=false,fire=false;} tap;
+  void hit_(int x,int y,int w,int h,int kind,int idx=0){ hits.push_back({x,y,w,h,kind,idx}); }
+  bool uiTap(int px,int py){ for(int i=(int)hits.size()-1;i>=0;i--){ const UiHit&h=hits[i]; if(px<h.x||px>=h.x+h.w||py<h.y||py>=h.y+h.h)continue; int dir=(px<h.x+h.w*45/100)?-1:1;
+      switch(h.kind){
+        case 1: if(menu==4){ rmRow=h.idx; tap.mx=dir; } else { menuRow=h.idx; tap.mx=dir; } return true;
+        case 2: if(menu==1)menuRow=5; tap.confirm=true; return true;
+        case 3: hostSel=h.idx; tap.confirm=true; return true;
+        case 4: tap.back=true; return true;
+        case 5: tap.start=true; return true;
+        case 6: tap.mx=dir; return true;
+        case 7: swapSticks=!swapSticks; return true;
+        case 8: if(h.idx==0)tap.tri=true; else if(h.idx==1)tap.reload=true; else if(h.idx==2)tap.swapP=true; else tap.fire=true; return true; }
+    } return false; } static constexpr int MROWS=6; // menu: 1 رئيسية ، 2 ردهة الانضمام
   // ---- شبكة ----
   int role=0,meI=0; uint8_t matchId=0,spawnCtr=0,evtId=0,lastEvt=0; std::vector<NetEvt> evq; uint16_t netSeq=0;
   Udp sock,beaconRx,beaconTx; float snapT=0,inT=0,beaconT=0,srvSilence=0,joinT=0; uint32_t myIp=0; int sweepIdx=0; float ipT=0; char ipTxt[24]={0}; bool joining=false; sockaddr_in hostAddr; Input lastIn;
@@ -73,6 +87,7 @@ struct Game{
   int cap(const Ent&p)const{ return (int)(WEAPONS[p.wpn].mag*p.magM+0.5f); }
   void giveWeapon(Ent&p,int wi){p.wpn=wi;p.magM=p.relM=1;if(&p==&e[meI]&&role!=3)optZ=0;p.ammo=WEAPONS[wi].mag;p.mags=WEAPONS[wi].mags;p.reloadT=-1;p.cd=0; if(role!=3&&&p==&e[meI])applyWAtt(p); }
   void spawn(Ent&p){
+    if(roomOn&&cfgWpn>=0&&role!=2)p.wpn=cfgWpn;
     if(role!=2&&!e.empty()){ int ix=(int)(&p-&e[0]); if(ix>=0&&ix<(int)e.size())c4Clear(ix); }
     const P2*sp=p.team?w.m->blue:w.m->red; int n=p.team?w.m->nbl:w.m->nr; P2 s=sp[rand()%n];
     // اختر نقطة بعيدة عن الأعداء
@@ -89,7 +104,7 @@ struct Game{
     return raycastMap(w,ax,ay,az,dx/d,dy/d,dz/d,d)>=1e29f;
   }
   void hurt(int vi,int ai,float dmg,bool head){
-    Ent&v=e[vi]; if(!v.alive||v.prot>0)return;
+    Ent&v=e[vi]; if(!v.alive||v.prot>0)return; if(roomOn)dmg*=cfgDmg;
     v.hp-=dmg; v.lastHitBy=ai; v.lastDmgT=t; if(vi==meI){dmgFlash=0.5f;SFX::play(SFX::HURT,0.9f); if(ai>=0&&ai!=vi){ hitAng=atan2f(-(e[ai].b.x-v.b.x),-(e[ai].b.z-v.b.z))-v.yaw; hitAngT=1.2f; } }
     if(ai==meI){hitMark=0.25f;SFX::play(SFX::HIT,0.7f);}
     if(nLocal==2){ if(vi==ls2.meI){ ls2.dmgFlash=0.5f; ls2.streak=0; if(ai>=0&&ai!=vi){ ls2.hitAng=atan2f(-(e[ai].b.x-v.b.x),-(e[ai].b.z-v.b.z))-v.yaw; ls2.hitAngT=1.2f; } } if(ai==ls2.meI&&vi!=ai)ls2.hitMark=0.25f; }
@@ -468,7 +483,8 @@ struct Game{
       k++; }
   }
   void update(float dt,const Input&in0){
-    airIn=in0; Input in=in0; if(air&&myJet()>=0){ in.drone=false;in.grenade=false;in.c4=false;in.det=false;in.fire=false;in.tri=false;in.use=false;in.reload=false;in.swapP=false;in.swapN=false;in.jump=false;in.crouch=false;in.pick=-1; }
+    Input in0b=in0; if(tap.mx){in0b.mx=(float)tap.mx;} if(tap.confirm)in0b.confirm=true; if(tap.back)in0b.back=true; if(tap.start)in0b.start=true; if(tap.tri)in0b.tri=true; if(tap.reload)in0b.reload=true; if(tap.swapP)in0b.swapP=true; if(tap.fire)in0b.fire=true; tap=Tap();
+    airIn=in0b; Input in=in0b; if(air&&myJet()>=0){ in.drone=false;in.grenade=false;in.c4=false;in.det=false;in.fire=false;in.tri=false;in.use=false;in.reload=false;in.swapP=false;in.swapN=false;in.jump=false;in.crouch=false;in.pick=-1; }
     lastIn=in; if(qApplied!=g_quality){ qApplied=g_quality; static const float FK[5]={0.40f,0.62f,0.82f,1.f,1.3f}; r.fogK=FK[g_quality]; qChanged=true; }
 
     if(menu==1){
@@ -481,8 +497,8 @@ struct Game{
       prev=in; return; }
     if(menu==4){ // إعداد الغرفة
       bool up=in.my>0.5f&&prev.my<=0.5f,dn=in.my<-0.5f&&prev.my>=-0.5f,rt=in.mx>0.5f&&prev.mx<=0.5f,lf=in.mx<-0.5f&&prev.mx>=-0.5f;
-      if(up)rmRow=(rmRow+5)%6; if(dn)rmRow=(rmRow+1)%6; int d=rt?1:lf?-1:0;
-      if(d){ switch(rmRow){ case 0:rmName=(rmName+d+8)%8;break; case 1:rmMaxI=(rmMaxI+d+7)%7;break; case 2:rmLimI=(rmLimI+d+4)%4;break; case 3:rmMinI=(rmMinI+d+4)%4;break; case 4:rmBotI=(rmBotI+d+4)%4;break; default:rmStyle=(rmStyle+d+2)%2; } }
+      if(up)rmRow=(rmRow+RROWS-1)%RROWS; if(dn)rmRow=(rmRow+1)%RROWS; int d=rt?1:lf?-1:0;
+      if(d){ switch(rmRow){ case 0:rmName=(rmName+d+8)%8;break; case 1:rmMaxI=(rmMaxI+d+7)%7;break; case 2:rmLimI=(rmLimI+d+4)%4;break; case 3:rmMinI=(rmMinI+d+4)%4;break; case 4:rmBotI=(rmBotI+d+4)%4;break; case 5:rmStyle=(rmStyle+d+2)%2;break; case 6:rmWpnI=(rmWpnI+d+WEAPON_COUNT+1)%(WEAPON_COUNT+1);break; default:rmDmgI=(rmDmgI+d+3)%3; } }
       if(in.back&&!prev.back){ menu=1; prev=in; return; }
       if((in.confirm&&!prev.confirm)||(in.start&&!prev.start)){ roomOn=true; roomApply(); hostStart(); }
       prev=in; return; }
@@ -544,13 +560,13 @@ struct Game{
   void airCam(Cam&c); void airDraw(const Cam&c); void airHud(int sc); bool projP(float x,float y,float z,int&X,int&Y,float&zc); void jetSay(const char*s){snprintf(jetMsg,48,"%s",trl(s));jetMsgT=2.5f;} int myJet()const{ return (air&&meI>=0&&meI<(int)entJet.size())?entJet[meI]:-1; }
   int modeCount=6; bool duel=false;
   // ---- إعداد الغرفة (استضافة LAN) ----
-  bool roomOn=false; int rmName=0,rmMaxI=6,rmLimI=2,rmMinI=0,rmBotI=2,rmStyle=0,rmRow=0,timeLim=0; // rmMaxI: 2..8 = 2+rmMaxI؛ البوتات {0,2,4,6}
+  bool roomOn=false; static constexpr int RROWS=8; int rmWpnI=0,rmDmgI=1; /* سلاح البداية (0=عشوائي) وقوة الضرر {0.5,1,2} — يطبّقها المضيف */ float cfgDmg=1.f; int cfgWpn=-1; int rmName=0,rmMaxI=6,rmLimI=2,rmMinI=0,rmBotI=2,rmStyle=0,rmRow=0,timeLim=0; // rmMaxI: 2..8 = 2+rmMaxI؛ البوتات {0,2,4,6}
   static const char*rmNameOf(int i){ static const char*N[8]={"Falcon","Lion","Wolf","Eagle","Tiger","Cobra","Viper","Shark"}; return N[i&7]; }
   static int rmLimV(int i){ static const int L[4]={10,20,30,50}; return L[i&3]; }
   static int rmMinV(int i){ static const int M[4]={0,5,10,15}; return M[i&3]; }
   int rmMaxE()const{ return rmStyle==1?2:2+rmMaxI; }
   int rmBotsE()const{ static const int B[4]={0,2,4,6}; return rmStyle==1?0:std::min(B[rmBotI&3],rmMaxE()-1); }
-  void roomApply(){ scoreLim=rmLimV(rmLimI); timeLim=rmMinV(rmMinI)*60; } int nLocal=1,act=0; bool coop=true; Input in2; LS ls2; int vpass=0; float fovMul=1.f,hudK=1.f;
+  void roomApply(){ scoreLim=rmLimV(rmLimI); timeLim=rmMinV(rmMinI)*60; static const float DM[3]={0.5f,1.f,2.f}; cfgDmg=DM[rmDmgI%3]; cfgWpn=rmWpnI>0?rmWpnI-1:-1; } int nLocal=1,act=0; bool coop=true; Input in2; LS ls2; int vpass=0; float fovMul=1.f,hudK=1.f;
   bool skipVM=false; // PS4 شاشة منقسمة: تخطّي توليد مجسّم السلاح في هذا الإطار
   void lsx(){ if(nLocal<2)return; LS&o=ls2; std::swap(meI,o.meI);std::swap(drive,o.drive);std::swap(gren,o.gren);std::swap(prim,o.prim);std::swap(streak,o.streak);std::swap(glCnt,o.glCnt);
     std::swap(lookIdle,o.lookIdle);std::swap(hitMark,o.hitMark);std::swap(dmgFlash,o.dmgFlash);std::swap(hitAng,o.hitAng);std::swap(hitAngT,o.hitAngT);std::swap(dnCd,o.dnCd);std::swap(dnSpot,o.dnSpot);std::swap(msgT,o.msgT);std::swap(optZ,o.optZ);
@@ -651,11 +667,25 @@ struct Game{
       H(0,0,0,.21f,.23f,.22f,skin); float hel[3]={d[0]*.9f,d[1]*.9f,d[2]*.9f}; H(0,0.08f,0.01f,.34f,.2f,.35f,hel); H(0,0.02f,-0.115f,.23f,.07f,.03f,visor); H(0,-0.1f,-0.08f,.18f,.05f,.08f,mask); }
     // الذراعان والسلاح (ثابتان على السلاح مع تنفّس خفيف)
     float ap=a.sprint?0.2f:a.pitch; float base=a.sprint?0.9f:1.5708f; float br=0.015f*sinf(a.phase*0.5f+t*2.f);
-    auto arm=[&](float ax,float rot){ float len=0.54f,sh[3]; UPp(ax,1.36f,0,sh); float cr_=cosf(rot),sr=sinf(rot);
-      B(sh[0],sh[1]-len/2*cr_,sh[2]-len/2*sr,.12f,len,.12f,rot,d); B(sh[0],sh[1]-(len+0.02f)*cr_,sh[2]-(len+0.02f)*sr,.1f,.1f,.1f,rot,glove); };
-    arm(0.27f,base+ap-0.12f+br); arm(-0.27f,base+ap+0.12f+br);
     float gs[3]; UPp(0.12f,1.3f,0,gs); float cA=cosf(ap),sA=sinf(ap); const bool lau=isExpl(a.wpn); const float gdy=lau?-0.13f:0.05f,gdz=lau?0.14f:0.38f; float wo[3]; Renderer::rot(yw,0,gs[0],gs[1]-gdy*cA+gdz*sA,gs[2]-gdy*sA-gdz*cA,wo);
     gsc=(gmodOf(a.wpn)&&WKIND[a.wpn%WEAPON_COUNT]>1)?1.5f:1.f; drawGunAt(x+wo[0],y+wo[1],z+wo[2],yw,ap,a.wpn,a.flash>0?1.f:0.f,true,1.f); gsc=1.f;
+    // ---- ذراعان بمفصل مرفق (IK): اليد اليمنى على قبضة الزناد واليسرى على المقدّمة، مع كتف وجذع يميلان مع الإطلاق ----
+    { const float gsK=(gmodOf(a.wpn)&&WKIND[a.wpn%WEAPON_COUNT]>1)?1.5f:1.f; const GunDef&gd=GUNDEFS[a.wpn]; const bool pistol=(a.wpn==6||a.wpn==7);
+      float gl[3]={gs[0],gs[1]-gdy*cA+gdz*sA,gs[2]-gdy*sA-gdz*cA}; // أصل السلاح (محلي)
+      auto G2L=[&](float hx,float hy,float hz,float*o3){ hx*=gsK; hy*=gsK; hz*=gsK; o3[0]=gl[0]+hx; o3[1]=gl[1]+hy*cA-hz*sA; o3[2]=gl[2]+hy*sA+hz*cA; };
+      auto seg=[&](const float*p0,const float*p1,float th,const float*col){ float w0[3],w1[3]; Renderer::rot(yw,0,p0[0],p0[1],p0[2],w0); Renderer::rot(yw,0,p1[0],p1[1],p1[2],w1);
+        float dx=w1[0]-w0[0],dy=w1[1]-w0[1],dz=w1[2]-w0[2],l=sqrtf(dx*dx+dy*dy+dz*dz); if(l<0.01f)return; float yw2=atan2f(-dx,-dz),pt=asinf(dy/l);
+        r.obb(x+(w0[0]+w1[0])*0.5f,y+(w0[1]+w1[1])*0.5f,z+(w0[2]+w1[2])*0.5f,th*.5f,th*.5f,l*.5f,yw2,pt,col[0],col[1],col[2]); };
+      auto limb=[&](float side,const float*hand,bool rightArm){ float S[3]; UPp(side*0.27f,1.36f,0,S); const float L1=0.3f,L2=0.29f; float dv[3]={hand[0]-S[0],hand[1]-S[1],hand[2]-S[2]}; float D=sqrtf(dv[0]*dv[0]+dv[1]*dv[1]+dv[2]*dv[2]); D=std::max(0.12f,D);
+        float k2=D>L1+L2-0.02f?(L1+L2-0.02f)/D:1.f; float H[3]={S[0]+dv[0]*k2,S[1]+dv[1]*k2,S[2]+dv[2]*k2}; D*=k2; float ux=(H[0]-S[0])/D,uy=(H[1]-S[1])/D,uz=(H[2]-S[2])/D;
+        float pv[3]={side*0.55f,-1.f,0.25f}; float dp=pv[0]*ux+pv[1]*uy+pv[2]*uz; pv[0]-=ux*dp; pv[1]-=uy*dp; pv[2]-=uz*dp; float pl=sqrtf(pv[0]*pv[0]+pv[1]*pv[1]+pv[2]*pv[2]); if(pl<1e-3f){pv[0]=side;pv[1]=0;pv[2]=0;pl=1;} for(int q=0;q<3;q++)pv[q]/=pl;
+        float aa=(L1*L1-L2*L2+D*D)/(2*D),hh=sqrtf(std::max(0.f,L1*L1-aa*aa)); float E[3]={S[0]+ux*aa+pv[0]*hh,S[1]+uy*aa+pv[1]*hh,S[2]+uz*aa+pv[2]*hh};
+        seg(S,E,0.115f,d); seg(E,H,0.1f,d); float hw[3]; Renderer::rot(yw,0,H[0],H[1],H[2],hw); r.obb(x+hw[0],y+hw[1],z+hw[2],.05f,.05f,.055f,yw,ap,glove[0],glove[1],glove[2]); (void)rightArm; };
+      float rh[3],lh[3]; float mzz=gd.mz;
+      if(isExpl(a.wpn)){ G2L(0.02f,-0.06f,mzz*0.10f,rh); G2L(-0.01f,0.0f,mzz*0.55f,lh); }
+      else if(pistol){ G2L(0.0f,-0.055f,mzz*0.20f,rh); G2L(-0.025f,-0.075f,mzz*0.18f,lh); }
+      else { G2L(-0.005f,-0.06f,mzz*0.32f,rh); G2L(-0.03f,-0.07f,mzz*0.72f,lh); }
+      limb(1.f,rh,true); limb(-1.f,lh,false); }
   }
   void render(){
     Ent&me=e[meI]; float eyeH=me.alive?(me.b.y+(me.crouch?PK.eyec:PK.eye)):me.b.y+0.6f;
@@ -791,6 +821,10 @@ struct Game{
       rect(cx2,cy2-3*sc,sc,3*sc,C_ACC); }
     // ---- وميض نبض عند انخفاض الصحة ----
     if(me.alive&&me.hp<35.f){ float pa=0.22f+0.14f*sinf(t*6.f); for(int k=0;k<7;k++){ float fa=pa*(1.f-k/7.f); rect(0,k*2*sc,W,2*sc,0xFFB01010,fa); rect(0,H-(k+1)*2*sc,W,2*sc,0xFFB01010,fa); rect(k*2*sc,0,2*sc,H,0xFFB01010,fa*0.8f); rect(W-(k+1)*2*sc,0,2*sc,H,0xFFB01010,fa*0.8f); } }
+    if(!menu&&!paused&&me.alive&&myJet()<0){ // علامة الحلفاء (الاسم + سهم) كي ترى صاحبك من بعيد
+      for(int i=0;i<(int)e.size();i++){ const Ent&q=e[i]; if(i==meI||!q.alive||q.off||q.team!=me.team)continue; float dx=q.b.x-me.b.x,dz=q.b.z-me.b.z,dd=sqrtf(dx*dx+dz*dz); if(dd>140.f||dd<2.f)continue;
+        int X,Y; float zc; if(!projP(q.b.x,q.b.y+2.1f,q.b.z,X,Y,zc)||zc<=0||X<8||X>W-8||Y<8||Y>H-8)continue; uint32_t col=q.bot?0xFF6CB4FF:0xFF5CFF8C; int s2=std::max(1,sc-1); int w2=tw(q.name,s2);
+        for(int k=0;k<3;k++)rect(X-(3-k)*s2,Y+k*s2,(3-k)*2*s2,s2,col,0.9f); text(X-w2/2,Y-8*s2,q.name,s2,col); } }
     if(!menu&&!paused&&me.alive&&drive<0&&myJet()<0)weaponPanel(sc);
     if(air&&!menu)airHud(sc);
     if(msgT>0)textC(W/2,H/3,msg,sc*2,0xFFFFFFFF);
@@ -804,15 +838,15 @@ struct Game{
         for(int i:ix){ if(y>cy+ch-26*sc)break; bool me2=i==meI; rrect(colx-2*sc,y-sc,colw,9*sc,3*sc,me2?0xFF1F3340:0xFF121A24,0.9f); rect(colx,y,sc,7*sc,tc); std::string n=nm(i); text(colx+4*sc,y,n.c_str(),sm,me2?C_ACC:C_TXT); if(i==bestI)text(colx+4*sc+tw(n.c_str(),sm)+3*sc,y,"MVP",sm,0xFFFFD23B);
           snprintf(b,64,"%d",e[i].kills); text(colx+colw*60/100,y,b,sm,C_TXT); snprintf(b,64,"%d",e[i].deaths); text(colx+colw*80/100,y,b,sm,C_MUT); y+=10*sc; } }
       textC(W/2,cy+ch-14*sc,role==2?"بانتظار المضيف…":"X = لعب مرة أخرى",sc,C_ACC); }
-    if(paused){ rect(0,0,W,H,0xFF000000,0.62f);
+    hits.clear(); if(paused){ rect(0,0,W,H,0xFF000000,0.62f);
       int cw=W*52/100,ch=H*72/100,cx=(W-cw)/2,cy=(H-ch)/2; card(cx,cy,cw,ch,sc); rect(cx+8*sc,cy,cw/2-8*sc,2*sc,0xFFE23B3B); rect(cx+cw/2,cy,cw/2-8*sc,2*sc,0xFF3B82F6);
-      textC(W/2,cy+8*sc,"إيقاف مؤقت",sc*3,C_TXT); textC(W/2,cy+36*sc,"OPTIONS: متابعة      O: القائمة الرئيسية",std::max(1,sc-1),C_MUT);
-      char sb[48]; snprintf(sb,48,T("الحساسية   < %.1f >"),sens); rrect(cx+16*sc,cy+52*sc,cw-32*sc,16*sc,6*sc,C_BTN); textC(W/2,cy+56*sc,sb,sc,C_TXT);
-      snprintf(sb,48,T("R1: العصي — %s"),swapSticks?T("يسار = نظر"):T("يسار = حركة")); rrect(cx+16*sc,cy+70*sc,cw-32*sc,16*sc,6*sc,C_BTN); textC(W/2,cy+74*sc,sb,sc,0xFF80E0FF);
+      textC(W/2,cy+8*sc,"إيقاف مؤقت",sc*3,C_TXT); { int bw=(cw-40*sc)/2,by2=cy+32*sc; btn(cx+16*sc,by2,bw,15*sc,sc,"متابعة",false,true); hit_(cx+16*sc,by2,bw,15*sc,5); btn(cx+24*sc+bw,by2,bw,15*sc,sc,"القائمة الرئيسية",false,false); hit_(cx+24*sc+bw,by2,bw,15*sc,4); }
+      char sb[48]; snprintf(sb,48,T("الحساسية   < %.1f >"),sens); rrect(cx+16*sc,cy+52*sc,cw-32*sc,16*sc,6*sc,C_BTN); textC(W/2,cy+56*sc,sb,sc,C_TXT); hit_(cx+16*sc,cy+52*sc,cw-32*sc,16*sc,6);
+      snprintf(sb,48,T("R1: العصي — %s"),swapSticks?T("يسار = نظر"):T("يسار = حركة")); rrect(cx+16*sc,cy+70*sc,cw-32*sc,16*sc,6*sc,C_BTN); textC(W/2,cy+74*sc,sb,sc,0xFF80E0FF); hit_(cx+16*sc,cy+70*sc,cw-32*sc,16*sc,7);
       if(role!=3){ static const char*OA[5]={"حديدي","نقطة حمراء","2x","4x","8x"},*MA[3]={"بدون","كاتم","مخمّد"},*UA[3]={"بدون","مقبض","ليزر"},*GA[3]={"عادي","ممتد","سريع"}; GAtt&a=wAtt[me.wpn&15];
         int by=cy+94*sc; rrect(cx+16*sc,by,cw-32*sc,ch-94*sc-12*sc,8*sc,0xFF0B0F14,0.75f); textC(W/2,by+4*sc,WEAPONS[me.wpn].name,sc*2,C_ACC);
         const char*lb[4]={"مثلث: منظار","مربع: فوهة","L1: مقبض","R2: مخزن"},*vl[4]={OA[a.optic],MA[a.muz],UA[a.under],GA[a.mag]}; int chw=(cw-32*sc-30*sc)/4;
-        for(int i=0;i<4;i++){ int x=cx+24*sc+i*(chw+6*sc),y=by+26*sc; rrect(x,y,chw,26*sc,6*sc,C_BTN); rrect(x,y,3*sc,26*sc,2*sc,i%2?0xFF3B82F6:0xFFE23B3B); textC(x+chw/2,y+3*sc,lb[i],std::max(1,sc-1),C_MUT); textC(x+chw/2,y+14*sc,vl[i],sc,C_TXT); }
+        for(int i=0;i<4;i++){ int x=cx+24*sc+i*(chw+6*sc),y=by+26*sc; hit_(x,y,chw,26*sc,8,i); rrect(x,y,chw,26*sc,6*sc,C_BTN); rrect(x,y,3*sc,26*sc,2*sc,i%2?0xFF3B82F6:0xFFE23B3B); textC(x+chw/2,y+3*sc,lb[i],std::max(1,sc-1),C_MUT); textC(x+chw/2,y+14*sc,vl[i],sc,C_TXT); }
         const WeaponDef&d=WEAPONS[me.wpn]; struct B{const char*n;float v;} bars[3]={{"الضرر",std::min(1.f,d.dmg/110.f)},{"معدل النار",std::min(1.f,d.rpm/1000.f)},{"المدى",std::min(1.f,d.r1/120.f)}};
         for(int i=0;i<3;i++){ int y=by+60*sc+i*9*sc; text(cx+24*sc,y,bars[i].n,std::max(1,sc-1),C_MUT); int bx=cx+cw/3,bw=cw/2; rect(bx,y+2*sc,bw,3*sc,0xFF243040); rect(bx,y+2*sc,(int)(bw*bars[i].v),3*sc,i==0?0xFFE23B3B:i==1?C_ACC:0xFF3B82F6); } } }
   }
@@ -833,27 +867,28 @@ struct Game{
     rect(cx-60*sc,y+34*sc,60*sc,3*sc,0xFFE23B3B); rect(cx,y+34*sc,60*sc,3*sc,0xFF3B82F6);
     textC(cx,y+48*sc,"حرب فرق ثلاثية الأبعاد — الأحمر ضد الأزرق",sc,C_MUT); char bb[48]; snprintf(bb,48,"BUILD %d",BUILD_ID); textC(cx,y+64*sc,bb,std::max(1,sc-1),0xFF607080);
     const char*feat[4]={"دبابة ومركبات","ملحقات الأسلحة","مسيّرة استطلاع","لعب شبكي مشترك"}; for(int i=0;i<4;i++){ int pw=tw(feat[i],std::max(1,sc-1))+12*sc,px=cx-pw/2,py=y+80*sc+i*15*sc; rrect(px,py,pw,12*sc,6*sc,0xFF1B2430,0.9f); textC(cx,py+3*sc,feat[i],std::max(1,sc-1),i%2?0xFF8FB8FF:0xFFFF9A8A); } }
+  void backBtn(int sc){ int x=4*sc,y=4*sc,w2=40*sc,h2=16*sc; rrect(x,y,w2,h2,6*sc,C_BTN); rrect(x,y,w2,h2,6*sc,C_LINE,0.0f); textC(x+w2/2,y+h2/2-4*sc,"<",sc*2,C_TXT); hit_(x,y,w2,h2,4); }
   void renderMenu(){ SFX::engSpeed.store(-1.f); SFX::droneVol.store(0.f);
     static float mt=0; mt+=0.016f; int showMap=menu==1?menuSel:mapIdx;
     Cam c{0,6,0,mt*0.2f,-0.15f,1.2f}; if(w.id!=showMap)w.load(showMap); r.setCam(c); r.world(w); int W=r.W,H=r.H,sc=std::max(1,(H+135)/270); menuBg();
-    char b[96]; int sm=std::max(1,sc-1);
+    char b[96]; int sm=std::max(1,sc-1); hits.clear();
 
     if(menu==3){ int cw=W*6/10,ch=H/2,cx=(W-cw)/2,cy=(H-ch)/2; card(cx,cy,cw,ch,sc); textC(W/2,cy+ch/2-18*sc,"جارٍ تشغيل الشبكة…",sc*2,C_TXT); snprintf(b,96,"STEP: %s",netWhat); textC(W/2,cy+ch/2+10*sc,b,sc,C_ACC); textC(W/2,cy+ch-16*sc,"O: إلغاء",sm,C_MUT); return; }
     if(menu==4){ // شاشة إعداد الغرفة
-      const char*L[6]={"اسم الغرفة","أقصى لاعبين","حد النقاط","الوقت","البوتات","النمط"}; char v[6][40];
+      const char*L[8]={"اسم الغرفة","أقصى لاعبين","حد النقاط","الوقت","البوتات","النمط","سلاح البداية","قوة الضرر"}; char v[8][40];
       snprintf(v[0],40,"%s",rmNameOf(rmName)); snprintf(v[1],40,"%d",rmMaxE()); snprintf(v[2],40,"%d",rmLimV(rmLimI)); if(rmMinV(rmMinI))snprintf(v[3],40,"%d min",rmMinV(rmMinI)); else snprintf(v[3],40,"بلا حد");
-      if(rmBotsE()==0)snprintf(v[4],40,"بدون بوتات"); else snprintf(v[4],40,"%d",rmBotsE()); snprintf(v[5],40,"%s",rmStyle?"مبارزة 1 ضد 1":"فرق");
-      int rh=20*sc,gap=6*sc,pad=12*sc,cw=W*52/100,ch=pad*2+6*(rh+gap)+rh+14*sc,cx=(W-cw)/2,cy=(H-ch)/2;
+      if(rmBotsE()==0)snprintf(v[4],40,"بدون بوتات"); else snprintf(v[4],40,"%d",rmBotsE()); snprintf(v[5],40,"%s",rmStyle?"مبارزة 1 ضد 1":"فرق"); snprintf(v[6],40,"%s",rmWpnI>0?WEAPONS[rmWpnI-1].name:"عشوائي"); { static const char*DV[3]={"50%","100%","200%"}; snprintf(v[7],40,"%s",DV[rmDmgI%3]); }
+      int rh=17*sc,gap=4*sc,pad=9*sc,cw=W*52/100,ch=pad*2+8*(rh+gap)+rh+12*sc,cx=(W-cw)/2,cy=(H-ch)/2;
       card(cx,cy,cw,ch,sc); rect(cx+8*sc,cy,cw/2-8*sc,2*sc,0xFFE23B3B); rect(cx+cw/2,cy,cw/2-8*sc,2*sc,0xFF3B82F6);
-      for(int k=0;k<6;k++){ int y=cy+pad+k*(rh+gap),x=cx+pad,w2=cw-pad*2; bool sel=rmRow==k; uint32_t col=k&1?0xFF3B82F6:0xFFE23B3B; rrect(x,y,w2,rh,6*sc,sel?col:C_LINE); rrect(x+1,y+1,w2-2,rh-2,6*sc-1,sel?C_BTNH:C_BTN);
+      for(int k=0;k<8;k++){ int y=cy+pad+k*(rh+gap),x=cx+pad,w2=cw-pad*2; bool sel=rmRow==k; hit_(x,y,w2,rh,1,k); uint32_t col=k&1?0xFF3B82F6:0xFFE23B3B; rrect(x,y,w2,rh,6*sc,sel?col:C_LINE); rrect(x+1,y+1,w2-2,rh-2,6*sc-1,sel?C_BTNH:C_BTN);
         int ty=y+rh/2-4*sc; text(x+w2-8*sc-tw(L[k],sc),ty,L[k],sc,C_MUT); textC(x+w2*3/10,ty,v[k],sc,sel?C_TXT:0xFFB8C4D4); if(sel){ text(x+8*sc,ty,"◀",sc,col); text(x+w2*11/20,ty,"▶",sc,col); } }
-      btn(cx+pad,cy+pad+6*(rh+gap)+2*sc,cw-pad*2,rh+4*sc,sc,"أنشئ الغرفة وابدأ",false,true);
+      btn(cx+pad,cy+pad+8*(rh+gap)+2*sc,cw-pad*2,rh+4*sc,sc,"أنشئ الغرفة وابدأ",false,true); hit_(cx+pad,cy+pad+8*(rh+gap)+2*sc,cw-pad*2,rh+4*sc,2); backBtn(sc);
       textC(W/2,cy+ch+8*sc,"D-pad: اختيار    X: إنشاء    O: رجوع",std::max(1,sc-1),0xFF607080); return; }
     if(menu==2){
       int cw=W*6/10,ch=H*7/10,cx=(W-cw)/2,cy=(H-ch)/2; card(cx,cy,cw,ch,sc); textC(W/2,cy+10*sc,"انضم إلى لعبة شبكة محلية",sc*2,C_TXT);
       if(joining)textC(W/2,H/2,"جارٍ الاتصال…",sc*2,C_ACC);
       else if(hosts.empty())textC(W/2,H/2-6*sc,"جارٍ البحث عن ألعاب على شبكتك…",sc,C_MUT);
-      else for(int i=0;i<(int)hosts.size();i++){ snprintf(b,96,"%s  MAP %d  %d/%d  %dK%s%s",hosts[i].name,hosts[i].map+1,hosts[i].players,hosts[i].maxp,hosts[i].lim5*5,hosts[i].mins?"  TIME":"",hosts[i].style?"  DUEL":(hosts[i].bots?"  BOTS":"")); btn(cx+10*sc,cy+40*sc+i*24*sc,cw-20*sc,20*sc,sc,b,i==hostSel,false); }
+      else for(int i=0;i<(int)hosts.size();i++){ snprintf(b,96,"%s  MAP %d  %d/%d  %dK%s%s",hosts[i].name,hosts[i].map+1,hosts[i].players,hosts[i].maxp,hosts[i].lim5*5,hosts[i].mins?"  TIME":"",hosts[i].style?"  DUEL":(hosts[i].bots?"  BOTS":"")); btn(cx+10*sc,cy+40*sc+i*24*sc,cw-20*sc,20*sc,sc,b,i==hostSel,false); hit_(cx+10*sc,cy+40*sc+i*24*sc,cw-20*sc,20*sc,3,i); } backBtn(sc);
       if(msgT>0)textC(W/2,cy+ch-34*sc,msg,sc,0xFFFF6060);
       textC(W/2,cy+ch-16*sc,"D-pad: تحديد    X: انضمام    O: رجوع",sm,C_MUT); return; }
     static const char*MN[9]={"المستودع","أطلال الصحراء","شارع المدينة","القاعدة القطبية","صحراء الشاص","أهرامات الجيزة","المدينة القديمة","ميناء الإسكندرية","قاعدة جوية F-35"};
@@ -861,12 +896,12 @@ struct Game{
     const char*go[6]={"العب منفردًا ضد البوتات","استضف لعبة شبكة محلية","انضم إلى لعبة شبكة محلية","ابدأ لاعبين على نفس الجهاز (تعاون)","ابدأ لاعبين على نفس الجهاز (ضد بعض)","ابدأ مبارزة: أنت وصاحبك فقط بدون بوتات"};
     int rh=18*sc,gap=4*sc,pad=10*sc,cw=W*45/100,ch=pad*2+5*(rh+gap)+rh+8*sc+6*sc+10*sc,cx=W/16,cy=(H-ch)/2+4*sc;
     card(cx,cy,cw,ch,sc); rect(cx+8*sc,cy,cw/2-8*sc,2*sc,0xFFE23B3B); rect(cx+cw/2,cy,cw/2-8*sc,2*sc,0xFF3B82F6);
-    auto sel_=[&](int i,const char*label,const char*val,uint32_t col){ int y=cy+pad+i*(rh+gap),x=cx+pad,w2=cw-pad*2; bool sel=menuRow==i; rrect(x,y,w2,rh,6*sc,sel?col:C_LINE); rrect(x+1,y+1,w2-2,rh-2,6*sc-1,sel?C_BTNH:C_BTN);
+    auto sel_=[&](int i,const char*label,const char*val,uint32_t col){ int y=cy+pad+i*(rh+gap),x=cx+pad,w2=cw-pad*2; hit_(x,y,w2,rh,1,i); bool sel=menuRow==i; rrect(x,y,w2,rh,6*sc,sel?col:C_LINE); rrect(x+1,y+1,w2-2,rh-2,6*sc-1,sel?C_BTNH:C_BTN);
       int ty=y+rh/2-4*sc; text(x+w2-8*sc-tw(label,sc),ty,label,sc,C_MUT); textC(x+w2*3/10,ty,val,sc,sel?C_TXT:0xFFB8C4D4); if(sel){ text(x+8*sc,ty,"◀",sc,col); text(x+w2*11/20,ty,"▶",sc,col); } };
     sel_(0,"الخريطة",MN[menuSel%9],0xFFE23B3B); sel_(1,"الصعوبة",dn[diff],C_ACC); sel_(2,"الوضع",md[mode],0xFF3B82F6);
     static const char*QN[5]={"ضعيفة جداً","ضعيفة","متوسطة","عالية","فائقة"},*LN[3]={"العربية","English","Español"};
     sel_(3,"الجودة",QN[g_quality%5],0xFF3DDC84); sel_(4,"اللغة",LN[g_lang%3],0xFFB07CFF);
-    btn(cx+pad,cy+pad+5*(rh+gap)+4*sc,cw-pad*2,rh+4*sc,sc,go[mode],menuRow==5,true);
+    btn(cx+pad,cy+pad+5*(rh+gap)+4*sc,cw-pad*2,rh+4*sc,sc,go[mode],menuRow==5,true); hit_(cx+pad,cy+pad+5*(rh+gap)+4*sc,cw-pad*2,rh+4*sc,2);
     if(msgT>0)textC(cx+cw/2,cy+ch-14*sc,msg,sm,0xFFFF6060);
     titlePanel(sc,W*55/100,W*38/100,H/2-72*sc);
     textC(W/2,H-14*sc,"D-pad: اختيار    X: تأكيد    Options: إيقاف مؤقت",std::max(1,sc-1),0xFF607080);

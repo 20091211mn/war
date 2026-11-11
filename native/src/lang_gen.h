@@ -141,6 +141,21 @@ static const TrE TR_TAB[]={
 {"قاذف RPG-7","RPG-7 Launcher","Lanzacohetes RPG-7"},
 {"المسيّرة تُشحن ","Drone recharging ","Dron recargando "},
 {"أسقطت طائرة! ","Jet down! ","¡Avión derribado! "},
+{"سلاح البداية","Starting weapon","Arma inicial"},
+{"قوة الضرر","Damage scale","Daño"},
+{"عشوائي","Random","Aleatorio"},
+{"اسم الغرفة","Room name","Nombre de sala"},
+{"أقصى لاعبين","Max players","Máx. jugadores"},
+{"حد النقاط","Score limit","Límite de puntos"},
+{"الوقت","Time","Tiempo"},
+{"البوتات","Bots","Bots"},
+{"النمط","Style","Estilo"},
+{"بدون بوتات","No bots","Sin bots"},
+{"بلا حد","No limit","Sin límite"},
+{"مبارزة 1 ضد 1","Duel 1v1","Duelo 1 vs 1"},
+{"فرق","Teams","Equipos"},
+{"أنشئ الغرفة وابدأ","Create room & start","Crear sala y empezar"},
+{"D-pad: اختيار    X: إنشاء    O: رجوع","D-pad: Select    X: Create    O: Back","D-pad: Elegir    X: Crear    O: Atrás"},
 {"الإعدادات","Settings","Ajustes"},
 {"الجودة","Quality","Calidad"},
 {"اللغة","Language","Idioma"},
@@ -155,4 +170,4 @@ static const TrE TR_TAB[]={
 {"Español","Español","Español"},
 {"تم حفظ الإعدادات","Settings saved","Ajustes guardados"},
 };
-static const int TR_N=152;
+static const int TR_N=167;
