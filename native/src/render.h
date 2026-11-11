@@ -51,11 +51,12 @@ struct Renderer {
 #else
   static inline float frcp(float x){ return 1.f/x; }
 #endif
+  float fogK=1.f; // مسافة الرؤية حسب الجودة
   void clear_black(){std::fill(fb.begin(),fb.end(),0xFF000000u);}
   void clear(){
     const MapDef&d=*m; float sl=sqrtf(d.sun[0]*d.sun[0]+d.sun[1]*d.sun[1]+d.sun[2]*d.sun[2]); for(int i=0;i<3;i++)sunN[i]=d.sun[i]/sl;
     flush(); clearPend=true; zBias=0;
-    for(int i=0;i<3;i++)fog[i]=d.fog[i]; fogN=d.fogN; fogF=d.fogF;
+    for(int i=0;i<3;i++)fog[i]=d.fog[i]; fogN=d.fogN*fogK; fogF=d.fogF*fogK;
   }
   // السماء تُرسم بعد الهندسة فقط في البكسلات الفارغة (أرخص بكثير)
   void skyAt(float vx,float vy,float&R,float&G,float&B,float&sOut)const{

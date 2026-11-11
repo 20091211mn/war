@@ -1,6 +1,7 @@
 package com.warzone.kotlin
 
 import android.graphics.*
+import com.warzone.core.Lang
 import com.warzone.core.Game
 import com.warzone.core.myJet
 import com.warzone.core.jetSpeed
@@ -17,7 +18,8 @@ class Hud(private val g: Game, private val c: Controls) {
     private val DIFF = arrayOf("سهل", "عادي", "صعب")
     private val RED = 0xFFE23B3B.toInt(); private val BLUE = 0xFF3B82F6.toInt(); private val ACC = 0xFF35D6FF.toInt()
 
-    private fun text(cv: Canvas, s: String, x: Float, y: Float, size: Float, col: Int = Color.WHITE, align: Paint.Align = Paint.Align.CENTER) {
+    private fun text(cv: Canvas, s0: String, x: Float, y: Float, size: Float, col: Int = Color.WHITE, align: Paint.Align = Paint.Align.CENTER) {
+        val s = com.warzone.core.Lang.t(s0)
         tp.textSize = size; tp.textAlign = align; tp.color = 0xFF000000.toInt(); tp.alpha = 150; cv.drawText(s, x + 1.5f, y + 1.5f, tp)
         tp.color = col; tp.alpha = 255; cv.drawText(s, x, y, tp)
     }
@@ -51,6 +53,14 @@ class Hud(private val g: Game, private val c: Controls) {
         // التصويب
         val cx = w / 2; val cy = h / 2
         if (g.air) airHud(cv, w, h, u, me)
+        val zm = g.zoomOf(me); val scoped = g.adsHeld && me.alive && g.drive < 0 && !g.dn.on && !(g.air && g.myJet() >= 0) && zm >= 2f
+        if (scoped) { // المنظار: شعرة رفيعة خاصة به (الشعرة الديناميكية كانت تغطي العدو البعيد)
+            p.style = Paint.Style.FILL
+            if (zm >= 3.4f) { val rad = h * 0.33f; val pa = Path(); pa.fillType = Path.FillType.EVEN_ODD; pa.addRect(0f, 0f, w, h, Path.Direction.CW); pa.addCircle(cx, cy, rad, Path.Direction.CW); p.color = Color.BLACK; cv.drawPath(pa, p)
+                p.style = Paint.Style.STROKE; p.strokeWidth = 1.2f * u; p.color = 0xE6000000.toInt(); cv.drawLine(cx - rad, cy, cx + rad, cy, p); cv.drawLine(cx, cy - rad, cx, cy + rad, p) }
+            else { p.color = 0xF2FF2828.toInt(); cv.drawCircle(cx, cy, 1.6f * u, p); p.style = Paint.Style.STROKE; p.strokeWidth = 1f * u; p.color = 0xD9000000.toInt(); val rd = h / 12f; val gp2 = 7f * u
+                cv.drawLine(cx - rd, cy, cx - gp2, cy, p); cv.drawLine(cx + gp2, cy, cx + rd, cy, p); cv.drawLine(cx, cy + gp2, cx, cy + rd, p); cv.drawLine(cx, cy - rd, cx, cy - gp2, p) }
+        } else
         if (me.alive && !(g.air && g.myJet() >= 0) && (g.drive < 0 || g.passenger())) {
             p.style = Paint.Style.STROKE; p.strokeWidth = 2.2f * u; p.color = if (g.hitMark > 0) 0xFFFF4040.toInt() else 0xCCFFFFFF.toInt()
             val s = 9f * u; val gp = (4f + (if (me.moving) 3f else 0f) + (if (me.flash > 0) 3f else 0f)) * u
@@ -158,6 +168,7 @@ class Hud(private val g: Game, private val c: Controls) {
         p.color = Color.WHITE; val tri = Path(); tri.moveTo(cx, cy - 6 * u); tri.lineTo(cx - 4 * u, cy + 4 * u); tri.lineTo(cx + 4 * u, cy + 4 * u); tri.close(); cv.drawPath(tri, p)
     }
 
+    private val QUAL = arrayOf("ضعيفة جداً", "ضعيفة", "متوسطة", "عالية", "فائقة"); private val LANGN = arrayOf("العربية", "English", "Español")
     private val MODES = arrayOf("لاعب واحد", "استضافة (LAN)", "انضمام (LAN)")
     private fun lobby(cv: Canvas, w: Float, h: Float, u: Float) {
         p.style = Paint.Style.FILL; p.color = 0xCC0B0F14.toInt(); cv.drawRect(0f, 0f, w, h, p)
@@ -196,6 +207,8 @@ class Hud(private val g: Game, private val c: Controls) {
                 B.ROW_MAP -> { panel(cv, l, t, l + b.w, t + b.h); text(cv, "◀  ${MAPS[g.menuSel % MAPS.size]}  ▶", b.x, b.y + 8 * u, 22 * u); text(cv, "الخريطة", b.x, t - 6 * u, 14 * u, 0xFF8090A0.toInt()) }
                 B.ROW_DIFF -> { panel(cv, l, t, l + b.w, t + b.h); text(cv, "◀  ${DIFF[g.diff % 3]}  ▶", b.x, b.y + 8 * u, 22 * u); text(cv, "الصعوبة", b.x, t - 6 * u, 14 * u, 0xFF8090A0.toInt()) }
                 B.ROW_MODE -> { panel(cv, l, t, l + b.w, t + b.h); text(cv, "◀  ${MODES[g.mode % 3]}  ▶", b.x, b.y + 8 * u, 22 * u); text(cv, "الوضع", b.x, t - 6 * u, 14 * u, 0xFF8090A0.toInt()) }
+                B.ROW_QUAL -> { panel(cv, l, t, l + b.w, t + b.h); text(cv, "◀  ${QUAL[Lang.quality % 5]}  ▶", b.x, b.y + 8 * u, 22 * u); text(cv, "الجودة", b.x, t - 6 * u, 14 * u, 0xFF8090A0.toInt()) }
+                B.ROW_LANG -> { panel(cv, l, t, l + b.w, t + b.h); text(cv, "◀  ${LANGN[Lang.lang % 3]}  ▶", b.x, b.y + 8 * u, 22 * u); text(cv, "اللغة", b.x, t - 6 * u, 14 * u, 0xFF8090A0.toInt()) }
                 B.START -> { panel(cv, l, t, l + b.w, t + b.h, if (c.held[B.START]) 0xFF8CE9FF.toInt() else ACC, 0xFFFFFFFF.toInt()); text(cv, "ابدأ اللعب", b.x, b.y + 9 * u, 26 * u, 0xFF04141A.toInt()) }
             }
         }

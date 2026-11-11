@@ -1,7 +1,7 @@
 # يولّد native/src/fontdata.h : أطلس خط DejaVu Sans Bold (لاتيني + عربي بأشكال العرض)
 from PIL import ImageFont, Image, ImageDraw
 F='/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
-lat=list(range(32,127))+[0xB7,0x2014,0x25B6,0x2190,0x2191,0x2192,0x2193,0x25C0]
+lat=list(range(32,127))+[0xA1,0xBF]+list(range(0xC0,0x100))+[0xB7,0x2014,0x25B6,0x2190,0x2191,0x2192,0x2193,0x25C0]
 ar=list(range(0xFE70,0xFEFD))+[0x60C,0x61F,0x640]
 out=['#pragma once','#include <cstdint>','struct FGlyph{uint32_t cp;uint8_t w,h;int8_t bx,by;uint16_t adv16;uint32_t off;};']
 blob=[];gl={}

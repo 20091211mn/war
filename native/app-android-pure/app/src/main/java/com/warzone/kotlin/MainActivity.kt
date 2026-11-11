@@ -37,7 +37,13 @@ class MainActivity : Activity() {
             }
         }
         view.setEGLContextClientVersion(2); view.setEGLConfigChooser(8, 8, 8, 8, 16, 0); view.preserveEGLContextOnPause = true
-        view.setRenderer(GameGL(game, ctl))
+        val sp = getSharedPreferences("wz", MODE_PRIVATE)
+        com.warzone.core.Lang.quality = sp.getInt("q", 3).coerceIn(0, 4); com.warzone.core.Lang.lang = sp.getInt("lang", 0).coerceIn(0, 2)
+        com.warzone.core.Lang.onSave = { sp.edit().putInt("q", com.warzone.core.Lang.quality).putInt("lang", com.warzone.core.Lang.lang).apply() }
+        val gl = GameGL(game, ctl)
+        gl.onQuality = { q -> runOnUiThread { val s = floatArrayOf(0.5f, 0.65f, 0.8f, 1f, 1f)[q]; val dm = resources.displayMetrics
+            if (s >= 1f) view.holder.setSizeFromLayout() else view.holder.setFixedSize((dm.widthPixels * s).toInt().coerceAtLeast(2), (dm.heightPixels * s).toInt().coerceAtLeast(2)) } }
+        view.setRenderer(gl)
         setContentView(view); immersive()
         Thread { Sfx.initBuffers() }.start()
         // تسخين: تحميل مجسّمات الأسلحة مسبقاً حتى لا يتجمّد أول إطار في المباراة

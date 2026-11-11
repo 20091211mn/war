@@ -251,7 +251,7 @@ class SceneBuilder(private val g: Game) {
             r.zBias = 1000f; val gd = GameData.gundefs[me.wpn]; val k = if (g.adsHeld) 1f else 0f; val top = gd.sy
             bob += if (me.moving) (if (me.sprint) 0.17f else 0.11f) else 0f
             val bx = sinf(bob) * 0.008f * (if (me.moving) 1 else 0); val by = fabsf(cosf(bob)) * 0.008f * (if (me.moving) 1 else 0)
-            var x = 0.17f * (1 - k) + 0 * k + bx; var y = -0.17f * (1 - k) + (-top - 0.002f) * k + by; var z = -0.33f * (1 - k) - 0.36f * k; val kick = if (me.flash > 0) 0.045f else 0f; z += kick; var rx = kick * 1.2f; var ry = 0.07f * (1 - k)
+            var x = 0.17f * (1 - k) + 0 * k + bx; var y = -0.17f * (1 - k) + (-top - 0.016f) * k + by; var z = -0.33f * (1 - k) - 0.36f * k; val kick = if (me.flash > 0) 0.045f else 0f; z += kick; var rx = kick * 1.2f; var ry = 0.07f * (1 - k)
             y += sinf(t * 1.7f) * 0.0025f * (1 - k * 0.7f); x += sinf(t * 0.9f) * 0.0015f
             val RP = RPose(); var inRl = false
             if (me.reloadT >= 0) {

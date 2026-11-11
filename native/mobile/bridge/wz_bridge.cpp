@@ -10,6 +10,7 @@ static volatile const char* g_phase="idle"; static char g_crashPath[512]={0};
 static void crashHandler(int sig){ if(g_crashPath[0]){ int fd=open(g_crashPath,O_WRONLY|O_CREAT|O_TRUNC,0600); if(fd>=0){ char b[200]; int n=0; const char*a="NATIVE CRASH signal "; while(*a)b[n++]=*a++; b[n++]=(char)('0'+sig/10); b[n++]=(char)('0'+sig%10); const char*c=" in: "; while(*c)b[n++]=*c++; const char*ph=(const char*)g_phase; while(*ph&&n<190)b[n++]=*ph++; b[n++]='\n'; ssize_t r=write(fd,b,n); (void)r; close(fd); } } signal(sig,SIG_DFL); raise(sig); }
 static Mobile* M=nullptr; static std::mutex mu; static std::atomic<bool> audioReady{false};
 extern "C" {
+void wz_set_config_path(const char*path){ g_cfgPath=path?path:""; loadSettings(); }
 void wz_set_crash_file(const char*path){ strncpy(g_crashPath,path,511); } // لا نستبدل معالجات الإشارات: ART يعتمد عليها (استبدالها يعطّل التطبيق)
 void wz_init(int sw,int sh,int cores){ g_phase="init"; std::lock_guard<std::mutex> l(mu); if(M)return; M=new Mobile(); M->start(sw,sh,cores); std::thread([]{ SFX::initBuffers(); audioReady=true; }).detach(); }
 void wz_set_screen(int sw,int sh){ g_phase="set_screen"; std::lock_guard<std::mutex> l(mu); if(M)M->setScreen(sw,sh); }

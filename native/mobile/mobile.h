@@ -26,6 +26,7 @@ struct Mobile{
   }
   int calcW(int h)const{ int w=(int)(h*(float)sw/sh+0.5f); w=std::max(h,std::min((int)(h*2.4f),w)); return (w+1)&~1; }
   void setScreen(int screenW,int screenH){ if(screenW==sw&&screenH==sh)return; sw=std::max(1,screenW); sh=std::max(1,screenH); resize(H); }
+  void applyQuality(){ static const float QS[5]={0.55f,0.7f,0.85f,1.0f,1.0f}; int cap=g_quality>=4?720:540; int bh=std::min(cap,std::max(360,sh)); bh=std::max(288,(int)(bh*QS[g_quality%5])); baseH=bh; g.qChanged=false; int h2=std::min(H,baseH); if(g_quality>=4)h2=baseH; if(g_quality<3&&H>baseH)h2=baseH; resize(h2); }
   void resize(int newH){ newH=std::max(288,std::min(baseH,newH)); int nw=calcW(newH); if(nw==W&&newH==H)return; g.r.flush(); H=newH; W=nw; g.r.init(W,H); out.assign((size_t)W*H,0); resizeSeq++; }
 
   // ---------- اللمس ----------
@@ -95,7 +96,7 @@ struct Mobile{
     { int md=(g.menu?1:0)|(g.paused?2:0)|(g.over?4:0); if(md!=lastMode){ lastMode=md; releaseAll(); } }
     Input in=build(); acc+=dt; int n=std::min(4,(int)(acc*60.f)); float lookX=0,lookY=0;
     if(n>0&&!g.menu&&!g.paused){ float K=0.0036f*(540.f/H); lookX=pdx*K*60.f/n; lookY=-pdy*K*0.85f*60.f/n; pdx=pdy=0; } else if(g.menu||g.paused){ pdx=pdy=0; }
-    int steps=0; while(acc>=1.f/60.f&&steps<4){ Input s=in; s.lx=lookX; s.ly=lookY; g.update(1.f/60.f,s); acc-=1.f/60.f; steps++; } if(steps==4)acc=0;
+    if(g.qChanged)applyQuality(); int steps=0; while(acc>=1.f/60.f&&steps<4){ Input s=in; s.lx=lookX; s.ly=lookY; g.update(1.f/60.f,s); acc-=1.f/60.f; steps++; } if(steps==4)acc=0;
     if(g.menu)g.renderMenu(); else g.render();
     drawControls(); g.r.flush();
     const uint32_t*fb=g.r.fb.data(); uint32_t*o=out.data(); size_t N=(size_t)W*H; for(size_t i=0;i<N;i++){ uint32_t p=fb[i]; o[i]=0xFF000000u|(p&0x0000FF00u)|((p>>16)&0xFFu)|((p&0xFFu)<<16); }

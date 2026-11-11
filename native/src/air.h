@@ -35,7 +35,7 @@ inline void Game::jetDie(int j,int by){
   int p=J.pilot; J.pilot=-1;
   if(p>=0){ Ent&pe=e[p]; pe.alive=false; pe.deaths++; pe.respawn=5.f; entJet[p]=-1; if(p==meI){ streak=0; jetSay("أُسقطت طائرتك!"); } }
   if(by>=0&&by<(int)e.size()&&e[by].team!=J.team){ Ent&k=e[by]; k.kills++; score[k.team]++; char b[64]; snprintf(b,64,"%s > F-35 (%s)",nm(by).c_str(),p>=0?nm(p).c_str():"طائرة"); addFeed(b);
-    if(by==meI){ SFX::play(SFX::KILL,0.8f); streak++; char m[48]; snprintf(m,48,"أسقطت طائرة! %d / %d",score[k.team],scoreLim); say(m); }
+    if(by==meI){ SFX::play(SFX::KILL,0.8f); streak++; char m[48]; snprintf(m,48,T("أسقطت طائرة! %d / %d"),score[k.team],scoreLim); say(m); }
     if(score[0]>=scoreLim||score[1]>=scoreLim){ over=true; winner=score[0]>=scoreLim?0:1; } }
 }
 // فيزياء الطيران: دفع + سحب + رفع يعتمد زاوية الهجوم (مع انهيار) + جاذبية + قصور؛ الدوران بالانحدار الجانبي يأتي من اتجاه قوة الرفع

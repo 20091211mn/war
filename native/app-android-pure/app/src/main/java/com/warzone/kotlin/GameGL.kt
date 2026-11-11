@@ -114,7 +114,9 @@ class GameGL(val g: Game, val ctl: Controls) : GLSurfaceView.Renderer {
     }
 
     private val step = FloatArray(2)
+    @Volatile var onQuality: ((Int) -> Unit)? = null; private var appliedQ = -1
     override fun onDrawFrame(gl: GL10?) {
+        if (appliedQ != com.warzone.core.Lang.quality) { appliedQ = com.warzone.core.Lang.quality; onQuality?.invoke(appliedQ) }
         if (!ready) return
         val now = SystemClock.elapsedRealtimeNanos(); var dt = if (last == 0L) 1f / 60 else ((now - last) / 1e9f); last = now; dt = min(0.1f, max(0.001f, dt))
         synchronized(g) {

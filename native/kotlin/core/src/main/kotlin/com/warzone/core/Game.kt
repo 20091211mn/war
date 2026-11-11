@@ -595,8 +595,8 @@ class Game {
         if (role != 0 || menu == 2 || ns.joining) netPump(dt)
         if (menu == 1) {
             val up = inp.my > 0.5f && prev.my <= 0.5f; val dnn = inp.my < -0.5f && prev.my >= -0.5f; val rt = inp.mx > 0.5f && prev.mx <= 0.5f; val lf = inp.mx < -0.5f && prev.mx >= -0.5f
-            if (up) menuRow = (menuRow + 2) % 3; if (dnn) menuRow = (menuRow + 1) % 3; val d = if (rt) 1 else if (lf) -1 else 0
-            if (d != 0) { if (menuRow == 0) menuSel = (menuSel + d + MAP_COUNT) % MAP_COUNT else if (menuRow == 1) diff = (diff + d + 3) % 3 else mode = (mode + d + modeCount) % modeCount }
+            if (up) menuRow = (menuRow + 5) % 6; if (dnn) menuRow = (menuRow + 1) % 6; val d = if (rt) 1 else if (lf) -1 else 0
+            if (d != 0) { if (menuRow == 0) menuSel = (menuSel + d + MAP_COUNT) % MAP_COUNT else if (menuRow == 1) diff = (diff + d + 3) % 3 else if (menuRow == 2) mode = (mode + d + modeCount) % modeCount else if (menuRow == 3) { Lang.quality = (Lang.quality + d + 5) % 5; Lang.save() } else if (menuRow == 4) { Lang.lang = (Lang.lang + d + 3) % 3; Lang.save() } }
             if (menuSel == 8) mode = 0
             if (msgT > 0) msgT -= dt
             if ((inp.confirm && !prev.confirm) || (inp.start && !prev.start)) { fovMul = 1f; hudK = 1f; if (mode == 1) { roomOn = false; menu = 4; rmRow = 0 } else if (mode == 2) lobbyStart() else { roomOn = false; scoreLim = 30; timeLim = 0; menu = 0; startMatch(menuSel) } }

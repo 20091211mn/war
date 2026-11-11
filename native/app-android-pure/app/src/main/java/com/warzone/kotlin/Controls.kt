@@ -1,5 +1,6 @@
 package com.warzone.kotlin
 
+import com.warzone.core.Lang
 import com.warzone.core.Game
 import com.warzone.core.myJet
 import com.warzone.core.jetSpeed
@@ -17,7 +18,7 @@ object B {
     const val C4 = 9; const val DET = 10; const val SEAT = 11; const val PREV = 12; const val NEXT = 13; const val PAUSE = 14
     const val OK = 20; const val BACK = 21; const val SENS_UP = 22; const val SENS_DN = 23
     const val P_OPT = 24; const val P_MUZ = 25; const val P_GRIP = 26; const val P_MAG = 27
-    const val ROW_MAP = 30; const val ROW_DIFF = 31; const val ROW_MODE = 32; const val START = 33
+    const val ROW_MAP = 30; const val ROW_DIFF = 31; const val ROW_MODE = 32; const val START = 33; const val ROW_QUAL = 34; const val ROW_LANG = 35
     const val WEAPON = 15; const val W0 = 50; const val H0 = 70; const val RM0 = 80; const val RMGO = 86
     const val NB = 96
 }
@@ -42,8 +43,10 @@ class Controls(private val g: Game) {
         fun R(id: Int, x: Float, y: Float, bw: Float, bh: Float, s: String) { l.add(Btn(id, x, y, 0f, s, bw * u, bh * u)) }
         if (g.menu == 1) {
             val cx = w * 0.30f
-            R(B.ROW_MAP, cx, h * 0.26f, 330f, 52f, "map"); R(B.ROW_DIFF, cx, h * 0.26f + 70 * u, 330f, 52f, "diff"); R(B.ROW_MODE, cx, h * 0.26f + 140 * u, 330f, 52f, "mode")
-            R(B.START, cx, h * 0.26f + 232 * u, 330f, 64f, "start")
+            val y0 = h * 0.17f; val st = 60 * u
+            R(B.ROW_MAP, cx, y0, 330f, 50f, "map"); R(B.ROW_DIFF, cx, y0 + st, 330f, 50f, "diff"); R(B.ROW_MODE, cx, y0 + 2 * st, 330f, 50f, "mode")
+            R(B.ROW_QUAL, cx, y0 + 3 * st, 330f, 50f, "q"); R(B.ROW_LANG, cx, y0 + 4 * st, 330f, 50f, "lang")
+            R(B.START, cx, y0 + 5 * st + 12 * u, 330f, 62f, "start")
         } else if (g.menu == 4) {
             val cx = w * 0.5f; for (k in 0 until 6) R(B.RM0 + k, cx, h * 0.18f + k * 54 * u, 420f, 46f, "row$k")
             R(B.RMGO, cx, h * 0.18f + 6 * 54 * u + 8 * u, 420f, 54f, "go"); R(B.BACK, 90 * u, h - 40 * u, 140f, 44f, "back")
@@ -84,6 +87,8 @@ class Controls(private val g: Game) {
             B.ROW_MAP -> g.menuSel = (g.menuSel + dir + g.MAP_COUNT) % g.MAP_COUNT
             B.ROW_DIFF -> g.diff = (g.diff + dir + 3) % 3
             B.ROW_MODE -> g.mode = (g.mode + dir + g.modeCount) % g.modeCount
+            B.ROW_QUAL -> { Lang.quality = (Lang.quality + dir + 5) % 5; Lang.save() }
+            B.ROW_LANG -> { Lang.lang = (Lang.lang + dir + 3) % 3; Lang.save() }
         }
     }
 
@@ -94,7 +99,7 @@ class Controls(private val g: Game) {
         if (wheelOpen) { t.id = id; t.role = 4; t.btn = 0; if (b != null && b.id >= B.W0 && b.id < B.W0 + 20) pickReq = b.id - B.W0; wheelOpen = false; return }
         t.id = id; t.x = x; t.y = y; t.ox = x; t.oy = y; t.btn = 0; t.role = 0
         if (b != null) {
-            if (g.menu == 1 && (b.id == B.ROW_MAP || b.id == B.ROW_DIFF || b.id == B.ROW_MODE)) { menuTap(b, x); t.role = 4; return }
+            if (g.menu == 1 && (b.id == B.ROW_MAP || b.id == B.ROW_DIFF || b.id == B.ROW_MODE || b.id == B.ROW_QUAL || b.id == B.ROW_LANG)) { menuTap(b, x); t.role = 4; return }
             if (g.menu == 4 && b.id >= B.RM0 && b.id < B.RM0 + 6) { g.rmRow = b.id - B.RM0; g.roomAdj(g.rmRow, if (x < b.x) -1 else 1); t.role = 4; return }
             if (g.menu == 2 && b.id >= B.H0 && b.id < B.H0 + 5) { g.ns.hostSel = b.id - B.H0; lobbyConf = true; t.role = 4; return }
             if (b.id == B.WEAPON) { t.role = 4; t.btn = 0; wheelOpen = true; return }

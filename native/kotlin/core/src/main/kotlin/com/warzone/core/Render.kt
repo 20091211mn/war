@@ -24,7 +24,7 @@ class Renderer {
     @JvmField var cam = Cam(0f, 0f, 0f, 0f, 0f, 1.3f)
     @JvmField var fx = 0f; @JvmField var fy = 0f; @JvmField var fz = 0f; @JvmField var rx = 0f; @JvmField var rz = 0f; @JvmField var ux = 0f; @JvmField var uy = 0f; @JvmField var uz = 0f; @JvmField var focal = 1f
     var m: MapDef? = null
-    @JvmField val fog = FloatArray(3); @JvmField var fogN = 30f; @JvmField var fogF = 100f; @JvmField val sunN = floatArrayOf(0f, 1f, 0f)
+    @JvmField val fog = FloatArray(3); @JvmField var fogK = 1f; private val FOGK = floatArrayOf(0.40f, 0.62f, 0.82f, 1f, 1.3f); @JvmField var fogN = 30f; @JvmField var fogF = 100f; @JvmField val sunN = floatArrayOf(0f, 1f, 0f)
     @JvmField val layers = arrayOf(FBuf(), FBuf())
     @JvmField var zBias = 0f
     @JvmField var obbRoll = 0f
@@ -67,7 +67,7 @@ class Renderer {
     fun beginWorld(mm: MapDef) {
         m = mm
         val sl = sqrtf(mm.sun[0] * mm.sun[0] + mm.sun[1] * mm.sun[1] + mm.sun[2] * mm.sun[2]); for (i in 0 until 3) sunN[i] = mm.sun[i] / sl
-        for (i in 0 until 3) fog[i] = mm.fog[i]; fogN = mm.fogN; fogF = mm.fogF; zBias = 0f
+        for (i in 0 until 3) fog[i] = mm.fog[i]; fogK = FOGK[Lang.quality.coerceIn(0, 4)]; fogN = mm.fogN * fogK; fogF = mm.fogF * fogK; zBias = 0f
     }
 
     private fun tri(o: FBuf, ax: Float, ay: Float, az: Float, au: Float, av: Float, bx: Float, by: Float, bz: Float, bu: Float, bv: Float,

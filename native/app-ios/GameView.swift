@@ -25,6 +25,7 @@ final class GameView: UIView {
         guard w > 0, h > 0 else { return }
         if !started {
             started = true
+            if let d = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first { wz_set_config_path(d.appendingPathComponent("warzone.cfg").path) }
             wz_init(w, h, Int32(ProcessInfo.processInfo.activeProcessorCount))
             AudioOut.shared.start()
         } else {
