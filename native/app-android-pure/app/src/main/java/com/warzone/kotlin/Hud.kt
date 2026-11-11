@@ -31,6 +31,7 @@ class Hud(private val g: Game, private val c: Controls) {
         diag(cv, w, h, u)
         if (g.menu == 1) { menu(cv, w, h, u); return }
         if (g.menu == 2) { lobby(cv, w, h, u); return }
+        if (g.menu == 4) { room(cv, w, h, u); return }
         val me = g.e[g.meI]
         // وميض الضرر
         if (g.dmgFlash > 0) { p.style = Paint.Style.FILL; p.color = Color.argb((min(0.5f, g.dmgFlash) * 160).toInt(), 220, 0, 0); cv.drawRect(0f, 0f, w, h, p) }
@@ -59,7 +60,7 @@ class Hud(private val g: Game, private val c: Controls) {
         // النتيجة والوقت
         panel(cv, w / 2 - 110 * u, 6 * u, w / 2 + 110 * u, 50 * u)
         text(cv, "${g.score[0]}", w / 2 - 70 * u, 40 * u, 30 * u, RED); text(cv, "${g.score[1]}", w / 2 + 70 * u, 40 * u, 30 * u, BLUE)
-        val left = max(0, (g.t).toInt()); text(cv, String.format("%d:%02d", left / 60, left % 60), w / 2, 40 * u, 22 * u)
+        val left = max(0, (if (g.timeLim > 0) g.timeLim else 600) - g.t.toInt()); text(cv, String.format("%d:%02d", left / 60, left % 60), w / 2, 40 * u, 22 * u)
         // الحياة
         val hp = me.hp.coerceIn(0f, 100f)
         panel(cv, 10 * u, 8 * u, 170 * u, 38 * u)
@@ -104,7 +105,7 @@ class Hud(private val g: Game, private val c: Controls) {
         var best = -1; var bk = -1; for (i in g.e.indices) if (g.e[i].kills > bk) { bk = g.e[i].kills; best = i }
         for (tm in 0..1) { val cw = (r - l) / 2; val x0 = l + tm * cw + 18 * u; val x1 = l + (tm + 1) * cw - 18 * u; var y = t + 98 * u; val col = if (tm == 0) RED else BLUE
             text(cv, "اللاعب", x0, y, 12 * u, 0xFF8FA0B4.toInt(), Paint.Align.LEFT); text(cv, "K", x1 - 70 * u, y, 12 * u, 0xFF8FA0B4.toInt(), Paint.Align.RIGHT); text(cv, "D", x1, y, 12 * u, 0xFF8FA0B4.toInt(), Paint.Align.RIGHT); y += 10 * u
-            val ix = g.e.indices.filter { g.e[it].team == tm }.sortedByDescending { g.e[it].kills }
+            val ix = g.e.indices.filter { g.e[it].team == tm && !g.e[it].off }.sortedByDescending { g.e[it].kills }
             for (i in ix) { if (y > b - 66 * u) break; val me2 = i == g.meI
                 p.style = Paint.Style.FILL; p.color = if (me2) 0xFF1F3340.toInt() else 0xFF121A24.toInt(); rect.set(x0 - 6 * u, y, x1 + 6 * u, y + 22 * u); cv.drawRoundRect(rect, 8 * u, 8 * u, p)
                 p.color = col; cv.drawRect(x0 - 6 * u, y + 3 * u, x0 - 3 * u, y + 19 * u, p)
@@ -167,8 +168,21 @@ class Hud(private val g: Game, private val c: Controls) {
         for (b in c.btns) { val l = b.x - b.w / 2; val t = b.y - b.h / 2
             if (b.id >= B.H0 && b.id < B.H0 + 5) { val hs = n.hosts.getOrNull(b.id - B.H0) ?: continue
                 panel(cv, l, t, l + b.w, t + b.h, if (n.hostSel == b.id - B.H0) 0xFF3B82F6.toInt() else 0xDD18202C.toInt())
-                text(cv, "${hs.name} — ${MAPS[hs.map % MAPS.size]} — ${hs.players}/${hs.maxp}", b.x, b.y + 7 * u, 17 * u) }
+                text(cv, "${hs.name} — ${MAPS[hs.map % MAPS.size]} — ${hs.players}/${hs.maxp} — ${hs.lim5 * 5}K${if (hs.mins > 0) " ${hs.mins}د" else ""}${if (hs.style == 1) " مبارزة" else if (hs.bots > 0) " بوتات" else ""}", b.x, b.y + 7 * u, 16 * u) }
             else if (b.id == B.BACK) { panel(cv, l, t, l + b.w, t + b.h, if (c.held[B.BACK]) 0xFF3B82F6.toInt() else 0xDD18202C.toInt()); text(cv, "رجوع", b.x, b.y + 7 * u, 18 * u) } }
+    }
+    private fun room(cv: Canvas, w: Float, h: Float, u: Float) {
+        p.style = Paint.Style.FILL; p.color = 0xCC0B0F14.toInt(); cv.drawRect(0f, 0f, w, h, p)
+        text(cv, "إنشاء غرفة LAN", w / 2, h * 0.09f, 26 * u)
+        val L = arrayOf("اسم الغرفة", "أقصى لاعبين", "حد النقاط", "الوقت", "البوتات", "النمط")
+        val V = arrayOf(g.rmNameOf(g.rmName), "${g.rmMaxE()}", "${g.rmLimV(g.rmLimI)}", if (g.rmMinV(g.rmMinI) > 0) "${g.rmMinV(g.rmMinI)} min" else "بلا حد", if (g.rmBotsE() == 0) "بدون بوتات" else "${g.rmBotsE()}", if (g.rmStyle == 1) "مبارزة 1 ضد 1" else "فرق")
+        for (b in c.btns) { val l = b.x - b.w / 2; val t = b.y - b.h / 2
+            if (b.id >= B.RM0 && b.id < B.RM0 + 6) { val k = b.id - B.RM0; val sel = g.rmRow == k; val col = if (k and 1 == 1) BLUE else RED
+                panel(cv, l, t, l + b.w, t + b.h, if (sel) 0xFF1F2A3A.toInt() else 0xDD18202C.toInt(), if (sel) col else 0x55FFFFFF)
+                text(cv, L[k], l + b.w - 14 * u, b.y + 7 * u, 15 * u, 0xFF8FA0B4.toInt(), Paint.Align.RIGHT); text(cv, V[k], l + b.w * 0.30f, b.y + 8 * u, 20 * u, if (sel) Color.WHITE else 0xFFB8C4D4.toInt())
+                if (sel) { text(cv, "◀", l + 20 * u, b.y + 7 * u, 18 * u, col); text(cv, "▶", l + b.w * 0.55f, b.y + 7 * u, 18 * u, col) } }
+            else if (b.id == B.RMGO) { panel(cv, l, t, l + b.w, t + b.h, if (c.held[B.RMGO]) 0xFF8CE9FF.toInt() else ACC, 0xFFFFFFFF.toInt()); text(cv, "أنشئ الغرفة وابدأ", b.x, b.y + 9 * u, 24 * u, 0xFF04141A.toInt()) }
+            else if (b.id == B.BACK) { panel(cv, l, t, l + b.w, t + b.h, if (c.held[B.BACK]) BLUE else 0xDD18202C.toInt()); text(cv, "رجوع", b.x, b.y + 7 * u, 18 * u) } }
     }
     private fun menu(cv: Canvas, w: Float, h: Float, u: Float) {
         p.style = Paint.Style.FILL; p.color = 0xB30B0F14.toInt(); cv.drawRect(0f, 0f, w, h, p)
@@ -197,7 +211,7 @@ class Hud(private val g: Game, private val c: Controls) {
     }
 
     private fun controls(cv: Canvas, w: Float, h: Float, u: Float) {
-        if (g.menu == 1 || g.paused) return
+        if (g.menu == 1 || g.menu == 4 || g.paused) return
         for (b in c.btns) {
             if (b.w > 0f) { if (b.id == B.OK) { val l = b.x - b.w / 2; val t = b.y - b.h / 2; panel(cv, l, t, l + b.w, t + b.h, if (c.held[b.id]) 0xFF8CE9FF.toInt() else ACC); text(cv, "OK", b.x, b.y + 8 * u, 22 * u, 0xFF04141A.toInt()) }; continue }
             val on = c.held[b.id] || (b.id == B.ADS && c.adsL) || (b.id == B.CROUCH && c.crL)

@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 object NetC {
     const val PORT_GAME = 9330; const val PORT_BEACON = 9331; const val NET_VER = 3
     const val T_HELLO = 1; const val T_WELCOME = 2; const val T_INPUT = 3; const val T_SNAP = 4; const val T_BYE = 5; const val T_BEACON = 6; const val T_PROBE = 7
-    const val SZ_INPUT = 45; const val SZ_ENT = 44; const val SZ_VEH = 24; const val SZ_C4 = 14; const val SZ_EVT = 4; const val SZ_TR = 24; const val SZ_HEAD = 16; const val SZ_BEACON = 20
+    const val SZ_INPUT = 45; const val SZ_ENT = 44; const val SZ_VEH = 24; const val SZ_C4 = 14; const val SZ_EVT = 4; const val SZ_TR = 24; const val SZ_HEAD = 16; const val SZ_BEACON = 20; const val SZ_BEACON_X = 24
     fun buf(n: Int): ByteBuffer = ByteBuffer.allocate(n).order(ByteOrder.LITTLE_ENDIAN)
     fun wrap(d: ByteArray): ByteBuffer = ByteBuffer.wrap(d).order(ByteOrder.LITTLE_ENDIAN)
     fun u8(b: ByteBuffer): Int = b.get().toInt() and 255
@@ -54,7 +54,7 @@ class NetIn {
 class NetEvt(@JvmField val id: Int, @JvmField val killer: Int, @JvmField val victim: Int, @JvmField val head: Int)
 class NetTr(@JvmField val x0: Float, @JvmField val y0: Float, @JvmField val z0: Float, @JvmField val x1: Float, @JvmField val y1: Float, @JvmField val z1: Float)
 class Cli { @JvmField var on = false; @JvmField var addr: InetAddress? = null; @JvmField var port = 0; @JvmField var ent = -1; @JvmField var last = 0f }
-class HostEnt(@JvmField val addr: InetAddress, @JvmField var map: Int, @JvmField var players: Int, @JvmField val maxp: Int, @JvmField val name: String) { @JvmField var seen = 0f }
+class HostEnt(@JvmField val addr: InetAddress, @JvmField var map: Int, @JvmField var players: Int, @JvmField var maxp: Int, @JvmField val name: String) { @JvmField var seen = 0f; @JvmField var lim5 = 6; @JvmField var mins = 0; @JvmField var bots = 0; @JvmField var style = 0 }
 
 class NetState {
     @JvmField val sock = Udp(); @JvmField val beaconRx = Udp(); @JvmField val beaconTx = Udp()

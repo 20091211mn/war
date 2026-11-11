@@ -20,10 +20,19 @@ fun Game.lobbyStart() { val n = ns; n.myIp = NetC.localIp(); n.beaconRx.open(Net
 fun Game.joinAddr(a: InetAddress) { val n = ns; n.sock.open(0, false); n.hostAddr = a; n.joining = true; n.joinT = 0f; n.retryT = 1f; n.status = "جارٍ الاتصال…" }
 fun Game.joinIp(ip: String): Boolean = try { joinAddr(InetAddress.getByName(ip)); true } catch (e: Exception) { false }
 
+/** حزمة المنارة: أول 20 بايت قديمة (نوع، خريطة، لاعبون، أقصى، اسم) + 4 اختيارية (حد/5، دقائق، بوتات، نمط). */
+private fun Game.beaconBytes(defName: String): ByteArray {
+    val bc = NetC.buf(NetC.SZ_BEACON_X); bc.put(NetC.T_BEACON.toByte()); bc.put(mapIdx.toByte()); bc.put(humans().toByte())
+    val nm0 = (if (roomOn) rmNameOf(rmName) else defName).toByteArray(); bc.put((if (roomOn) e.size else 8).toByte())
+    bc.position(4); bc.put(nm0, 0, minOf(15, nm0.size)); bc.position(20)
+    bc.put((if (roomOn) scoreLim / 5 else 6).toByte()); bc.put((if (roomOn) timeLim / 60 else 0).toByte()); bc.put((if (roomOn) rmBotsE() else 0).toByte()); bc.put((if (roomOn) rmStyle else 0).toByte())
+    return bc.array()
+}
+
 private fun Game.assignSlot(): Int {
     val hc = IntArray(2); for (p in e) if (p.remote) hc[p.team]++; hc[0] += 1
     val pref = if (hc[0] <= hc[1]) 0 else 1
-    for (pass in 0 until 2) for (i in 1 until e.size) { val p = e[i]; if (!p.remote && p.bot && p.team == (if (pass == 1) 1 - pref else pref)) return i }
+    for (pk in 0 until 2) for (pass in 0 until 2) for (i in 1 until e.size) { val p = e[i]; if (p.remote) continue; if (if (pk == 0) !p.off else !(p.bot && !p.off)) continue; if (p.team == (if (pass == 1) 1 - pref else pref)) return i } // الخانات الفارغة أولاً ثم البوتات
     return -1
 }
 
@@ -33,7 +42,7 @@ fun Game.packSnap() {
     b.put(NetC.T_SNAP.toByte()); b.put(mapIdx.toByte()); b.put(n.matchId.toByte()); b.put(ne.toByte()); b.put((if (over) 1 else 0).toByte()); b.put(winner.toByte())
     b.putShort(score[0].toShort()); b.putShort(score[1].toShort()); b.put(n.evq.size.toByte()); b.put(n.trOut.size.toByte()); n.netSeq = (n.netSeq + 1) and 0xFFFF; b.putShort(n.netSeq.toShort()); b.put(nVeh.toByte()); b.put(nC4.toByte())
     for (i in 0 until ne) { val p = e[i]
-        b.putFloat(p.b.x); b.putFloat(p.b.y); b.putFloat(p.b.z); b.putFloat(p.yaw); b.putFloat(p.pitch); b.putFloat(p.flash); b.putFloat(p.phase); b.putFloat(p.reloadT); b.putShort(p.hp.toInt().toShort())
+        b.putFloat(p.b.x); b.putFloat(p.b.y); b.putFloat(p.b.z); b.putFloat(p.yaw); b.putFloat(p.pitch); b.putFloat(p.flash); b.putFloat(p.phase); b.putFloat(p.reloadT); b.putShort((if (p.off) -1 else p.hp.toInt()).toShort())
         val fl = (if (p.alive) 1 else 0) or (if (p.crouch) 2 else 0) or (if (p.moving) 4 else 0) or (if (p.sprint) 8 else 0) or (if (p.team != 0) 16 else 0) or (if (p.remote || i == 0) 32 else 0) or (if (p.prot > 0) 64 else 0) or (if (p.revealT > 0) 128 else 0)
         b.put(fl.toByte()); b.put(p.wpn.toByte()); b.put(p.ammo.toByte()); b.put(p.mags.toByte()); b.put(p.spawnSeq.toByte()); b.putShort(p.kills.toShort()); b.putShort(p.deaths.toShort()); b.put(p.c4Left.toByte()) }
     for (v in n.evq) { b.put(v.id.toByte()); b.put(v.killer.toByte()); b.put(v.victim.toByte()); b.put(v.head.toByte()) }
@@ -57,7 +66,7 @@ private fun Game.applySnap(pk: Pkt) {
     for (i in 0 until cnt) {
         val x = b.float; val y = b.float; val z = b.float; val yaw = b.float; val pitch = b.float; val flash = b.float; val phase = b.float; val reloadT = b.float; val hp = b.short.toInt()
         val fl = NetC.u8(b); val wpn = NetC.u8(b); val ammo = NetC.u8(b); val mags = NetC.u8(b); val sseq = NetC.u8(b); val kills = NetC.u16(b); val deaths = NetC.u16(b); val c4 = NetC.u8(b)
-        val p = e[i]; p.team = if (fl and 16 != 0) 1 else 0; if (fl and 128 != 0) p.revealT = 5f; p.remote = (fl and 32 != 0) && i != 0; val al = fl and 1 != 0; p.kills = kills; p.deaths = deaths; p.name = nm(i)
+        val p = e[i]; p.team = if (fl and 16 != 0) 1 else 0; if (fl and 128 != 0) p.revealT = 5f; p.remote = (fl and 32 != 0) && i != 0; val al = fl and 1 != 0; p.kills = kills; p.deaths = deaths; p.off = hp == -1 && !al; p.name = nm(i)
         if (i == meI) {
             p.c4Left = c4; if (hp < p.hp && al) dmgFlash = 0.5f; p.hp = hp.toFloat()
             if (sseq != p.spawnSeq || (al && !p.alive)) { p.spawnSeq = sseq; p.b.x = x; p.b.y = y; p.b.z = z; p.b.vy = 0f; p.yaw = yaw; p.pitch = 0f; p.crouch = false; prim = wpn; p.wpn = wpn }
@@ -102,24 +111,23 @@ fun Game.netPump(dt: Float) {
             var ci = -1; for (k in 0 until 8) if (n.cli[k].on && n.cli[k].addr == pk.addr && n.cli[k].port == pk.port) ci = k
             if (ty == NetC.T_HELLO) {
                 if (ci < 0) { for (k in 0 until 8) { if (ci >= 0) break; if (!n.cli[k].on) { val en = assignSlot(); if (en < 0) break; ci = k; val c = n.cli[k]; c.on = true; c.addr = pk.addr; c.port = pk.port; c.ent = en
-                    val p = e[en]; p.remote = true; p.bot = false; p.rin = null; p.rc4Init = false; spawn(en); p.name = nm(en); addFeed("${nm(en)} انضم") } } }
+                    val p = e[en]; p.remote = true; p.bot = false; p.off = false; p.rin = null; p.rc4Init = false; spawn(en); p.name = nm(en); addFeed("${nm(en)} انضم") } } }
                 val wl = NetC.buf(4); wl.put(NetC.T_WELCOME.toByte())
                 if (ci >= 0) { n.cli[ci].last = 0f; wl.put(n.cli[ci].ent.toByte()); wl.put(mapIdx.toByte()); wl.put(e.size.toByte()) } else { wl.put((-1).toByte()); wl.put(0); wl.put(0) }
                 n.sock.send(pk.addr, pk.port, wl.array())
             } else if (ty == NetC.T_PROBE) { // ردّ مباشر على مسح العميل: يعمل حيث يُمنع البث (iOS)
-                val bc = NetC.buf(NetC.SZ_BEACON); bc.put(NetC.T_BEACON.toByte()); bc.put(mapIdx.toByte()); bc.put(humans().toByte()); bc.put(8); val nm0 = "LAN HOST".toByteArray(); bc.put(nm0, 0, minOf(15, nm0.size)); n.sock.send(pk.addr, pk.port, bc.array())
-            } else if (ty == NetC.T_BYE && ci >= 0) { val p = e[n.cli[ci].ent]; p.remote = false; p.bot = true; addFeed("${nm(n.cli[ci].ent)} غادر"); n.cli[ci].on = false; n.cli[ci].ent = -1 }
+                val bc = beaconBytes("LAN HOST"); n.sock.send(pk.addr, pk.port, bc)
+            } else if (ty == NetC.T_BYE && ci >= 0) { val p = e[n.cli[ci].ent]; p.remote = false; p.bot = true; if (roomOn && rmBotsE() == 0) { p.bot = false; p.off = true; p.alive = false; p.respawn = 1e9f }; addFeed("${nm(n.cli[ci].ent)} غادر"); n.cli[ci].on = false; n.cli[ci].ent = -1 }
             else if (ty == NetC.T_INPUT && ci >= 0 && pk.n >= NetC.SZ_INPUT) {
                 n.cli[ci].last = 0f; val b = NetC.wrap(pk.d); b.position(2); val seq = NetC.u16(b); val p = e[n.cli[ci].ent]; val cur = p.rin
                 if (cur == null || !cur.valid || (seq - cur.seq).toShort() > 0) { val r = cur ?: NetIn(); r.valid = true; r.seq = seq; r.x = b.float; r.y = b.float; r.z = b.float; r.yaw = b.float; r.pitch = b.float
                     r.flags = NetC.u8(b); r.wpn = NetC.u8(b); r.vx = b.float; r.vz = b.float; r.vh = b.float; r.vsp = b.float; r.veh = NetC.u8(b); r.c4p = NetC.u8(b); r.c4d = NetC.u8(b); p.rin = r }
             }
         }
-        for (c in n.cli) if (c.on) { c.last += dt; if (c.last > 5f) { val p = e[c.ent]; p.remote = false; p.bot = true; c.on = false; c.ent = -1 } }
+        for (c in n.cli) if (c.on) { c.last += dt; if (c.last > 5f) { val p = e[c.ent]; p.remote = false; p.bot = true; if (roomOn && rmBotsE() == 0) { p.bot = false; p.off = true; p.alive = false; p.respawn = 1e9f }; c.on = false; c.ent = -1 } }
         n.snapT += dt; if (n.snapT >= 0.05f) { n.snapT = 0f; packSnap() }
-        n.beaconT += dt; if (n.beaconT >= 1f) { n.beaconT = 0f; val bc = NetC.buf(NetC.SZ_BEACON); bc.put(NetC.T_BEACON.toByte()); bc.put(mapIdx.toByte()); bc.put(humans().toByte()); bc.put(8)
-            val nm0 = "KOTLIN HOST".toByteArray(); bc.put(nm0, 0, minOf(15, nm0.size))
-            try { n.beaconTx.send(InetAddress.getByName("255.255.255.255"), NetC.PORT_BEACON, bc.array()); val ip = n.myIp; if (ip != null) n.beaconTx.send(InetAddress.getByAddress(byteArrayOf(ip[0], ip[1], ip[2], (-1).toByte())), NetC.PORT_BEACON, bc.array()) } catch (_: Exception) {} }
+        n.beaconT += dt; if (n.beaconT >= 1f) { n.beaconT = 0f; val bc = beaconBytes("KOTLIN HOST")
+            try { n.beaconTx.send(InetAddress.getByName("255.255.255.255"), NetC.PORT_BEACON, bc); val ip = n.myIp; if (ip != null) n.beaconTx.send(InetAddress.getByAddress(byteArrayOf(ip[0], ip[1], ip[2], (-1).toByte())), NetC.PORT_BEACON, bc) } catch (_: Exception) {} }
     } else if (role == 2 || n.joining) {
         if (n.sock.state < 0) { say("خطأ شبكة: ${n.sock.err}"); n.status = "خطأ شبكة"; netClose(); if (menu != 2) menu = 1; return }
         while (true) { val pk = n.sock.recv() ?: break; if (pk.n < 1) continue; val ty = pk.d[0].toInt()
@@ -144,9 +152,10 @@ fun Game.netPump(dt: Float) {
             for (k in 0 until 10) { n.sweepIdx = n.sweepIdx % 254 + 1; if (n.sweepIdx == (me[3].toInt() and 255)) continue
                 try { n.beaconRx.send(InetAddress.getByAddress(byteArrayOf(me[0], me[1], me[2], n.sweepIdx.toByte())), NetC.PORT_GAME, arr) } catch (_: Exception) {} } } // مسح مباشر للشبكة
         while (true) { val pk = n.beaconRx.recv() ?: break; if (pk.n < NetC.SZ_BEACON || pk.d[0].toInt() != NetC.T_BEACON) continue
+            val x = pk.n >= NetC.SZ_BEACON_X; val lim5 = if (x && (pk.d[20].toInt() and 255) != 0) pk.d[20].toInt() and 255 else 6; val mins = if (x) pk.d[21].toInt() and 255 else 0; val bts = if (x) pk.d[22].toInt() and 255 else 0; val sty = if (x) pk.d[23].toInt() and 255 else 0
             val map = pk.d[1].toInt() and 255; val pl = pk.d[2].toInt() and 255; val mx = pk.d[3].toInt() and 255; var nl = 4; while (nl < 20 && pk.d[nl].toInt() != 0) nl++; val name = String(pk.d, 4, nl - 4)
-            var f = false; for (h in n.hosts) if (h.addr == pk.addr) { h.map = map; h.players = pl; h.seen = 0f; f = true }
-            if (!f) n.hosts.add(HostEnt(pk.addr, map, pl, mx, name)) }
+            var f = false; for (h in n.hosts) if (h.addr == pk.addr) { h.map = map; h.players = pl; h.maxp = mx; h.lim5 = lim5; h.mins = mins; h.bots = bts; h.style = sty; h.seen = 0f; f = true }
+            if (!f) { val he = HostEnt(pk.addr, map, pl, mx, name); he.lim5 = lim5; he.mins = mins; he.bots = bts; he.style = sty; n.hosts.add(he) } }
         for (h in n.hosts) h.seen += dt; n.hosts.removeAll { it.seen > 4f }; if (n.hostSel >= n.hosts.size) n.hostSel = maxOf(0, n.hosts.size - 1)
     }
 }

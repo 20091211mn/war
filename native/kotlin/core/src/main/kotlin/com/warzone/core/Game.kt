@@ -18,6 +18,7 @@ class Input {
 }
 
 class Ent {
+    @JvmField var off = false // خانة فارغة في غرفة بلا بوتات
     @JvmField var mnt = false; @JvmField var mvi = -1
     @JvmField val b = Body(); @JvmField var yaw = 0f; @JvmField var pitch = 0f; @JvmField var team = 0
     @JvmField var bot = true; @JvmField var alive = false; @JvmField var crouch = false; @JvmField var sprint = false; @JvmField var moving = false
@@ -66,6 +67,15 @@ class Game {
     @JvmField val feed = Array(4) { "" }; @JvmField val feedT = FloatArray(4)
     @JvmField var menu = 1; @JvmField var menuSel = 0; @JvmField var menuRow = 0; @JvmField var mode = 0
     @JvmField var modeCount = 3
+    // ---- إعداد الغرفة (استضافة LAN) — نفس قيم C++ ----
+    @JvmField var roomOn = false; @JvmField var rmName = 0; @JvmField var rmMaxI = 6; @JvmField var rmLimI = 2; @JvmField var rmMinI = 0; @JvmField var rmBotI = 2; @JvmField var rmStyle = 0; @JvmField var rmRow = 0; @JvmField var timeLim = 0
+    fun rmNameOf(i: Int) = arrayOf("Falcon", "Lion", "Wolf", "Eagle", "Tiger", "Cobra", "Viper", "Shark")[i and 7]
+    fun rmLimV(i: Int) = intArrayOf(10, 20, 30, 50)[i and 3]
+    fun rmMinV(i: Int) = intArrayOf(0, 5, 10, 15)[i and 3]
+    fun rmMaxE() = if (rmStyle == 1) 2 else 2 + rmMaxI
+    fun rmBotsE() = if (rmStyle == 1) 0 else minOf(intArrayOf(0, 2, 4, 6)[rmBotI and 3], rmMaxE() - 1)
+    fun roomApply() { scoreLim = rmLimV(rmLimI); timeLim = rmMinV(rmMinI) * 60 }
+    fun roomAdj(row: Int, d: Int) { when (row) { 0 -> rmName = (rmName + d + 8) % 8; 1 -> rmMaxI = (rmMaxI + d + 7) % 7; 2 -> rmLimI = (rmLimI + d + 4) % 4; 3 -> rmMinI = (rmMinI + d + 4) % 4; 4 -> rmBotI = (rmBotI + d + 4) % 4; else -> rmStyle = (rmStyle + d + 2) % 2 } }
     @JvmField var air = false; @JvmField val jets = ArrayList<Jet>(); @JvmField var entJet = IntArray(0); @JvmField val airPrev = Input()
     @JvmField var footT = 0f; @JvmField var jetMsg = ""; @JvmField var jetMsgT = 0f; @JvmField var rpgIdx = 8
     @JvmField var meI = 0; @JvmField var role = 0; @JvmField val ns = NetState(); @JvmField var overT = 0f; @JvmField var netPc4 = false; @JvmField var netPdet = false
@@ -97,7 +107,7 @@ class Game {
 
     fun startMatch(idx: Int) {
         mapIdx = idx % MAP_COUNT; w.load(mapIdx)
-        val total = if (idx % MAP_COUNT == 8 && role == 0) 16 else 1 + nBots * 2 - 1
+        var total = if (idx % MAP_COUNT == 8 && role == 0) 16 else 1 + nBots * 2 - 1; if (roomOn && role == 1) total = rmMaxE()
         e = ArrayList(total); for (i in 0 until total) e.add(Ent()); c4s.clear()
         for (i in 0 until total) { val p = e[i]; p.bot = i > 0; p.team = if (i == 0) 0 else (if (i and 1 != 0) 1 else 0); p.name = nm(i); p.wpn = if (i == 0) prim else rand() % WEAPON_COUNT }
         dn.on = false; dnCd = 0f; grs.clear(); rks.clear(); vh = ArrayList(); drive = -1; puffs.clear()
@@ -107,6 +117,7 @@ class Game {
         air = mapIdx == 8 && role == 0
         if (air) airInit() else { jets.clear(); entJet = IntArray(0) }
         if (!air) for (i in 0 until e.size) spawn(i)
+        if (roomOn && role == 1) { val nb = rmBotsE(); for (i in 1 until e.size) if (i > nb && !e[i].remote) { val p = e[i]; p.bot = false; p.off = true; p.alive = false; p.respawn = 1e9f } }
     }
 
     fun zoomOf(p: Ent): Float = if (optZ > 0 && p === e[meI]) optZ else WEAPONS[p.wpn].zoom
@@ -588,13 +599,20 @@ class Game {
             if (d != 0) { if (menuRow == 0) menuSel = (menuSel + d + MAP_COUNT) % MAP_COUNT else if (menuRow == 1) diff = (diff + d + 3) % 3 else mode = (mode + d + modeCount) % modeCount }
             if (menuSel == 8) mode = 0
             if (msgT > 0) msgT -= dt
-            if ((inp.confirm && !prev.confirm) || (inp.start && !prev.start)) { fovMul = 1f; hudK = 1f; if (mode == 1) hostStart() else if (mode == 2) lobbyStart() else { menu = 0; startMatch(menuSel) } }
+            if ((inp.confirm && !prev.confirm) || (inp.start && !prev.start)) { fovMul = 1f; hudK = 1f; if (mode == 1) { roomOn = false; menu = 4; rmRow = 0 } else if (mode == 2) lobbyStart() else { roomOn = false; scoreLim = 30; timeLim = 0; menu = 0; startMatch(menuSel) } }
+            prev.set(inp); return
+        }
+        if (menu == 4) { // إعداد الغرفة
+            val up = inp.my > 0.5f && prev.my <= 0.5f; val dnn = inp.my < -0.5f && prev.my >= -0.5f; val rt = inp.mx > 0.5f && prev.mx <= 0.5f; val lf = inp.mx < -0.5f && prev.mx >= -0.5f
+            if (up) rmRow = (rmRow + 5) % 6; if (dnn) rmRow = (rmRow + 1) % 6; val d = if (rt) 1 else if (lf) -1 else 0; if (d != 0) roomAdj(rmRow, d)
+            if (inp.back && !prev.back) { menu = 1; prev.set(inp); return }
+            if ((inp.confirm && !prev.confirm) || (inp.start && !prev.start)) { roomOn = true; roomApply(); hostStart() }
             prev.set(inp); return
         }
         if (menu == 2) {
             val up = inp.my > 0.5f && prev.my <= 0.5f; val dnn = inp.my < -0.5f && prev.my >= -0.5f; if (msgT > 0) msgT -= dt
             if (ns.hosts.isNotEmpty()) { if (up) ns.hostSel = (ns.hostSel + ns.hosts.size - 1) % ns.hosts.size; if (dnn) ns.hostSel = (ns.hostSel + 1) % ns.hosts.size }
-            if (inp.confirm && !prev.confirm && !ns.joining && ns.hosts.isNotEmpty()) joinAddr(ns.hosts[ns.hostSel].addr)
+            if (inp.confirm && !prev.confirm && !ns.joining && ns.hosts.isNotEmpty()) { val hh = ns.hosts[ns.hostSel]; scoreLim = hh.lim5 * 5; timeLim = hh.mins * 60; roomOn = false; joinAddr(hh.addr) }
             if (inp.back && !prev.back) { netClose(); menu = 1 }
             prev.set(inp); return
         }
@@ -615,7 +633,7 @@ class Game {
             lastPh = m0.phase
             Sfx.engSpeed = if (drive >= 0 && drive < vh.size) fabsf(vh[drive].speed) else -1f; Sfx.droneVol = if (dn.on) 1f else 0f
         }
-        t += dt; updateGren(dt, inp); if (msgT > 0) msgT -= dt; if (hitMark > 0) hitMark -= dt; if (dmgFlash > 0) dmgFlash -= dt; if (hitAngT > 0) hitAngT -= dt
+        t += dt; if (role != 2 && timeLim > 0 && !over && t >= timeLim) { over = true; winner = if (score[0] >= score[1]) 0 else 1 }; updateGren(dt, inp); if (msgT > 0) msgT -= dt; if (hitMark > 0) hitMark -= dt; if (dmgFlash > 0) dmgFlash -= dt; if (hitAngT > 0) hitAngT -= dt
         for (q in tr) q.t -= dt; tr.removeAll { it.t <= 0 }
         for (k in 0 until 4) if (feedT[k] > 0) feedT[k] -= dt
         for (k in sparks) { k.t -= dt; k.vy -= 9f * dt; k.x += k.vx * dt; k.y = fmax(0.02f, k.y + k.vy * dt); k.z += k.vz * dt }; sparks.removeAll { it.t <= 0 }
@@ -632,6 +650,7 @@ class Game {
         if (air) airUpdate(dt, use) else for (i in 0 until e.size) {
             val p = e[i]
             if (p.prot > 0) p.prot -= dt
+            if (p.off && !p.remote) continue
             if (!p.alive) { p.respawn -= dt; if (p.respawn <= 0) spawn(i); continue }
             if (i == meI) updatePlayer(dt, use) else if (p.remote) updateRemote(i, dt) else updateBot(i, dt)
         }
