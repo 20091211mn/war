@@ -727,7 +727,7 @@ struct Game{
   void textC(int cx,int y,const char*s,int sc,uint32_t col){text(cx-tw(s,sc)/2,y,s,sc,col);}
   // ---------- عجلة الأسلحة / شريط التبديل (PS4 + أندرويد + آيفون) ----------
   void wheelRect(int i,int sc,int&x,int&y,int&w2,int&h2)const{ int W=r.W,H=r.H; w2=98*sc; h2=29*sc; int gp=3*sc; int cx=W/2-(3*w2+2*gp)/2,cy=H/2-(3*h2+2*gp)/2-6*sc; x=cx+(i%3)*(w2+gp); y=cy+(i/3)*(h2+gp); }
-  int hudSc()const{ return std::max(1,(int)((r.H*hudK+135)/270)); }
+  int hudSc()const{ return std::max(1,(int)((r.H*hudK*1.2f+135)/270)); } // 1.2 = واجهة أكبر
   void weaponPanel(int sc){
     float a=wheelOpen?1.f:std::min<float>(1.f,wsT*2.5f); if(a<=0.01f)return; int sm2=std::max(1,sc-1); Ent&me=e[meI]; char b[48];
     float mxD=1,mxR=1,mxG=1; for(int i=0;i<WEAPON_COUNT;i++){ mxD=std::max<float>(mxD,WEAPONS[i].dmg*std::min(4,std::max(1,WEAPONS[i].pellets))); mxR=std::max<float>(mxR,WEAPONS[i].rpm); mxG=std::max<float>(mxG,WEAPONS[i].r1); }

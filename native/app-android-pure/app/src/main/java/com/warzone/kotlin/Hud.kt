@@ -20,7 +20,7 @@ class Hud(private val g: Game, private val c: Controls) {
 
     private fun text(cv: Canvas, s0: String, x: Float, y: Float, size: Float, col: Int = Color.WHITE, align: Paint.Align = Paint.Align.CENTER) {
         val s = com.warzone.core.Lang.t(s0)
-        tp.textSize = size; tp.textAlign = align; tp.color = 0xFF000000.toInt(); tp.alpha = 150; cv.drawText(s, x + 1.5f, y + 1.5f, tp)
+        tp.textSize = size * 1.15f; tp.textAlign = align; tp.color = 0xFF000000.toInt(); tp.alpha = 150; cv.drawText(s, x + 1.5f, y + 1.5f, tp)
         tp.color = col; tp.alpha = 255; cv.drawText(s, x, y, tp)
     }
     private fun panel(cv: Canvas, l: Float, t: Float, r: Float, b: Float, fill: Int = 0xCC0B0F14.toInt(), stroke: Int = 0x55FFFFFF) {
