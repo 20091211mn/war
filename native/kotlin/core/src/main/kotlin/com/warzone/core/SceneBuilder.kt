@@ -147,7 +147,9 @@ class SceneBuilder(private val g: Game) {
             D(0f, 1.58f, 0f, .21f, .23f, .22f, 0f, skin); D(0f, 1.66f, 0.01f, .34f, .2f, .35f, 0f, d); D(0.36f + sp * 2, 1.2f, 0f, .12f, .54f, .12f, 0f, d); D(-0.36f - sp * 2, 1.2f, 0f, .12f, .54f, .12f, 0f, d)
             return
         }
-        if (camDist > 38f) {
+        val avLod = floatArrayOf(14f, 24f, 38f, 60f, 95f)[Lang.quality.coerceIn(0, 4)]
+        if (Lang.quality >= 2 && camDist < avLod) { r.obb(x, y + 0.03f, z, 0.42f, 0.012f, 0.42f, yw, 0f, 0.10f, 0.10f, 0.11f, false, false); r.obb(x, y + 0.035f, z, 0.42f, 0.012f, 0.42f, yw + 0.785f, 0f, 0.10f, 0.10f, 0.11f, false, false) }
+        if (camDist > avLod) {
             r.obb(x, y + 0.42f, z, .2f, .42f, .12f, yw, 0f, pants[0], pants[1], pants[2]); r.obb(x, y + 1.1f, z, .25f, .3f, .15f, yw, 0f, c[0], c[1], c[2]); r.obb(x, y + 1.58f, z, .12f, .13f, .12f, yw, 0f, d[0], d[1], d[2]); return
         }
         val mv = if (a.moving) 1f else 0f; val cr = a.crouch; val amp = (if (a.sprint) 0.95f else 0.68f) * (if (cr) 0.45f else 1f) * mv

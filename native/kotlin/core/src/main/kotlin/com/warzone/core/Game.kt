@@ -202,7 +202,8 @@ class Game {
     private fun puffExplosion(gx: Float, gy: Float, gz: Float, n: Int, lim: Int) {
         for (j in 0 until n) { val a = gx + (frand() - 0.5f) * 2; val b = gy + frand() * 1.2f; val c = gz + (frand() - 0.5f) * 2; val d = 1.2f + frand() * 1.5f; val f = 0.7f + frand() * 0.5f; val g = 0.9f + frand() * 0.9f; puffs.add(Puff(a, b, c, d, f, g, j < lim)) }
     }
-    fun sparkAt(x: Float, y: Float, z: Float, nx: Float, ny: Float, nz: Float, n: Int) {
+    fun sparkAt(x: Float, y: Float, z: Float, nx: Float, ny: Float, nz: Float, n0: Int) {
+        val n = (n0 * floatArrayOf(0.3f, 0.6f, 1f, 1.2f, 1.6f)[Lang.quality.coerceIn(0, 4)] + 0.5f).toInt()
         var k = 0
         while (k < n && sparks.size < 120) { val a = -nx * 1.5f + (frand() - 0.5f) * 3f; val b = -ny * 1.5f + frand() * 2.5f; val c = -nz * 1.5f + (frand() - 0.5f) * 3f; val d = 0.22f + frand() * 0.15f; sparks.add(Spark(x, y, z, a, b, c, d)); k++ }
     }

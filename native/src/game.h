@@ -43,7 +43,7 @@ struct Game{
   int mapIdx=0,scoreLim=30,score[2]={0,0},nBots=6,diff=0; float sens=1.0f; bool swapTrig=false,swapL=false,swapSticks=false; float t=0,hitMark=0,dmgFlash=0,wsT=0; bool wheelOpen=false; bool over=false; int winner=0; int streak=0,glCnt=2; float hitAng=0,hitAngT=0;
   float fpsShow=0; std::vector<VH::Veh> vh; int drive=-1; float lookIdle=0; bool nearVeh=false; struct Puff{float x,y,z,vy,t,sz;bool fire;}; std::vector<Puff> puffs; struct Drn{bool on=false;float x=0,y=0,z=0,yaw=0,pitch=0,vx=0,vy=0,vz=0,t=0;} dn; float dnCd=0,dnSpot=0; bool pdn=false,pfireD=false;
   struct Shell{float x,y,z,vx,vy,vz,t;}; std::vector<Shell> shells; struct Gr{float x,y,z,vx,vy,vz,t;}; std::vector<Gr> grs; struct Rk{float ox,oy,oz,dx,dy,dz,len,t,by;}; std::vector<Rk> rks; int gren=2; bool pg=false; struct Spark{float x,y,z,vx,vy,vz,t;}; std::vector<Spark> sparks;
-  void sparkAt(float x,float y,float z,float nx,float ny,float nz,int n){ for(int k=0;k<n&&sparks.size()<120;k++)sparks.push_back({x,y,z,-nx*1.5f+(frand()-0.5f)*3.f,-ny*1.5f+frand()*2.5f,-nz*1.5f+(frand()-0.5f)*3.f,0.22f+frand()*0.15f}); }
+  void sparkAt(float x,float y,float z,float nx,float ny,float nz,int n){ { static const float SK[5]={0.3f,0.6f,1.f,1.2f,1.6f}; n=(int)(n*SK[g_quality%5]+0.5f); } for(int k=0;k<n&&sparks.size()<120;k++)sparks.push_back({x,y,z,-nx*1.5f+(frand()-0.5f)*3.f,-ny*1.5f+frand()*2.5f,-nz*1.5f+(frand()-0.5f)*3.f,0.22f+frand()*0.15f}); }
   int prim=0; Input prev; bool paused=false; float msgT=0; char msg[64]={0}; int shotsFeed[4]={-1,-1,-1,-1}; std::string feed[4]; float feedT[4]={};
   int netGoal=0,netSt=0,netPhase=0; const char*netWhat=""; sockaddr_in pendJoin;
 
@@ -634,7 +634,7 @@ struct Game{
       if(R->handle&&!awm){ float gg[3]; gcol('g',gg); bool sn=(wi==3); part(sn?0.062f:0.03f,sn?0.f:0.032f,0.05f+R->bolt,0.014f,0.014f,0.04f,gg); } }
     r.obbRoll=0;
   }
-  void drawAvatar(const Ent&a,float camDist){
+  float avLod=38.f; void drawAvatar(const Ent&a,float camDist){
     float tc[2][3]={{0.82f,0.14f,0.14f},{0.15f,0.36f,0.9f}}; const float*c=tc[a.team]; const float td[2][3]={{0.5f,0.08f,0.08f},{0.08f,0.2f,0.55f}}; const float*d=td[a.team];
     float x=a.b.x,y=a.b.y,z=a.b.z,yw=a.yaw;
     static const float pants[3]={.17f,.18f,.15f},boot[3]={.08f,.07f,.07f},vest[3]={.2f,.22f,.2f},plate[3]={.26f,.28f,.25f},pocket[3]={.16f,.17f,.15f},pack[3]={.18f,.2f,.16f},belt[3]={.1f,.1f,.11f},skin[3]={.86f,.68f,.55f},glove[3]={.1f,.1f,.11f},visor[3]={.05f,.06f,.08f},mask[3]={.12f,.12f,.12f};
@@ -643,7 +643,9 @@ struct Game{
       auto D=[&](float lx,float ly,float lz,float hx,float hy,float hz,float rx_,const float*col){ float y1=ly*cosf(ph)-lz*sinf(ph),z1=ly*sinf(ph)+lz*cosf(ph)+0.0f; float o[3];Renderer::rot(yw,0,lx,y1+0.17f*k,z1,o); r.obb(x+o[0],y+o[1],z+o[2],hx*.5f,hy*.5f,hz*.5f,yw,rx_+ph,col[0]*0.6f,col[1]*0.6f,col[2]*0.6f); };
       float sp=0.12f*k; D(-0.12f-sp,0.4f,0.02f,.2f,.8f,.22f,0,pants); D(0.12f+sp,0.4f,0.0f,.2f,.8f,.22f,0,pants); D(0,1.1f,0,.44f,.58f,.25f,0,c); D(0,1.13f,0.015f,.5f,.46f,.29f,0,vest); D(0,1.0f,0.2f,.36f,.42f,.14f,0,pack);
       D(0,1.58f,0,.21f,.23f,.22f,0,skin); D(0,1.66f,0.01f,.34f,.2f,.35f,0,d); D(0.36f+sp*2,1.2f,0,.12f,.54f,.12f,0,d); D(-0.36f-sp*2,1.2f,0,.12f,.54f,.12f,0,d); return; }
-    if(camDist>38.f){ float o[3]; r.obb(x,y+0.42f,z,.2f,.42f,.12f,yw,0,pants[0],pants[1],pants[2]); r.obb(x,y+1.1f,z,.25f,.3f,.15f,yw,0,c[0],c[1],c[2]); r.obb(x,y+1.58f,z,.12f,.13f,.12f,yw,0,d[0],d[1],d[2]); (void)o; return; }
+    { static const float AL[5]={14.f,24.f,38.f,60.f,95.f}; avLod=AL[g_quality%5]; }
+    if(g_quality>=2&&camDist<avLod){ r.obb(x,y+0.03f,z,0.42f,0.012f,0.42f,yw,0,0.10f,0.10f,0.11f,false,false); r.obb(x,y+0.035f,z,0.42f,0.012f,0.42f,yw+0.785f,0,0.10f,0.10f,0.11f,false,false); } // ظل تحت الجندي
+    if(camDist>avLod){ float o[3]; r.obb(x,y+0.42f,z,.2f,.42f,.12f,yw,0,pants[0],pants[1],pants[2]); r.obb(x,y+1.1f,z,.25f,.3f,.15f,yw,0,c[0],c[1],c[2]); r.obb(x,y+1.58f,z,.12f,.13f,.12f,yw,0,d[0],d[1],d[2]); (void)o; return; }
     // ---- مشية واقعية: فخذ + ساق مع ثني الركبة ، اهتزاز الجذع ، ميلان عند الركض ، وضعية انحناء حقيقية ----
     float mv=a.moving?1.f:0.f; bool cr=a.crouch; float amp=(a.sprint?0.95f:0.68f)*(cr?0.45f:1.f)*mv;
     float hipY=0.84f-(cr?0.34f:0.f); float bob=fabsf(sinf(a.phase))*0.032f*mv*(a.sprint?1.7f:1.f)*(cr?0.5f:1.f);
