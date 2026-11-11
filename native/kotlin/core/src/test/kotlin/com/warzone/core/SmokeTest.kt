@@ -32,7 +32,7 @@ class SmokeTest {
     @Test fun lanLoopback() {
         val h = Game(); h.menu = 1; h.init(640, 360); h.mode = 1
         val c = Game(); c.menu = 1; c.init(640, 360)
-        val ci = Input(); ci.confirm = true; h.update(1f / 60, ci); assertTrue(h.role == 1 && h.menu == 0, "host started")
+        val ci = Input(); ci.confirm = true; h.update(1f / 60, ci); ci.confirm = false; h.update(1f / 60, ci); ci.confirm = true; h.update(1f / 60, ci); assertTrue(h.role == 1 && h.menu == 0, "host started")
         assertTrue(c.joinIp("127.0.0.1"))
         var ok = false
         for (k in 0 until 400) {
@@ -115,7 +115,7 @@ class SmokeTest {
     @Test fun crossKotlinHostCppClient() {
         val bin = crossBin() ?: return
         Thread.sleep(1500)
-        val h = Game(); h.menu = 1; h.init(640, 360); h.mode = 1; val ci = Input(); ci.confirm = true; h.update(1f / 60, ci); assertTrue(h.role == 1)
+        val h = Game(); h.menu = 1; h.init(640, 360); h.mode = 1; val ci = Input(); ci.confirm = true; h.update(1f / 60, ci); ci.confirm = false; h.update(1f / 60, ci); ci.confirm = true; h.update(1f / 60, ci); assertTrue(h.role == 1)
         val pr = ProcessBuilder(bin, "join").redirectErrorStream(true).start()
         try {
             var ok = 0
