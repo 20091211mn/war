@@ -19,7 +19,7 @@ object B {
     const val OK = 20; const val BACK = 21; const val SENS_UP = 22; const val SENS_DN = 23
     const val P_OPT = 24; const val P_MUZ = 25; const val P_GRIP = 26; const val P_MAG = 27
     const val ROW_MAP = 30; const val ROW_DIFF = 31; const val ROW_MODE = 32; const val START = 33; const val ROW_QUAL = 34; const val ROW_LANG = 35
-    const val WEAPON = 15; const val W0 = 50; const val H0 = 70; const val RM0 = 80; const val RMGO = 86
+    const val WEAPON = 15; const val W0 = 50; const val H0 = 70; const val RM0 = 80; const val RMGO = 90
     const val NB = 96
 }
 
@@ -48,8 +48,8 @@ class Controls(private val g: Game) {
             R(B.ROW_QUAL, cx, y0 + 3 * st, 330f, 50f, "q"); R(B.ROW_LANG, cx, y0 + 4 * st, 330f, 50f, "lang")
             R(B.START, cx, y0 + 5 * st + 12 * u, 330f, 62f, "start")
         } else if (g.menu == 4) {
-            val cx = w * 0.5f; for (k in 0 until 6) R(B.RM0 + k, cx, h * 0.18f + k * 54 * u, 420f, 46f, "row$k")
-            R(B.RMGO, cx, h * 0.18f + 6 * 54 * u + 8 * u, 420f, 54f, "go"); R(B.BACK, 90 * u, h - 40 * u, 140f, 44f, "back")
+            val cx = w * 0.5f; for (k in 0 until 8) R(B.RM0 + k, cx, h * 0.15f + k * 42 * u, 420f, 36f, "row$k")
+            R(B.RMGO, cx, h * 0.15f + 8 * 42 * u + 6 * u, 420f, 46f, "go"); R(B.BACK, 90 * u, h - 40 * u, 140f, 44f, "back")
         } else if (g.menu == 2) {
             for (i in 0 until minOf(5, g.ns.hosts.size)) R(B.H0 + i, w * 0.5f, h * 0.30f + i * 62 * u, 420f, 54f, "host")
             R(B.BACK, w * 0.5f, h - 56 * u, 220f, 50f, "back")
@@ -100,7 +100,7 @@ class Controls(private val g: Game) {
         t.id = id; t.x = x; t.y = y; t.ox = x; t.oy = y; t.btn = 0; t.role = 0
         if (b != null) {
             if (g.menu == 1 && (b.id == B.ROW_MAP || b.id == B.ROW_DIFF || b.id == B.ROW_MODE || b.id == B.ROW_QUAL || b.id == B.ROW_LANG)) { menuTap(b, x); t.role = 4; return }
-            if (g.menu == 4 && b.id >= B.RM0 && b.id < B.RM0 + 6) { g.rmRow = b.id - B.RM0; g.roomAdj(g.rmRow, if (x < b.x) -1 else 1); t.role = 4; return }
+            if (g.menu == 4 && b.id >= B.RM0 && b.id < B.RM0 + 8) { g.rmRow = b.id - B.RM0; g.roomAdj(g.rmRow, if (x < b.x) -1 else 1); t.role = 4; return }
             if (g.menu == 2 && b.id >= B.H0 && b.id < B.H0 + 5) { g.ns.hostSel = b.id - B.H0; lobbyConf = true; t.role = 4; return }
             if (b.id == B.WEAPON) { t.role = 4; t.btn = 0; wheelOpen = true; return }
             t.role = 3; t.btn = b.id; held[b.id] = true
@@ -109,7 +109,7 @@ class Controls(private val g: Game) {
         }
         if (g.menu != 0 || g.paused) return
         val haveMove = tc.any { it.id >= 0 && it.role == 1 }
-        if (x < sw * 0.38f && !haveMove) { t.role = 1; stX = 0f; stY = 0f } else t.role = 2
+        if ((x < sw * 0.38f || (g.air && g.myJet() >= 0)) && !haveMove) { t.role = 1; stX = 0f; stY = 0f } else t.role = 2 // في الطيران: السحب بأي مكان = عصا توجيه
     }
     @Synchronized fun touchMove(id: Int, x: Float, y: Float) {
         val t = tc.firstOrNull { it.id == id } ?: return

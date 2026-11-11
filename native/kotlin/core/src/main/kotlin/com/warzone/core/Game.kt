@@ -68,14 +68,15 @@ class Game {
     @JvmField var menu = 1; @JvmField var menuSel = 0; @JvmField var menuRow = 0; @JvmField var mode = 0
     @JvmField var modeCount = 3
     // ---- إعداد الغرفة (استضافة LAN) — نفس قيم C++ ----
+    @JvmField var rmWpnI = 0; @JvmField var rmDmgI = 1; @JvmField var cfgDmg = 1f; @JvmField var cfgWpn = -1
     @JvmField var roomOn = false; @JvmField var rmName = 0; @JvmField var rmMaxI = 6; @JvmField var rmLimI = 2; @JvmField var rmMinI = 0; @JvmField var rmBotI = 2; @JvmField var rmStyle = 0; @JvmField var rmRow = 0; @JvmField var timeLim = 0
     fun rmNameOf(i: Int) = arrayOf("Falcon", "Lion", "Wolf", "Eagle", "Tiger", "Cobra", "Viper", "Shark")[i and 7]
     fun rmLimV(i: Int) = intArrayOf(10, 20, 30, 50)[i and 3]
     fun rmMinV(i: Int) = intArrayOf(0, 5, 10, 15)[i and 3]
     fun rmMaxE() = if (rmStyle == 1) 2 else 2 + rmMaxI
     fun rmBotsE() = if (rmStyle == 1) 0 else minOf(intArrayOf(0, 2, 4, 6)[rmBotI and 3], rmMaxE() - 1)
-    fun roomApply() { scoreLim = rmLimV(rmLimI); timeLim = rmMinV(rmMinI) * 60 }
-    fun roomAdj(row: Int, d: Int) { when (row) { 0 -> rmName = (rmName + d + 8) % 8; 1 -> rmMaxI = (rmMaxI + d + 7) % 7; 2 -> rmLimI = (rmLimI + d + 4) % 4; 3 -> rmMinI = (rmMinI + d + 4) % 4; 4 -> rmBotI = (rmBotI + d + 4) % 4; else -> rmStyle = (rmStyle + d + 2) % 2 } }
+    fun roomApply() { scoreLim = rmLimV(rmLimI); timeLim = rmMinV(rmMinI) * 60; cfgDmg = floatArrayOf(0.5f, 1f, 2f)[rmDmgI % 3]; cfgWpn = if (rmWpnI > 0) rmWpnI - 1 else -1 }
+    fun roomAdj(row: Int, d: Int) { when (row) { 0 -> rmName = (rmName + d + 8) % 8; 1 -> rmMaxI = (rmMaxI + d + 7) % 7; 2 -> rmLimI = (rmLimI + d + 4) % 4; 3 -> rmMinI = (rmMinI + d + 4) % 4; 4 -> rmBotI = (rmBotI + d + 4) % 4; 5 -> rmStyle = (rmStyle + d + 2) % 2; 6 -> rmWpnI = (rmWpnI + d + WEAPON_COUNT + 1) % (WEAPON_COUNT + 1); else -> rmDmgI = (rmDmgI + d + 3) % 3 } }
     @JvmField var air = false; @JvmField val jets = ArrayList<Jet>(); @JvmField var entJet = IntArray(0); @JvmField val airPrev = Input()
     @JvmField var footT = 0f; @JvmField var jetMsg = ""; @JvmField var jetMsgT = 0f; @JvmField var rpgIdx = 8
     @JvmField var meI = 0; @JvmField var role = 0; @JvmField val ns = NetState(); @JvmField var overT = 0f; @JvmField var netPc4 = false; @JvmField var netPdet = false
@@ -128,6 +129,7 @@ class Game {
     }
     fun spawn(ix: Int) {
         val p = e[ix]
+        if (roomOn && cfgWpn >= 0 && role != 2) p.wpn = cfgWpn
         if (e.isNotEmpty()) c4Clear(ix)
         val sp = if (p.team != 0) w.m.blue else w.m.red; val n = sp.size; var s = sp[rand() % n]
         var bestD = -1f
@@ -157,6 +159,7 @@ class Game {
     fun hurt(vi: Int, ai: Int, dmg: Float, head: Boolean) {
         if (role == 2) return
         val v = e[vi]; if (!v.alive || v.prot > 0) return
+        val dmg = if (roomOn) dmg * cfgDmg else dmg
         v.hp -= dmg; v.lastHitBy = ai; v.lastDmgT = t
         if (vi == meI) { dmgFlash = 0.5f; Sfx.play(Sfx.HURT, 0.9f); if (ai >= 0 && ai != vi) { hitAng = atan2f(-(e[ai].b.x - v.b.x), -(e[ai].b.z - v.b.z)) - v.yaw; hitAngT = 1.2f } }
         if (ai == meI) { hitMark = 0.25f; Sfx.play(Sfx.HIT, 0.7f) }
@@ -604,7 +607,7 @@ class Game {
         }
         if (menu == 4) { // إعداد الغرفة
             val up = inp.my > 0.5f && prev.my <= 0.5f; val dnn = inp.my < -0.5f && prev.my >= -0.5f; val rt = inp.mx > 0.5f && prev.mx <= 0.5f; val lf = inp.mx < -0.5f && prev.mx >= -0.5f
-            if (up) rmRow = (rmRow + 5) % 6; if (dnn) rmRow = (rmRow + 1) % 6; val d = if (rt) 1 else if (lf) -1 else 0; if (d != 0) roomAdj(rmRow, d)
+            if (up) rmRow = (rmRow + 7) % 8; if (dnn) rmRow = (rmRow + 1) % 8; val d = if (rt) 1 else if (lf) -1 else 0; if (d != 0) roomAdj(rmRow, d)
             if (inp.back && !prev.back) { menu = 1; prev.set(inp); return }
             if ((inp.confirm && !prev.confirm) || (inp.start && !prev.start)) { roomOn = true; roomApply(); hostStart() }
             prev.set(inp); return

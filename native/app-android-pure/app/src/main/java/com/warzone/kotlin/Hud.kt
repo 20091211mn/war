@@ -49,7 +49,21 @@ class Hud(private val g: Game, private val c: Controls) {
         HudDiag.err?.let { e -> p.style = Paint.Style.FILL; p.color = 0xE0200000.toInt(); cv.drawRect(0f, 0f, w, h, p); var y = 30 * u; for (ln in ("ERROR\n" + e).split("\n")) { text(cv, ln, 12 * u, y, 13 * u, 0xFFFF8080.toInt(), Paint.Align.LEFT); y += 17 * u } }
     }
 
+    /** اسم الحليف وسهم فوق رأسه — لترى صاحبك من بعيد */
+    private fun allyTags(cv: Canvas, w: Float, h: Float, u: Float, me: com.warzone.core.Ent) {
+        val r = g.r; p.style = Paint.Style.FILL
+        for (i in g.e.indices) { val q = g.e[i]; if (i == g.meI || !q.alive || q.off || q.team != me.team) continue
+            val dx = q.b.x - me.b.x; val dz = q.b.z - me.b.z; val dd = hypot(dx, dz); if (dd > 140f || dd < 2f) continue
+            val ddx = q.b.x - r.cam.x; val ddy = q.b.y + 2.1f - r.cam.y; val ddz = q.b.z - r.cam.z; val zc = ddx * r.fx + ddy * r.fy + ddz * r.fz; if (zc < 1f) continue
+            val xc = ddx * r.rx + ddz * r.rz; val yc = ddx * r.ux + ddy * r.uy + ddz * r.uz
+            val X = w / 2 + xc / zc * r.focal * (w / r.W); val Y = h / 2 - yc / zc * r.focal * (h / r.H); if (X < 8 || X > w - 8 || Y < 8 || Y > h - 8) continue
+            val col = if (q.bot) 0xFF6CB4FF.toInt() else 0xFF5CFF8C.toInt(); p.color = col
+            val path = Path(); path.moveTo(X - 6 * u, Y); path.lineTo(X + 6 * u, Y); path.lineTo(X, Y + 7 * u); path.close(); cv.drawPath(path, p)
+            text(cv, q.name, X, Y - 4 * u, 12 * u, col) }
+    }
+
     private fun hud(cv: Canvas, w: Float, h: Float, u: Float, me: com.warzone.core.Ent) {
+        if (!(g.air && g.myJet() >= 0) && me.alive) allyTags(cv, w, h, u, me)
         // التصويب
         val cx = w / 2; val cy = h / 2
         if (g.air) airHud(cv, w, h, u, me)
@@ -185,10 +199,10 @@ class Hud(private val g: Game, private val c: Controls) {
     private fun room(cv: Canvas, w: Float, h: Float, u: Float) {
         p.style = Paint.Style.FILL; p.color = 0xCC0B0F14.toInt(); cv.drawRect(0f, 0f, w, h, p)
         text(cv, "إنشاء غرفة LAN", w / 2, h * 0.09f, 26 * u)
-        val L = arrayOf("اسم الغرفة", "أقصى لاعبين", "حد النقاط", "الوقت", "البوتات", "النمط")
-        val V = arrayOf(g.rmNameOf(g.rmName), "${g.rmMaxE()}", "${g.rmLimV(g.rmLimI)}", if (g.rmMinV(g.rmMinI) > 0) "${g.rmMinV(g.rmMinI)} min" else "بلا حد", if (g.rmBotsE() == 0) "بدون بوتات" else "${g.rmBotsE()}", if (g.rmStyle == 1) "مبارزة 1 ضد 1" else "فرق")
+        val L = arrayOf("اسم الغرفة", "أقصى لاعبين", "حد النقاط", "الوقت", "البوتات", "النمط", "سلاح البداية", "قوة الضرر")
+        val V = arrayOf(g.rmNameOf(g.rmName), "${g.rmMaxE()}", "${g.rmLimV(g.rmLimI)}", if (g.rmMinV(g.rmMinI) > 0) "${g.rmMinV(g.rmMinI)} min" else "بلا حد", if (g.rmBotsE() == 0) "بدون بوتات" else "${g.rmBotsE()}", if (g.rmStyle == 1) "مبارزة 1 ضد 1" else "فرق", if (g.rmWpnI > 0) g.WEAPONS[g.rmWpnI - 1].name else "عشوائي", arrayOf("50%", "100%", "200%")[g.rmDmgI % 3])
         for (b in c.btns) { val l = b.x - b.w / 2; val t = b.y - b.h / 2
-            if (b.id >= B.RM0 && b.id < B.RM0 + 6) { val k = b.id - B.RM0; val sel = g.rmRow == k; val col = if (k and 1 == 1) BLUE else RED
+            if (b.id >= B.RM0 && b.id < B.RM0 + 8) { val k = b.id - B.RM0; val sel = g.rmRow == k; val col = if (k and 1 == 1) BLUE else RED
                 panel(cv, l, t, l + b.w, t + b.h, if (sel) 0xFF1F2A3A.toInt() else 0xDD18202C.toInt(), if (sel) col else 0x55FFFFFF)
                 text(cv, L[k], l + b.w - 14 * u, b.y + 7 * u, 15 * u, 0xFF8FA0B4.toInt(), Paint.Align.RIGHT); text(cv, V[k], l + b.w * 0.30f, b.y + 8 * u, 20 * u, if (sel) Color.WHITE else 0xFFB8C4D4.toInt())
                 if (sel) { text(cv, "◀", l + 20 * u, b.y + 7 * u, 18 * u, col); text(cv, "▶", l + b.w * 0.55f, b.y + 7 * u, 18 * u, col) } }

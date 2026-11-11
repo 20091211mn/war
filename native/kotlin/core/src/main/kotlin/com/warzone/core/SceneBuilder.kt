@@ -174,15 +174,36 @@ class SceneBuilder(private val g: Game) {
             H(0f, 0f, 0f, .21f, .23f, .22f, skin); val hel = floatArrayOf(d[0] * .9f, d[1] * .9f, d[2] * .9f); H(0f, 0.08f, 0.01f, .34f, .2f, .35f, hel); H(0f, 0.02f, -0.115f, .23f, .07f, .03f, visor); H(0f, -0.1f, -0.08f, .18f, .05f, .08f, mask)
         }
         val ap = if (a.sprint) 0.2f else a.pitch; val base = if (a.sprint) 0.9f else 1.5708f; val br = 0.015f * sinf(a.phase * 0.5f + t * 2f)
-        fun arm(ax: Float, rot: Float) {
-            val len = 0.54f; val sh = FloatArray(3); UPp(ax, 1.36f, 0f, sh); val cr_ = cosf(rot); val sr = sinf(rot)
-            B(sh[0], sh[1] - len / 2 * cr_, sh[2] - len / 2 * sr, .12f, len, .12f, rot, d); B(sh[0], sh[1] - (len + 0.02f) * cr_, sh[2] - (len + 0.02f) * sr, .1f, .1f, .1f, rot, glove)
-        }
-        arm(0.27f, base + ap - 0.12f + br); arm(-0.27f, base + ap + 0.12f + br)
         val gs = FloatArray(3); UPp(0.12f, 1.3f, 0f, gs); val cA = cosf(ap); val sA = sinf(ap); val lau = g.isExpl(a.wpn); val gdy = if (lau) -0.13f else 0.05f; val gdz = if (lau) 0.14f else 0.38f; val wo = FloatArray(3)
         r.rot(yw, 0f, gs[0], gs[1] - gdy * cA + gdz * sA, gs[2] - gdy * sA - gdz * cA, wo)
         gsc = if (GameData.meshOf(a.wpn) != null && GameData.wkind[a.wpn % g.WEAPON_COUNT] > 1) 1.5f else 1f
         drawGunAt(x + wo[0], y + wo[1], z + wo[2], yw, ap, a.wpn, if (a.flash > 0) 1f else 0f, true, 1f, null, false); gsc = 1f
+        // ذراعان بمفصل مرفق (IK): اليمنى على قبضة الزناد واليسرى على المقدّمة
+        run {
+            val gsK = if (GameData.meshOf(a.wpn) != null && GameData.wkind[a.wpn % g.WEAPON_COUNT] > 1) 1.5f else 1f; val gd = GameData.gundefs[a.wpn]; val pistol = a.wpn == 6 || a.wpn == 7
+            val gl = floatArrayOf(gs[0], gs[1] - gdy * cA + gdz * sA, gs[2] - gdy * sA - gdz * cA)
+            fun g2l(hx0: Float, hy0: Float, hz0: Float): FloatArray { val hx = hx0 * gsK; val hy = hy0 * gsK; val hz = hz0 * gsK; return floatArrayOf(gl[0] + hx, gl[1] + hy * cA - hz * sA, gl[2] + hy * sA + hz * cA) }
+            fun seg(p0: FloatArray, p1: FloatArray, th: Float, col: FloatArray) { val w0 = FloatArray(3); val w1 = FloatArray(3); r.rot(yw, 0f, p0[0], p0[1], p0[2], w0); r.rot(yw, 0f, p1[0], p1[1], p1[2], w1)
+                val dx = w1[0] - w0[0]; val dy = w1[1] - w0[1]; val dz = w1[2] - w0[2]; val l = sqrtf(dx * dx + dy * dy + dz * dz); if (l < 0.01f) return
+                r.obb(x + (w0[0] + w1[0]) * 0.5f, y + (w0[1] + w1[1]) * 0.5f, z + (w0[2] + w1[2]) * 0.5f, th * .5f, th * .5f, l * .5f, atan2f(-dx, -dz), asinf(dy / l), col[0], col[1], col[2]) }
+            fun limb(side: Float, hand: FloatArray) {
+                val S = FloatArray(3); UPp(side * 0.27f, 1.36f, 0f, S); val L1 = 0.3f; val L2 = 0.29f
+                val dv = floatArrayOf(hand[0] - S[0], hand[1] - S[1], hand[2] - S[2]); var D = fmax(0.12f, sqrtf(dv[0] * dv[0] + dv[1] * dv[1] + dv[2] * dv[2]))
+                val k2 = if (D > L1 + L2 - 0.02f) (L1 + L2 - 0.02f) / D else 1f; val H = floatArrayOf(S[0] + dv[0] * k2, S[1] + dv[1] * k2, S[2] + dv[2] * k2); D *= k2
+                val ux = (H[0] - S[0]) / D; val uy = (H[1] - S[1]) / D; val uz = (H[2] - S[2]) / D
+                val pv = floatArrayOf(side * 0.55f, -1f, 0.25f); val dp = pv[0] * ux + pv[1] * uy + pv[2] * uz; pv[0] -= ux * dp; pv[1] -= uy * dp; pv[2] -= uz * dp
+                var pl = sqrtf(pv[0] * pv[0] + pv[1] * pv[1] + pv[2] * pv[2]); if (pl < 1e-3f) { pv[0] = side; pv[1] = 0f; pv[2] = 0f; pl = 1f }; for (q in 0 until 3) pv[q] /= pl
+                val aa = (L1 * L1 - L2 * L2 + D * D) / (2 * D); val hh = sqrtf(fmax(0f, L1 * L1 - aa * aa))
+                val E = floatArrayOf(S[0] + ux * aa + pv[0] * hh, S[1] + uy * aa + pv[1] * hh, S[2] + uz * aa + pv[2] * hh)
+                seg(S, E, 0.115f, d); seg(E, H, 0.1f, d); val hw = FloatArray(3); r.rot(yw, 0f, H[0], H[1], H[2], hw); r.obb(x + hw[0], y + hw[1], z + hw[2], .05f, .05f, .055f, yw, ap, glove[0], glove[1], glove[2])
+            }
+            val mzz = gd.mz
+            val rh: FloatArray; val lh: FloatArray
+            if (lau) { rh = g2l(0.02f, -0.06f, mzz * 0.10f); lh = g2l(-0.01f, 0f, mzz * 0.55f) }
+            else if (pistol) { rh = g2l(0f, -0.055f, mzz * 0.20f); lh = g2l(-0.025f, -0.075f, mzz * 0.18f) }
+            else { rh = g2l(-0.005f, -0.06f, mzz * 0.32f); lh = g2l(-0.03f, -0.07f, mzz * 0.72f) }
+            limb(1f, rh); limb(-1f, lh)
+        }
     }
 
     /** Camera used for the last frame (also read by HUD for projections). */
