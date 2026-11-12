@@ -485,7 +485,7 @@ struct Game{
   void update(float dt,const Input&in0){
     Input in0b=in0; if(tap.mx){in0b.mx=(float)tap.mx;} if(tap.confirm)in0b.confirm=true; if(tap.back)in0b.back=true; if(tap.start)in0b.start=true; if(tap.tri)in0b.tri=true; if(tap.reload)in0b.reload=true; if(tap.swapP)in0b.swapP=true; if(tap.fire)in0b.fire=true; tap=Tap();
     airIn=in0b; Input in=in0b; if(air&&myJet()>=0){ in.drone=false;in.grenade=false;in.c4=false;in.det=false;in.fire=false;in.tri=false;in.use=false;in.reload=false;in.swapP=false;in.swapN=false;in.jump=false;in.crouch=false;in.pick=-1; }
-    lastIn=in; if(qApplied!=g_quality){ qApplied=g_quality; static const float FK[5]={0.40f,0.62f,0.82f,1.f,1.3f}; r.fogK=FK[g_quality]; qChanged=true; }
+    lastIn=in; if(qApplied!=g_quality){ qApplied=g_quality; static const float FK[5]={0.45f,0.7f,1.f,1.5f,2.2f}; r.fogK=FK[g_quality]; qChanged=true; }
 
     if(menu==1){
       bool up=in.my>0.5f&&prev.my<=0.5f,dn=in.my<-0.5f&&prev.my>=-0.5f,rt=in.mx>0.5f&&prev.mx<=0.5f,lf=in.mx<-0.5f&&prev.mx>=-0.5f;
@@ -634,6 +634,30 @@ struct Game{
       if(R->handle&&!awm){ float gg[3]; gcol('g',gg); bool sn=(wi==3); part(sn?0.062f:0.03f,sn?0.f:0.032f,0.05f+R->bolt,0.014f,0.014f,0.04f,gg); } }
     r.obbRoll=0;
   }
+  // ---- مشاهد أعلى جودة: أشجار تتمايل مع الريح + نوافذ وإفريز للمباني القريبة (جودة عالية فأعلى) ----
+  struct Tree{float x,z,h,ph;}; std::vector<Tree> trees; int treeMap=-1;
+  void buildTrees(){ treeMap=w.id; trees.clear(); if(!w.m||w.id>=8)return; uint32_t sd=0x9E3779B9u*(uint32_t)(w.id+7); auto rnd=[&]{ sd=sd*1664525u+1013904223u; return (sd>>8)/16777216.f; };
+    for(int n=0,tries=0;n<60&&tries<900;tries++){ float x=(rnd()-0.5f)*w.m->W*0.96f,z=(rnd()-0.5f)*w.m->D*0.96f; bool bad=false;
+      for(float dx=-1.6f;dx<=1.6f&&!bad;dx+=1.6f)for(float dz=-1.6f;dz<=1.6f;dz+=1.6f)for(int k:w.cellAt(x+dx,z+dz)){ const Box&b=w.boxes[k]; if(x+dx>b.x0-0.6f&&x+dx<b.x1+0.6f&&z+dz>b.z0-0.6f&&z+dz<b.z1+0.6f&&b.y1>0.3f){ bad=true; break; } }
+      for(int i=0;i<w.m->nr&&!bad;i++){ float ddx=x-w.m->red[i].x,ddz=z-w.m->red[i].z; if(ddx*ddx+ddz*ddz<100.f)bad=true; } for(int i=0;i<w.m->nbl&&!bad;i++){ float ddx=x-w.m->blue[i].x,ddz=z-w.m->blue[i].z; if(ddx*ddx+ddz*ddz<100.f)bad=true; }
+      if(bad)continue; trees.push_back({x,z,3.2f+rnd()*2.6f,rnd()*6.28f}); n++; } }
+  void drawScenery(const Cam&c){
+    if(g_quality<2||!w.m)return; if(treeMap!=w.id)buildTrees(); static const int TN[5]={0,0,10,28,60}; int nt=std::min<int>((int)trees.size(),TN[g_quality%5]);
+    bool snow=w.id==3, desert=(w.id==1||w.id==4||w.id==5||w.id==7);
+    for(int i=0;i<nt;i++){ const Tree&T=trees[i]; float dx=T.x-c.x,dz=T.z-c.z,dd=dx*dx+dz*dz; if(dd>r.fogF*r.fogF||dd>110.f*110.f)continue; float sw=sinf(t*1.25f+T.ph)*0.09f+sinf(t*3.1f+T.ph*2)*0.025f; float h=T.h;
+      float tx=T.x+sw*h*0.35f,tz=T.z+sw*h*0.2f; // قمة الجذع تميل مع الريح
+      r.obb((T.x+tx)*0.5f,h*0.25f,(T.z+tz)*0.5f,0.14f,h*0.25f,0.14f,0,0,0.33f,0.22f,0.12f); r.obb(tx,h*0.62f,tz,0.11f,h*0.14f,0.11f,0,0,0.30f,0.2f,0.11f);
+      float fx=T.x+sw*h*0.9f,fz=T.z+sw*h*0.5f; float cr=snow?0.16f:desert?0.3f:0.14f,cg=snow?0.34f:desert?0.5f:0.42f,cb=snow?0.2f:desert?0.16f:0.16f;
+      if(desert){ for(int k=0;k<6;k++){ float a=k*1.047f+T.ph; r.obb(fx+cosf(a)*1.0f,h*0.82f-0.1f,fz+sinf(a)*1.0f,0.9f,0.05f,0.16f,a+sw*2,0.35f,cr,cg,cb); } }
+      else { r.obb(fx-sw*h*0.2f,h*0.74f,fz,1.35f,0.5f,1.35f,sw,0,cr,cg,cb); r.obb(fx,h*0.74f+0.65f,fz,1.0f,0.5f,1.0f,sw+0.4f,0,cr*1.1f,cg*1.1f,cb*1.1f); r.obb(fx+sw*h*0.2f,h*0.74f+1.2f,fz,0.6f,0.45f,0.6f,sw+0.8f,0,cr*1.2f,cg*1.2f,cb*1.2f); } }
+    if(g_quality>=3){ int budget=g_quality>=4?300:150; const float rD=g_quality>=4?45.f:32.f; int used=0;
+      for(const Box&b:w.boxes){ if(used>=budget)break; float bw=b.x1-b.x0,bd=b.z1-b.z0,bh=b.y1-b.y0; if(bh<4.f||b.y0>2.f||std::max(bw,bd)>50.f||std::min(bw,bd)<2.5f)continue;
+        float cx=(b.x0+b.x1)*0.5f,cz=(b.z0+b.z1)*0.5f; float ddx=cx-c.x,ddz=cz-c.z; if(ddx*ddx+ddz*ddz>rD*rD)continue;
+        r.obb(cx,b.y1+0.09f,cz,bw*0.5f+0.12f,0.09f,bd*0.5f+0.12f,0,0,0.22f,0.22f,0.24f); // إفريز السطح
+        for(int f=0;f<4&&used<budget;f++){ bool zf=f<2; float face=f==0?b.z0:f==1?b.z1:f==2?b.x0:b.x1; float cam=zf?c.z:c.x; if((f&1)==0?cam>face:cam<face)continue; float len=zf?bw:bd; int nw=std::max(1,(int)(len/2.6f)); float step=len/nw;
+          for(int i2=0;i2<nw&&used<budget;i2++)for(float wy=b.y0+1.6f;wy<b.y1-1.2f&&used<budget;wy+=3.2f){ float o=(i2+0.5f)*step-len*0.5f; float wx=zf?cx+o:face+(f==2?-0.03f:0.03f),wz=zf?face+(f==0?-0.03f:0.03f):cz+o;
+            bool lit=((i2*7+(int)(wy*3)+w.id)%5)==0; r.obb(wx,wy+0.7f,wz,zf?0.55f:0.04f,0.7f,zf?0.04f:0.55f,0,0,lit?0.9f:0.1f,lit?0.8f:0.2f,lit?0.45f:0.32f); used++; } } } }
+  }
   float avLod=38.f; void drawAvatar(const Ent&a,float camDist){
     float tc[2][3]={{0.82f,0.14f,0.14f},{0.15f,0.36f,0.9f}}; const float*c=tc[a.team]; const float td[2][3]={{0.5f,0.08f,0.08f},{0.08f,0.2f,0.55f}}; const float*d=td[a.team];
     float x=a.b.x,y=a.b.y,z=a.b.z,yw=a.yaw;
@@ -668,7 +692,7 @@ struct Game{
     { float nk[3]; UPp(0,1.58f,0,nk); float hp=a.pitch*0.5f; auto H=[&](float ox,float oy,float oz,float sx,float sy,float sz,const float*col){ float cx=cosf(hp),sx2=sinf(hp); float o3[3]={nk[0]+ox,nk[1]+oy*cx-oz*sx2,nk[2]+oy*sx2+oz*cx}; B(o3[0],o3[1],o3[2],sx,sy,sz,hp,col); };
       H(0,0,0,.21f,.23f,.22f,skin); float hel[3]={d[0]*.9f,d[1]*.9f,d[2]*.9f}; H(0,0.08f,0.01f,.34f,.2f,.35f,hel); H(0,0.02f,-0.115f,.23f,.07f,.03f,visor); H(0,-0.1f,-0.08f,.18f,.05f,.08f,mask); }
     // الذراعان والسلاح (ثابتان على السلاح مع تنفّس خفيف)
-    float ap=a.sprint?0.2f:a.pitch; float base=a.sprint?0.9f:1.5708f; float br=0.015f*sinf(a.phase*0.5f+t*2.f);
+    float ap=(a.sprint?0.2f:a.pitch)+(g_quality>=2?0.025f*sinf(a.phase*2)*mv+0.012f*sinf(t*1.6f+a.b.x):0.f); float base=a.sprint?0.9f:1.5708f; float br=0.015f*sinf(a.phase*0.5f+t*2.f);
     float gs[3]; UPp(0.12f,1.3f,0,gs); float cA=cosf(ap),sA=sinf(ap); const bool lau=isExpl(a.wpn); const float gdy=lau?-0.13f:0.05f,gdz=lau?0.14f:0.38f; float wo[3]; Renderer::rot(yw,0,gs[0],gs[1]-gdy*cA+gdz*sA,gs[2]-gdy*sA-gdz*cA,wo);
     gsc=(gmodOf(a.wpn)&&WKIND[a.wpn%WEAPON_COUNT]>1)?1.5f:1.f; drawGunAt(x+wo[0],y+wo[1],z+wo[2],yw,ap,a.wpn,a.flash>0?1.f:0.f,true,1.f); gsc=1.f;
     // ---- ذراعان بمفصل مرفق (IK): اليد اليمنى على قبضة الزناد واليسرى على المقدّمة، مع كتف وجذع يميلان مع الإطلاق ----
@@ -704,6 +728,7 @@ struct Game{
     for(auto&q:rks){ static const float one[3]={1,1,1}; float yw=atan2f(-q.dx,-q.dz),pt=asinf(q.dy); float px=q.ox+q.dx*q.t-q.dx*0.475f,py=q.oy+q.dy*q.t-q.dy*0.475f,pz=q.oz+q.dz*q.t-q.dz*0.475f; drawAwmGroup(8,1,px,py,pz,yw,pt,0,0,1.f,true,one); }
     for(auto&c:c4s){ r.obb(c.x,c.y+0.04f,c.z,0.1f,0.04f,0.065f,0,0,0.22f,0.22f,0.2f,true,true); r.obb(c.x,c.y+0.085f,c.z,0.085f,0.008f,0.05f,0,0,0.45f,0.4f,0.3f,true,true); bool on=((int)(t*2.2f))%2==0; float k=on?1.f:0.15f; r.obb(c.x+0.05f,c.y+0.1f,c.z,0.015f,0.015f,0.015f,0,0,c.team?0.1f*k:k,0.1f*k,c.team?k:0.1f*k,false,false); }
     for(auto&q:puffs){ float k=std::min<float>(1.f,q.t); if(q.fire)r.obb(q.x,q.y,q.z,q.sz*.4f,q.sz*.4f,q.sz*.4f,0,0,1.0f,0.55f*k+0.2f,0.1f,false,false); else r.obb(q.x,q.y,q.z,q.sz*.5f,q.sz*.5f,q.sz*.5f,0,0,0.12f+0.1f*k,0.12f+0.1f*k,0.12f+0.1f*k,false,false); }
+    drawScenery(c);
     for(int i=0;i<(int)e.size();i++){if((i==meI&&!dn.on)||e[i].gone||(air&&i<(int)entJet.size()&&entJet[i]>=0))continue;const Ent&a=e[i];float dx=a.b.x-c.x,dz=a.b.z-c.z; if(dx*dx+dz*dz>r.fogF*r.fogF||(dx*dx+dz*dz<0.5f&&i!=meI))continue; drawAvatar(a,sqrtf(dx*dx+dz*dz));}
     for(auto&q:tr){ float dx=q.x1-q.x0,dy=q.y1-q.y0,dz=q.z1-q.z0,l=sqrtf(dx*dx+dy*dy+dz*dz); if(l<0.1f)continue; float p0=std::min<float>(1.f,std::max<float>(0.f,1.f-q.t/0.09f)); float hd=p0*l,tl=std::max<float>(0.f,hd-std::min<float>(5.f,l*0.7f)); float sg=hd-tl; if(sg<0.05f)continue;
       float yw=atan2f(-dx,-dz),pt=asinf(dy/l); float m=(hd+tl)*0.5f/l; float cx=q.x0+dx*m,cy=q.y0+dy*m,cz=q.z0+dz*m; float fa=1.f-p0*0.5f;

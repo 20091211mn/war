@@ -134,6 +134,42 @@ class SceneBuilder(private val g: Game) {
     private val glove = floatArrayOf(.1f, .1f, .11f); private val visor = floatArrayOf(.05f, .06f, .08f); private val mask = floatArrayOf(.12f, .12f, .12f)
     private val tcol = arrayOf(floatArrayOf(0.82f, 0.14f, 0.14f), floatArrayOf(0.15f, 0.36f, 0.9f)); private val tdk = arrayOf(floatArrayOf(0.5f, 0.08f, 0.08f), floatArrayOf(0.08f, 0.2f, 0.55f))
 
+    // ---- أشجار تتمايل مع الريح + نوافذ وإفريز للمباني القريبة (جودة عالية فأعلى) ----
+    private class Tree(val x: Float, val z: Float, val h: Float, val ph: Float)
+    private var trees = ArrayList<Tree>(); private var treeMap = -1
+    private fun buildTrees() {
+        treeMap = g.w.id; trees = ArrayList(); val w = g.w; if (w.id >= 8) return
+        var sd = (0x9E3779B9L * (w.id + 7)).toInt()
+        fun rnd(): Float { sd = sd * 1664525 + 1013904223; return ((sd ushr 8) and 0xFFFFFF) / 16777216f }
+        var n = 0; var tries = 0
+        while (n < 60 && tries < 900) { tries++
+            val x = (rnd() - 0.5f) * w.m.W * 0.96f; val z = (rnd() - 0.5f) * w.m.D * 0.96f; var bad = false
+            var dx = -1.6f; while (dx <= 1.6f && !bad) { var dz = -1.6f; while (dz <= 1.6f && !bad) { for (k in w.cellAt(x + dx, z + dz)) { val b = w.boxes[k]; if (x + dx > b.x0 - 0.6f && x + dx < b.x1 + 0.6f && z + dz > b.z0 - 0.6f && z + dz < b.z1 + 0.6f && b.y1 > 0.3f) { bad = true; break } }; dz += 1.6f }; dx += 1.6f }
+            for (p in w.m.red) { val ax = x - p.x; val az = z - p.z; if (ax * ax + az * az < 100f) bad = true }
+            for (p in w.m.blue) { val ax = x - p.x; val az = z - p.z; if (ax * ax + az * az < 100f) bad = true }
+            if (bad) continue; trees.add(Tree(x, z, 3.2f + rnd() * 2.6f, rnd() * 6.28f)); n++ }
+    }
+    private fun drawScenery(c: Cam) {
+        val q = Lang.quality; if (q < 2) return; val w = g.w; if (treeMap != w.id) buildTrees(); val t = g.t
+        val nt = min(trees.size, intArrayOf(0, 0, 10, 28, 60)[q.coerceIn(0, 4)]); val snow = w.id == 3; val desert = w.id == 1 || w.id == 4 || w.id == 5 || w.id == 7
+        for (i in 0 until nt) { val T = trees[i]; val dx = T.x - c.x; val dz = T.z - c.z; val dd = dx * dx + dz * dz; if (dd > r.fogF * r.fogF || dd > 110f * 110f) continue
+            val sw = sinf(t * 1.25f + T.ph) * 0.09f + sinf(t * 3.1f + T.ph * 2) * 0.025f; val h = T.h; val tx = T.x + sw * h * 0.35f; val tz = T.z + sw * h * 0.2f
+            r.obb((T.x + tx) * 0.5f, h * 0.25f, (T.z + tz) * 0.5f, 0.14f, h * 0.25f, 0.14f, 0f, 0f, 0.33f, 0.22f, 0.12f); r.obb(tx, h * 0.62f, tz, 0.11f, h * 0.14f, 0.11f, 0f, 0f, 0.30f, 0.2f, 0.11f)
+            val fx = T.x + sw * h * 0.9f; val fz = T.z + sw * h * 0.5f; val cr = if (snow) 0.16f else if (desert) 0.3f else 0.14f; val cg = if (snow) 0.34f else if (desert) 0.5f else 0.42f; val cb = if (snow) 0.2f else if (desert) 0.16f else 0.16f
+            if (desert) { for (k in 0 until 6) { val a = k * 1.047f + T.ph; r.obb(fx + cosf(a), h * 0.82f - 0.1f, fz + sinf(a), 0.9f, 0.05f, 0.16f, a + sw * 2, 0.35f, cr, cg, cb) } }
+            else { r.obb(fx - sw * h * 0.2f, h * 0.74f, fz, 1.35f, 0.5f, 1.35f, sw, 0f, cr, cg, cb); r.obb(fx, h * 0.74f + 0.65f, fz, 1f, 0.5f, 1f, sw + 0.4f, 0f, cr * 1.1f, cg * 1.1f, cb * 1.1f); r.obb(fx + sw * h * 0.2f, h * 0.74f + 1.2f, fz, 0.6f, 0.45f, 0.6f, sw + 0.8f, 0f, cr * 1.2f, cg * 1.2f, cb * 1.2f) } }
+        if (q >= 3) { val budget = if (q >= 4) 300 else 150; val rD = if (q >= 4) 45f else 32f; var used = 0
+            for (b in w.boxes) { if (used >= budget) break; val bw = b.x1 - b.x0; val bd = b.z1 - b.z0; val bh = b.y1 - b.y0; if (bh < 4f || b.y0 > 2f || max(bw, bd) > 50f || min(bw, bd) < 2.5f) continue
+                val cx = (b.x0 + b.x1) * 0.5f; val cz = (b.z0 + b.z1) * 0.5f; val ddx = cx - c.x; val ddz = cz - c.z; if (ddx * ddx + ddz * ddz > rD * rD) continue
+                r.obb(cx, b.y1 + 0.09f, cz, bw * 0.5f + 0.12f, 0.09f, bd * 0.5f + 0.12f, 0f, 0f, 0.22f, 0.22f, 0.24f)
+                for (f in 0 until 4) { if (used >= budget) break; val zf = f < 2; val face = if (f == 0) b.z0 else if (f == 1) b.z1 else if (f == 2) b.x0 else b.x1; val cam = if (zf) c.z else c.x
+                    if (if ((f and 1) == 0) cam > face else cam < face) continue; val len = if (zf) bw else bd; val nw = max(1, (len / 2.6f).toInt()); val step = len / nw
+                    for (i2 in 0 until nw) { var wy = b.y0 + 1.6f; while (wy < b.y1 - 1.2f && used < budget) { val o = (i2 + 0.5f) * step - len * 0.5f
+                        val wx = if (zf) cx + o else face + (if (f == 2) -0.03f else 0.03f); val wz = if (zf) face + (if (f == 0) -0.03f else 0.03f) else cz + o
+                        val lit = ((i2 * 7 + (wy * 3).toInt() + w.id) % 5) == 0
+                        r.obb(wx, wy + 0.7f, wz, if (zf) 0.55f else 0.04f, 0.7f, if (zf) 0.04f else 0.55f, 0f, 0f, if (lit) 0.9f else 0.1f, if (lit) 0.8f else 0.2f, if (lit) 0.45f else 0.32f); used++; wy += 3.2f } } } } }
+    }
+
     fun drawAvatar(a: Ent, camDist: Float) {
         val c = tcol[a.team]; val d = tdk[a.team]; val x = a.b.x; val y = a.b.y; val z = a.b.z; val yw = a.yaw; val t = g.t
         if (!a.alive) {
@@ -175,7 +211,7 @@ class SceneBuilder(private val g: Game) {
             fun H(ox: Float, oy: Float, oz: Float, sx: Float, sy: Float, sz: Float, col: FloatArray) { val cx = cosf(hp); val sx2 = sinf(hp); B(nk[0] + ox, nk[1] + oy * cx - oz * sx2, nk[2] + oy * sx2 + oz * cx, sx, sy, sz, hp, col) }
             H(0f, 0f, 0f, .21f, .23f, .22f, skin); val hel = floatArrayOf(d[0] * .9f, d[1] * .9f, d[2] * .9f); H(0f, 0.08f, 0.01f, .34f, .2f, .35f, hel); H(0f, 0.02f, -0.115f, .23f, .07f, .03f, visor); H(0f, -0.1f, -0.08f, .18f, .05f, .08f, mask)
         }
-        val ap = if (a.sprint) 0.2f else a.pitch; val base = if (a.sprint) 0.9f else 1.5708f; val br = 0.015f * sinf(a.phase * 0.5f + t * 2f)
+        val ap = (if (a.sprint) 0.2f else a.pitch) + (if (Lang.quality >= 2) 0.025f * sinf(a.phase * 2f) * (if (a.moving) 1f else 0f) + 0.012f * sinf(t * 1.6f + a.b.x) else 0f); val base = if (a.sprint) 0.9f else 1.5708f; val br = 0.015f * sinf(a.phase * 0.5f + t * 2f)
         val gs = FloatArray(3); UPp(0.12f, 1.3f, 0f, gs); val cA = cosf(ap); val sA = sinf(ap); val lau = g.isExpl(a.wpn); val gdy = if (lau) -0.13f else 0.05f; val gdz = if (lau) 0.14f else 0.38f; val wo = FloatArray(3)
         r.rot(yw, 0f, gs[0], gs[1] - gdy * cA + gdz * sA, gs[2] - gdy * sA - gdz * cA, wo)
         gsc = if (GameData.meshOf(a.wpn) != null && GameData.wkind[a.wpn % g.WEAPON_COUNT] > 1) 1.5f else 1f
@@ -261,6 +297,7 @@ class SceneBuilder(private val g: Game) {
             if (dx * dx + dz * dz > r.fogF * r.fogF || (dx * dx + dz * dz < 0.5f && i != g.meI)) continue
             drawAvatar(a, sqrtf(dx * dx + dz * dz))
         }
+        drawScenery(c)
         for (q in g.tr) {
             val dx = q.x1 - q.x0; val dy = q.y1 - q.y0; val dz = q.z1 - q.z0; val l = sqrtf(dx * dx + dy * dy + dz * dz); if (l < 0.1f) continue
             val p0 = fmin(1f, fmax(0f, 1f - q.t / 0.09f)); val hd = p0 * l; val tl = fmax(0f, hd - fmin(5f, l * 0.7f)); val sg = hd - tl; if (sg < 0.05f) continue

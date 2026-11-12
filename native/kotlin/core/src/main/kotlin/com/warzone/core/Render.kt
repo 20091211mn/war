@@ -24,7 +24,7 @@ class Renderer {
     @JvmField var cam = Cam(0f, 0f, 0f, 0f, 0f, 1.3f)
     @JvmField var fx = 0f; @JvmField var fy = 0f; @JvmField var fz = 0f; @JvmField var rx = 0f; @JvmField var rz = 0f; @JvmField var ux = 0f; @JvmField var uy = 0f; @JvmField var uz = 0f; @JvmField var focal = 1f
     var m: MapDef? = null
-    @JvmField val fog = FloatArray(3); @JvmField var fogK = 1f; private val FOGK = floatArrayOf(0.40f, 0.62f, 0.82f, 1f, 1.3f); @JvmField var fogN = 30f; @JvmField var fogF = 100f; @JvmField val sunN = floatArrayOf(0f, 1f, 0f)
+    @JvmField val fog = FloatArray(3); @JvmField var fogK = 1f; private val FOGK = floatArrayOf(0.45f, 0.7f, 1f, 1.5f, 2.2f); @JvmField var fogN = 30f; @JvmField var fogF = 100f; @JvmField val sunN = floatArrayOf(0f, 1f, 0f)
     @JvmField val layers = arrayOf(FBuf(), FBuf())
     @JvmField var zBias = 0f
     @JvmField var obbRoll = 0f

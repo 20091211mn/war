@@ -308,7 +308,7 @@ int main(int,char**){
   wzlog("calling scePadInit"); int pr=scePadInit(); wzlog("scePadInit ret=0x%x",(unsigned)pr);
   padH=scePadOpen(uid,0,0,NULL); wzlog("pad open %d",padH);
 #endif
-  g_cfgPath="/data/warzone.cfg"; loadSettings(); static Game g; wzlog("game constructed"); g.r.startThreads(WZ_THREADS); wzlog("threads started"); g.menu=1; g.init(WZ_IW,WZ_IH);
+  g_quality=2; g_cfgPath="/data/warzone.cfg"; loadSettings(); static Game g; wzlog("game constructed"); g.r.startThreads(WZ_THREADS); wzlog("threads started"); g.menu=1; g.init(WZ_IW,WZ_IH);
 #if WZ_GPU
   g.r.gpu=true;
 #endif
