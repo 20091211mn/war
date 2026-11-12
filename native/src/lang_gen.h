@@ -123,6 +123,12 @@ static const TrE TR_TAB[]={
 {"متابعة","Resume","Continuar"},
 {"مباراة جديدة","New match","Nueva partida"},
 {"انتهت المباراة","MATCH OVER","FIN DE LA PARTIDA"},
+{"إنشاء غرفة","Host room","Crear sala"},
+{"الانضمام","Join","Unirse"},
+{"الغرفة ممتلئة","Room is full","Sala llena"},
+{"تعذّر الاتصال","Connection failed","Conexión fallida"},
+{"انقطع الاتصال بالمضيف","Host disconnected","Host desconectado"},
+{"جارٍ البحث عن غرف…","Searching for rooms…","Buscando salas…"},
 {"القائمة الرئيسية","Main menu","Menú principal"},
 {"منظار","Optic","Mira"},
 {"فوهة","Muzzle","Boca"},
@@ -172,4 +178,4 @@ static const TrE TR_TAB[]={
 {"Español","Español","Español"},
 {"تم حفظ الإعدادات","Settings saved","Ajustes guardados"},
 };
-static const int TR_N=169;
+static const int TR_N=175;

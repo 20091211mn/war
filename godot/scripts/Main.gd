@@ -24,12 +24,17 @@ var time := 0.0
 var show_touch := false
 var ui: CanvasLayer
 var ui_root: Control
+var lan: Lan
+var time_cap := 600.0   # 0 = بلا حد (يُعرض الوقت المنقضي)
+var match_t := 0.0
+var overlay := false   # في LAN: قائمة الإيقاف تُعرض فوق اللعب دون إيقاف المحاكاة
 var menu_root: Control
 var pause_root: Control
 var over_label: Label
 var sfx := {}
 var scenery: Node3D
 var selftest := false
+var lan_test := ""
 var test_frames := 0
 var shot_path := ""
 var menu_shot := ""
@@ -48,7 +53,9 @@ func _ready() -> void:
 	ui_root = Control.new(); ui_root.theme = UiTheme.make(); ui_root.mouse_filter = Control.MOUSE_FILTER_IGNORE; ui.add_child(ui_root)
 	hud = Hud.new(); hud.game = self; ui.add_child(hud)
 	Settings.changed.connect(_on_settings)
+	lan = Lan.new(); lan.game = self; lan.process_mode = Node.PROCESS_MODE_ALWAYS; lan.name = "Lan"; add_child(lan)
 	_build_menu(); _build_pause()
+	lan.build_ui()
 	_show_menu()
 	var args := OS.get_cmdline_user_args()
 	selftest = "--selftest" in args
@@ -62,8 +69,12 @@ func _ready() -> void:
 		if a.begins_with("--rl="): dbg_rl = float(a.substr(5))
 		if a == "--ads": dbg_ads = true
 		if a == "--botcam": dbg_botcam = true
+		if a == "--lanhost": lan_test = "host"
+		if a.begins_with("--lanjoin="): lan_test = "join:" + a.substr(10)
 	if not (selftest or shot_path != ""): _refresh(); _build_preview()
-	if selftest or shot_path != "":
+	if lan_test == "host": selftest = true; lan.host_start()
+	elif lan_test.begins_with("join:"): selftest = true; lan.join(lan_test.substr(5))
+	elif selftest or shot_path != "":
 		start_match()
 		if dbg_wpn >= 0 and player != null: player.setup_weapon(dbg_wpn); player.rebuild_viewmodel()
 		if dbg_rl >= 0.0 and player != null: player.dbg_rp = dbg_rl
@@ -181,6 +192,7 @@ func _build_menu() -> void:
 	_sub = Label.new(); _sub.add_theme_font_size_override("font_size", 20); _sub.add_theme_color_override("font_color", UiTheme.MUTED); _sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; panel.add_child(_sub)
 	var sp := Control.new(); sp.size_flags_vertical = Control.SIZE_EXPAND_FILL; panel.add_child(sp)
 	_settings_rows(panel, true)
+	lan.add_menu_buttons(panel)
 	_start_btn = Button.new(); _start_btn.custom_minimum_size = Vector2(0, 92); _start_btn.add_theme_font_size_override("font_size", 34); UiTheme.style_accent(_start_btn); UiTheme.juicy(_start_btn); _start_btn.pressed.connect(start_match); panel.add_child(_start_btn)
 	# ---- الجهة الأخرى: معاينة حيّة للخريطة + شريط الخرائط ----
 	var right := VBoxContainer.new(); right.size_flags_horizontal = Control.SIZE_EXPAND_FILL; right.add_theme_constant_override("separation", 10); hb.add_child(right)
@@ -251,15 +263,21 @@ func _fade_in(c: Control) -> void:
 	c.modulate.a = 0.0; var tw := c.create_tween(); tw.tween_property(c, "modulate:a", 1.0, 0.18)
 
 func _show_menu() -> void:
+	if lan != null: lan.leave()
+	overlay = false
 	state = "menu"; menu_root.visible = true; _fade_in(menu_root); pause_root.visible = false; hud.visible = false; map_info.clear()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE; get_tree().paused = false
 	if world != null: world.queue_free(); world = null
 	for f in fighters: if is_instance_valid(f): f.queue_free()
 	fighters.clear(); player = null; _refresh(); _build_preview()
 
+func _set_paused(b: bool) -> void:
+	get_tree().paused = b and lan.role == 0
+
 func open_pause() -> void:
 	if state != "play": return
-	state = "pause"; pause_root.visible = true; over_label.text = ""; _fade_in(pause_root); get_tree().paused = true; Input.mouse_mode = Input.MOUSE_MODE_VISIBLE; hud.mouse_look = false
+	overlay = lan.role != 0
+	state = "pause" if lan.role == 0 else "play"; pause_root.visible = true; over_label.text = ""; _fade_in(pause_root); _set_paused(true); Input.mouse_mode = Input.MOUSE_MODE_VISIBLE; hud.mouse_look = false
 	_release_inputs(); _refresh()
 
 # تفريغ كل المدخلات واللمسات العالقة (عند الإيقاف/نهاية المباراة) كي لا يبقى جويستيك أو إطلاق وهمي
@@ -268,8 +286,12 @@ func _release_inputs() -> void:
 	hud.reset_touch()
 
 func resume() -> void:
+	overlay = false
 	if state == "over":  # بعد نهاية المباراة: الزر "مباراة جديدة" وليس متابعة المباراة المنتهية
-		get_tree().paused = false; start_match(); return
+		get_tree().paused = false
+		if lan.role == 1: lan.host_restart()
+		elif lan.role == 0: start_match()
+		return
 	state = "play"; pause_root.visible = false; get_tree().paused = false
 
 # ---------------------------------------------------------------- بناء المباراة
@@ -282,7 +304,7 @@ func start_match() -> void:
 	world = Node3D.new(); world.name = "World"; add_child(world)
 	var m: Dictionary = maps[map_idx]
 	map_info = MapBuilder.build(m, world); map_w = m["W"]; map_d = m["D"]
-	score = [0, 0]; time_left = 600.0; resp_t = 0.0
+	score = [0, 0]; time_left = 600.0; time_cap = 600.0; match_t = 0.0; resp_t = 0.0
 	player = Player.new(); player.game = self; player.team = 0; player.fname = Settings.t("اللاعب"); world.add_child(player)
 	player.setup_weapon(0); fighters.append(player); player.respawn(spawn_point(0))
 	for t in 2:
@@ -292,6 +314,33 @@ func start_match() -> void:
 	scenery = Node3D.new(); world.add_child(scenery); build_scenery(); apply_quality()
 	menu_root.visible = false; pause_root.visible = false; hud.visible = true; state = "play"
 	hud.say(Settings.t("اختر سلاحك") if false else m["name"])
+
+# مباراة LAN: role 1 مضيف (slot 0 = لاعب المضيف) أو 2 عميل (slot = خانتي). كل الخانات n؛ الفريق = رقم الخانة & 1
+func start_lan_match(role: int, slot: int, cfg: Dictionary) -> void:
+	if prev_world != null and is_instance_valid(prev_world): prev_world.queue_free()
+	prev_world = null; prev_cam = null
+	if world != null: world.queue_free()
+	for f in fighters: if is_instance_valid(f): f.queue_free()
+	fighters.clear()
+	map_idx = int(cfg["map"]); world = Node3D.new(); world.name = "World"; add_child(world)
+	var m: Dictionary = maps[map_idx]
+	map_info = MapBuilder.build(m, world); map_w = m["W"]; map_d = m["D"]
+	score = [0, 0]; score_lim = int(cfg["lim"]); var mins := int(cfg["mins"]); time_cap = mins * 60.0; time_left = time_cap if mins > 0 else 1.0e9; match_t = 0.0; resp_t = 0.0
+	var n := int(cfg["n"]); var nbots := int(cfg["bots"])
+	for i in n:
+		if i == slot:
+			player = Player.new(); player.game = self; player.team = i & 1; player.fname = Settings.t("اللاعب"); world.add_child(player)
+			player.setup_weapon(0); fighters.append(player); player.respawn(spawn_point(player.team))
+		else:
+			var b := Bot.new(); b.game = self; b.team = i & 1; b.fname = "P%d" % i if role == 2 else "BOT%d" % i; b.acc = [0.09, 0.055, 0.03][diff]
+			world.add_child(b); fighters.append(b)
+			if role == 2: b.net_ctrl = true; b.net_pos = spawn_point(b.team); b.visible = false; b.alive = false   # دمية: الحالة تأتي من المضيف
+			elif i > nbots: b.off = true; b.alive = false; b.visible = false; b.fname = "-"; b.global_position = Vector3(0, -50, 0)
+			else: b.respawn(spawn_point(b.team))
+	scenery = Node3D.new(); world.add_child(scenery); build_scenery(); apply_quality()
+	menu_root.visible = false; pause_root.visible = false; for r in lan.screens(): r.visible = false
+	hud.visible = true; state = "play"; overlay = false; get_tree().paused = false
+	hud.say(m["name"])
 
 func spawn_point(team: int) -> Vector3:
 	var arr: Array = maps[map_idx]["red"] if team == 0 else maps[map_idx]["blue"]
@@ -312,6 +361,8 @@ func switch_weapon(f: Fighter, d: int) -> void:
 
 # ---------------------------------------------------------------- الإطلاق والضرر
 func hitscan(shooter: Fighter, from: Vector3, dir: Vector3, w: Dictionary) -> void:
+	if lan.role == 2 and shooter == player: lan.send_fire(from, dir, shooter.wi)   # العميل: المضيف يحسم الضرر
+	if lan.role == 1: lan.send_fx(fighters.find(shooter), from, dir)
 	var to := from + dir * 220.0
 	var q := PhysicsRayQueryParameters3D.create(from, to, 3, [shooter.get_rid()])
 	var r := get_world_3d().direct_space_state.intersect_ray(q)
@@ -329,10 +380,25 @@ func hitscan(shooter: Fighter, from: Vector3, dir: Vector3, w: Dictionary) -> vo
 			var head: bool = endp.y > f.global_position.y + 1.5
 			f.take_damage(float(w["dmg"]) * k * (float(w["head"]) if head else 1.0), shooter, head)
 			if shooter == player: hud.hitmark()
+			elif lan.role == 1 and shooter is Bot and (shooter as Bot).human: lan.send_hit(fighters.find(shooter), head)
 		else:
 			_spark(endp)
 	if shooter == player or from.distance_to(cam_pos()) < 60.0:
 		var st: Vector3 = (shooter as Fighter).muzzle_pos() if shooter.has_method("muzzle_pos") else from + dir * 0.8
+		_tracer(st, endp); _bullet(st, endp)
+
+# مؤثرات طلقة لاعب آخر على العميل (رسم فقط بلا ضرر)
+func fx_shot(slot: int, from: Vector3, dir: Vector3) -> void:
+	if slot < 0 or slot >= fighters.size(): return
+	var f: Fighter = fighters[slot]
+	if not is_instance_valid(f): return
+	var to := from + dir * 220.0
+	var r := get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(from, to, 3, [f.get_rid()]))
+	var endp: Vector3 = r["position"] if not r.is_empty() else to
+	if f is Bot: (f as Bot).kick = 1.0
+	sfx_play("shot", from)
+	if from.distance_to(cam_pos()) < 90.0:
+		var st: Vector3 = (f as Bot).muzzle_pos() if f is Bot else from
 		_tracer(st, endp); _bullet(st, endp)
 
 func _explode(src: Fighter, p: Vector3) -> void:
@@ -388,15 +454,20 @@ func on_kill(src: Fighter, victim: Fighter, head: bool) -> void:
 	var kn := (src.fname if src != null else "-")
 	hud.add_feed("%s  ✕  %s%s" % [kn, victim.fname, "  ★" if head else ""])
 	if src == player: hud.say(Settings.t("تصويبة رأس!") if head else victim.fname)
+	if lan.role == 1: lan.send_feed("%s  ✕  %s%s" % [kn, victim.fname, "  ★" if head else ""])
 	if victim == player: resp_t = 4.0
 	else:
 		victim.visible = false
-		get_tree().create_timer(3.0).timeout.connect(func(): if is_instance_valid(victim) and state != "menu": (victim as Bot).respawn(spawn_point(victim.team)))
+		var hum := victim is Bot and (victim as Bot).net_ctrl
+		get_tree().create_timer(4.0 if hum else 3.0).timeout.connect(func():
+			if is_instance_valid(victim) and state != "menu" and not (victim as Bot).off:
+				if hum: lan.respawn_human(victim as Bot)
+				else: (victim as Bot).respawn(spawn_point(victim.team)))
 	if score[0] >= score_lim or score[1] >= score_lim: _end_match()
 
 func _end_match() -> void:
 	if state == "over": return
-	state = "over"; pause_root.visible = true; get_tree().paused = true; Input.mouse_mode = Input.MOUSE_MODE_VISIBLE; hud.mouse_look = false; _release_inputs(); _refresh()
+	state = "over"; overlay = false; pause_root.visible = true; _set_paused(true); Input.mouse_mode = Input.MOUSE_MODE_VISIBLE; hud.mouse_look = false; _release_inputs(); _refresh()
 	over_label.text = Settings.t("فاز الفريق الأحمر") if score[0] >= score[1] else Settings.t("فاز الفريق الأزرق")
 
 # ---------------------------------------------------------------- الجودة والمشاهد
@@ -503,12 +574,13 @@ func _process(dt: float) -> void:
 
 func _physics_process(dt: float) -> void:
 	if state != "play": return
-	time += dt
-	time_left -= dt
-	if time_left <= 0.0: _end_match()
-	if player != null and not player.alive:
-		resp_t -= dt
-		if resp_t <= 0.0: player.respawn(spawn_point(0))
+	time += dt; match_t += dt
+	if lan.role != 2:
+		time_left -= dt
+		if time_left <= 0.0: _end_match()
+		if player != null and not player.alive:
+			resp_t -= dt
+			if resp_t <= 0.0: player.respawn(spawn_point(player.team))
 	if shot_path != "":
 		test_frames += 1
 		inp["mv"] = Vector2(0, -0.3)
@@ -518,6 +590,17 @@ func _physics_process(dt: float) -> void:
 			player.cam.global_position = bt.global_position + side; player.cam.look_at(bt.global_position + Vector3(0, 1.05, 0)); player.gun_parts.visible = false; player.arm_r.visible = false; player.arm_l.visible = false
 		if test_frames == 150:
 			get_viewport().get_texture().get_image().save_png(shot_path); print("SHOT saved"); get_tree().quit(0)
+		return
+	if lan_test != "":
+		test_frames += 1
+		if state == "play" and lan_test.begins_with("join:"): inp["mv"] = Vector2(0, -1); inp["look"] = Vector2(1, 0)
+		if test_frames % 150 == 0 or test_frames == (500 if lan_test.begins_with("join:") else 1300):
+			var hum := 0; var info := []
+			for i in fighters.size():
+				var b := fighters[i] as Bot
+				if b != null and b.human: hum += 1; info.append("%d@%s" % [i, str(b.global_position.snapped(Vector3(1, 1, 1)))])
+			print("LANTEST ", lan_test.get_slice(":", 0), " role=", lan.role, " state=", state, " slot=", lan.my_slot, " humans=", hum, " ", info, " me=", (str(player.global_position.snapped(Vector3(1, 1, 1))) if player != null else "-"), " fighters=", fighters.size(), " score=", score)
+			if test_frames == (500 if lan_test.begins_with("join:") else 1300): get_tree().quit(0)
 		return
 	if selftest:
 		test_frames += 1

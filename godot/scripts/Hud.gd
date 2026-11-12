@@ -51,7 +51,7 @@ func _hit(p: Vector2) -> String:
 	return ""
 
 func _input(ev: InputEvent) -> void:
-	if game == null or game.state != "play": return
+	if game == null or game.state != "play" or game.overlay: return
 	var inp: Dictionary = game.inp
 	if ev is InputEventScreenTouch:
 		var t := ev as InputEventScreenTouch
@@ -163,7 +163,7 @@ func _draw() -> void:
 	_txt(Vector2(s.x - 340, s.y - 304), am, 30, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
 	# ---- النتيجة والوقت ----
 	_txt(Vector2(cx - 170, 36), "%d" % game.score[0], 30, Color(1, 0.35, 0.35), HORIZONTAL_ALIGNMENT_RIGHT, 100.0)
-	_txt(Vector2(cx - 60, 36), "%d:%02d" % [int(game.time_left) / 60, int(game.time_left) % 60], 26, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, 120.0)
+	_txt(Vector2(cx - 60, 36), "%d:%02d" % [int(game.time_left if game.time_cap > 0.0 else game.match_t) / 60, int(game.time_left if game.time_cap > 0.0 else game.match_t) % 60], 26, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, 120.0)
 	_txt(Vector2(cx + 70, 36), "%d" % game.score[1], 30, Color(0.4, 0.65, 1), HORIZONTAL_ALIGNMENT_LEFT, 100.0)
 	# ---- سجل القتل والرسالة ----
 	var fy := 90.0

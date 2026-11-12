@@ -28,6 +28,13 @@ var kick := 0.0
 var run_k := 0.0            # 0..1 شدّة الجري (تنعيم)
 var aim_pitch := 0.0
 var gun_key := -1
+# ---- شبكة LAN ----
+var net_ctrl := false       # لاعب بشري (على المضيف) أو دمية (على العميل): لا ذكاء ولا فيزياء، يتبع الحالة المستلمة
+var human := false
+var off := false            # خانة فارغة في الغرفة
+var net_pos := Vector3.ZERO
+var net_yaw := 0.0
+var net_aim := 0.0
 
 func _ready() -> void:
 	collision_layer = 2; collision_mask = 1
@@ -96,6 +103,20 @@ func _build_gun() -> void:
 	flash.visible = false
 	rh.position = Vector3(0, -0.09, 0.0); lh.position = Vector3(0, -0.06, -L * 0.5 - 0.02)
 
+func _puppet(dt: float) -> void:
+	if gun_key != wi and gunn != null: _build_gun()
+	spawn_prot = maxf(0.0, spawn_prot - dt)
+	if not alive: return
+	var old := global_position
+	if old.distance_to(net_pos) > 6.0: global_position = net_pos
+	else: global_position = old.lerp(net_pos, minf(1.0, dt * 12.0))
+	yaw = lerp_angle(yaw, net_yaw, minf(1.0, dt * 12.0)); rotation.y = yaw
+	var spd := Vector2(global_position.x - old.x, global_position.z - old.z).length() / maxf(dt, 0.0001)
+	aim_pitch = net_aim
+	var far := global_position.distance_to(game.cam_pos()) > Settings.lod_dist()
+	for n in far_hide: (n as Node3D).visible = not far
+	if not far: _animate(dt, minf(spd, 6.0), false)
+
 func muzzle_pos() -> Vector3:
 	return muzzle.global_position if muzzle != null and is_instance_valid(muzzle) else eye_pos()
 
@@ -125,6 +146,8 @@ func _animate(dt: float, spd: float, firing: bool) -> void:
 	_arm_to(arm_r, Vector3(0.27, 0.5, 0), rh); _arm_to(arm_l, Vector3(-0.27, 0.5, 0), lh)
 
 func _physics_process(dt: float) -> void:
+	if off: return
+	if net_ctrl: _puppet(dt); return
 	super._physics_process(dt)
 	if not alive: return
 	think -= dt; strafe_t -= dt
@@ -215,5 +238,5 @@ func _step_up(h: Vector3) -> void:
 			global_position.y += 0.55
 
 func respawn(p: Vector3) -> void:
-	global_position = p; velocity = Vector3.ZERO; hp = 100.0; alive = true; visible = true; spawn_prot = 2.0; target = null
+	global_position = p; velocity = Vector3.ZERO; hp = 100.0; alive = true; visible = true; spawn_prot = 2.0; target = null; spawn_seq += 1
 	setup_weapon(game.random_weapon()); wander = game.random_point()

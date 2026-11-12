@@ -237,5 +237,5 @@ func _step_up2(h: Vector3) -> void:
 			global_position.y += 0.55
 
 func respawn(p: Vector3) -> void:
-	global_position = p; velocity = Vector3.ZERO; hp = 100.0; alive = true; spawn_prot = 2.0
+	global_position = p; velocity = Vector3.ZERO; hp = 100.0; alive = true; spawn_prot = 2.0; spawn_seq += 1
 	cam.position.y = EYE; setup_weapon(wi); rebuild_viewmodel()

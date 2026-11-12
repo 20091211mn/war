@@ -16,6 +16,7 @@ var deaths := 0
 var fname := "BOT"
 var recoil := 0.0
 var spawn_prot := 0.0
+var spawn_seq := 0   # يزيد مع كل ولادة (لمزامنة إعادة الظهور عبر الشبكة)
 const EYE := 1.62
 
 func setup_weapon(i: int) -> void:
@@ -66,6 +67,7 @@ func try_fire(origin: Vector3, dir: Vector3, ads: bool, extra_spread: float) -> 
 
 func take_damage(d: float, src: Fighter, head: bool) -> void:
 	if not alive or spawn_prot > 0.0: return
+	if game.lan != null and game.lan.role == 2: return  # العميل لا يطبّق الضرر: المضيف هو الحَكَم
 	hp -= d
 	if self == game.player: game.hud.flash_damage()
 	if hp <= 0.0:
