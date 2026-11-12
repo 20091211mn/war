@@ -34,6 +34,9 @@ var test_frames := 0
 var shot_path := ""
 var menu_shot := ""
 var _mf := 0
+var dbg_wpn := -1
+var dbg_rl := -1.0
+var dbg_ads := false
 
 func _ready() -> void:
 	var f := FileAccess.open("res://data/game.json", FileAccess.READ)
@@ -54,9 +57,15 @@ func _ready() -> void:
 		if a.begins_with("--quality="): Settings.quality = int(a.substr(10))
 		if a.begins_with("--lang="): Settings.lang = int(a.substr(7))
 		if a.begins_with("--map="): map_idx = int(a.substr(6))
+		if a.begins_with("--wpn="): dbg_wpn = int(a.substr(6))
+		if a.begins_with("--rl="): dbg_rl = float(a.substr(5))
+		if a == "--ads": dbg_ads = true
 	if not (selftest or shot_path != ""): _refresh(); _build_preview()
 	if selftest or shot_path != "":
 		start_match()
+		if dbg_wpn >= 0 and player != null: player.setup_weapon(dbg_wpn); player.rebuild_viewmodel()
+		if dbg_rl >= 0.0 and player != null: player.dbg_rp = dbg_rl
+		if dbg_ads: inp["ads"] = true
 
 func cam_pos() -> Vector3:
 	if player != null and player.cam != null: return player.cam.global_position
@@ -320,7 +329,9 @@ func hitscan(shooter: Fighter, from: Vector3, dir: Vector3, w: Dictionary) -> vo
 			if shooter == player: hud.hitmark()
 		else:
 			_spark(endp)
-	if shooter == player or from.distance_to(cam_pos()) < 60.0: _tracer(from + dir * 0.8, endp)
+	if shooter == player or from.distance_to(cam_pos()) < 60.0:
+		var st: Vector3 = (shooter as Fighter).muzzle_pos() if shooter.has_method("muzzle_pos") else from + dir * 0.8
+		_tracer(st, endp); _bullet(st, endp)
 
 func _explode(src: Fighter, p: Vector3) -> void:
 	sfx_play("boom", p)
@@ -338,6 +349,29 @@ func _spark(p: Vector3, n := 3) -> void:
 		var m := StandardMaterial3D.new(); m.albedo_color = Color(1, 0.7, 0.2); m.emission_enabled = true; m.emission = Color(1, 0.6, 0.1); mi.material_override = m
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; world.add_child(mi); mi.global_position = p
 		var tw := create_tween(); tw.tween_property(mi, "global_position", p + Vector3(randf_range(-1, 1), randf_range(0.2, 1.2), randf_range(-1, 1)) * 0.6, 0.25); tw.tween_callback(mi.queue_free)
+
+# رصاصة مرئية (كبسولة نحاسية متوهجة تنطلق من الفوهة إلى نقطة الإصابة)
+func _bullet(a: Vector3, b: Vector3) -> void:
+	if Settings.quality < 1: return
+	var l := a.distance_to(b)
+	if l < 2.0: return
+	var mi := MeshInstance3D.new(); var cm := CapsuleMesh.new(); cm.radius = 0.014; cm.height = 0.16; cm.radial_segments = 6; cm.rings = 2; mi.mesh = cm
+	var m := StandardMaterial3D.new(); m.albedo_color = Color(1.0, 0.75, 0.3); m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; world.add_child(mi)
+	mi.look_at_from_position(a, b, Vector3.UP); mi.rotate_object_local(Vector3.RIGHT, PI * 0.5)  # محور الكبسولة Y -> اتجاه الإطلاق
+	var tw := create_tween(); tw.tween_property(mi, "global_position", b, clampf(l / 380.0, 0.02, 0.4)); tw.tween_callback(mi.queue_free)
+
+# ظرف فارغ يُطرد من فتحة الإخراج ويسقط بتأثير الجاذبية
+func eject_shell(p: Vector3, bs: Basis) -> void:
+	if Settings.quality < 2 or world == null: return
+	var mi := MeshInstance3D.new(); var cm := CylinderMesh.new(); cm.top_radius = 0.006; cm.bottom_radius = 0.007; cm.height = 0.045; cm.radial_segments = 6; mi.mesh = cm
+	var m := StandardMaterial3D.new(); m.albedo_color = Color(0.85, 0.65, 0.2); m.metallic = 0.9; m.roughness = 0.35; mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; world.add_child(mi); mi.global_position = p
+	var v := bs.x.normalized() * randf_range(1.6, 2.4) + bs.y.normalized() * randf_range(1.0, 1.8) + bs.z.normalized() * randf_range(0.2, 0.6)
+	var spin := Vector3(randf_range(-9, 9), randf_range(-9, 9), randf_range(-9, 9))
+	var tw := create_tween(); tw.tween_method(func(t: float):
+		if is_instance_valid(mi): mi.global_position = p + v * t + Vector3(0, -4.9 * t * t, 0); mi.rotation = spin * t, 0.0, 0.7, 0.7)
+	tw.tween_callback(mi.queue_free)
 
 func _tracer(a: Vector3, b: Vector3) -> void:
 	var l := a.distance_to(b)
