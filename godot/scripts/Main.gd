@@ -54,6 +54,7 @@ func _ready() -> void:
 		if a.begins_with("--quality="): Settings.quality = int(a.substr(10))
 		if a.begins_with("--lang="): Settings.lang = int(a.substr(7))
 		if a.begins_with("--map="): map_idx = int(a.substr(6))
+	if not (selftest or shot_path != ""): _refresh(); _build_preview()
 	if selftest or shot_path != "":
 		start_match()
 
@@ -99,57 +100,90 @@ func _card(parent: Control, min_w := 0.0) -> VBoxContainer:
 	var m := MarginContainer.new(); m.add_theme_constant_override("margin_left", 26); m.add_theme_constant_override("margin_right", 26); m.add_theme_constant_override("margin_top", 22); m.add_theme_constant_override("margin_bottom", 22); pc.add_child(m)
 	var vb := VBoxContainer.new(); vb.add_theme_constant_override("separation", 14); m.add_child(vb); return vb
 
-func _chev(txt: String) -> Button:
-	var b := Button.new(); b.text = txt; b.custom_minimum_size = Vector2(72, 72); UiTheme.juicy(b)
-	b.add_theme_stylebox_override("normal", UiTheme.flat(Color(1, 1, 1, 0.08), 36, UiTheme.BORDER, 1)); b.add_theme_stylebox_override("hover", UiTheme.flat(Color(1, 1, 1, 0.16), 36, UiTheme.ACCENT, 1)); b.add_theme_stylebox_override("pressed", UiTheme.flat(UiTheme.ACCENT, 36))
-	return b
+func _glass_label(t: String, size: int, col := UiTheme.TEXT) -> Label:
+	var l := Label.new(); l.text = t; l.add_theme_font_size_override("font_size", size); l.add_theme_color_override("font_color", col)
+	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.55)); l.add_theme_constant_override("outline_size", 6); return l
 
-func _cycler(parent: Control, label_ar: String, get_text: Callable, step: Callable) -> void:
-	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 4); parent.add_child(box)
+# صف خيارات: شرائح (Segmented) بدل الأسهم — لمسة واحدة لاختيار القيمة
+func _seg(parent: Control, label_ar: String, opts: Callable, get_i: Callable, set_i: Callable, fs := 22) -> void:
+	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 8); parent.add_child(box)
 	var lab := Label.new(); lab.add_theme_font_size_override("font_size", 19); lab.add_theme_color_override("font_color", UiTheme.MUTED); box.add_child(lab)
-	var row := HBoxContainer.new(); row.add_theme_constant_override("separation", 10); box.add_child(row)
-	var lb := _chev("‹"); row.add_child(lb)
-	var pc := PanelContainer.new(); pc.size_flags_horizontal = Control.SIZE_EXPAND_FILL; pc.add_theme_stylebox_override("panel", UiTheme.flat(Color(1, 1, 1, 0.05), 36, UiTheme.BORDER, 1)); row.add_child(pc)
-	var val := Label.new(); val.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; val.vertical_alignment = VERTICAL_ALIGNMENT_CENTER; val.add_theme_font_size_override("font_size", 28); val.custom_minimum_size = Vector2(0, 60); pc.add_child(val)
-	var rb := _chev("›"); row.add_child(rb)
-	lb.pressed.connect(func(): step.call(-1); _refresh())
-	rb.pressed.connect(func(): step.call(1); _refresh())
-	_rows.append({"lab": lab, "val": val, "ar": label_ar, "get": get_text})
+	var row := HBoxContainer.new(); row.add_theme_constant_override("separation", 8); box.add_child(row)
+	var chips: Array = []
+	var n: int = (opts.call() as Array).size()
+	for i in n:
+		var b := Button.new(); b.custom_minimum_size = Vector2(0, 64); b.size_flags_stretch_ratio = 1.0; b.size_flags_horizontal = Control.SIZE_EXPAND_FILL; b.clip_text = false
+		b.add_theme_font_size_override("font_size", fs); UiTheme.juicy(b)
+		var idx := i
+		b.pressed.connect(func(): set_i.call(idx); _refresh())
+		row.add_child(b); chips.append(b)
+	_rows.append({"lab": lab, "chips": chips, "ar": label_ar, "opts": opts, "get": get_i})
+
+func _style_chip(b: Button, on: bool) -> void:
+	var sel := UiTheme.flat(UiTheme.ACCENT, 18, Color(1, 1, 1, 0.3), 1, 10) if on else UiTheme.flat(Color(1, 1, 1, 0.06), 18, UiTheme.BORDER, 1)
+	b.add_theme_stylebox_override("normal", sel)
+	b.add_theme_stylebox_override("hover", sel if on else UiTheme.flat(Color(1, 1, 1, 0.12), 18, UiTheme.ACCENT, 1))
+	b.add_theme_stylebox_override("pressed", UiTheme.flat(Color("3868cc") if on else Color(1, 1, 1, 0.2), 18))
+	b.add_theme_color_override("font_color", Color.WHITE if on else UiTheme.MUTED)
 
 func _bg_layer(root: Control, dim: bool) -> void:
-	var bg := ColorRect.new(); bg.set_anchors_preset(Control.PRESET_FULL_RECT); root.add_child(bg)
-	if dim: bg.color = Color(0.02, 0.03, 0.07, 0.78)
-	else:
-		var sh := Shader.new(); sh.code = UiTheme.BG_SHADER; var mat := ShaderMaterial.new(); mat.shader = sh; bg.material = mat; bg.color = Color.WHITE
+	var bg := ColorRect.new(); bg.set_anchors_preset(Control.PRESET_FULL_RECT); bg.color = Color(0.02, 0.03, 0.07, 0.8 if dim else 0.0); bg.mouse_filter = Control.MOUSE_FILTER_STOP; root.add_child(bg)
 
 func _settings_rows(vb: Control, with_map: bool) -> void:
 	if with_map:
-		_cycler(vb, "الخريطة", func(): return Settings.t(maps[map_idx]["name"]), func(d): map_idx = (map_idx + d + maps.size() - 1) % (maps.size() - 1))
-		_cycler(vb, "الصعوبة", func(): return Settings.t(["سهل", "عادي", "صعب"][diff]), func(d): diff = (diff + d + 3) % 3)
-	_cycler(vb, "الجودة", func(): return Settings.t(Settings.QUALS[Settings.quality]), func(d): Settings.quality = (Settings.quality + d + 5) % 5; Settings.save())
-	_cycler(vb, "اللغة", func(): return Settings.LANGS[Settings.lang], func(d): Settings.lang = (Settings.lang + d + 3) % 3; Settings.save())
+		_seg(vb, "الصعوبة", func(): return ["سهل", "عادي", "صعب"].map(func(x): return Settings.t(x)), func(): return diff, func(i): diff = i)
+	_seg(vb, "الجودة", func(): return Settings.QUALS.map(func(x): return Settings.t(x)), func(): return Settings.quality, func(i): Settings.quality = i; Settings.save(); Settings.changed.emit(), 16)
+	_seg(vb, "اللغة", func(): return Settings.LANGS, func(): return Settings.lang, func(i): Settings.lang = i; Settings.save(); Settings.changed.emit())
+
+var _map_cards: Array = []
+var _map_scroll: ScrollContainer
+var _map_title: Label
+var _map_meta: Label
+
+func _map_card(i: int) -> Control:
+	var m: Dictionary = maps[i]; var cols: Array = m["theme"]["cols"]
+	var pc := PanelContainer.new(); pc.custom_minimum_size = Vector2(210, 150); pc.clip_contents = true
+	var vb := VBoxContainer.new(); vb.add_theme_constant_override("separation", 0); pc.add_child(vb)
+	var strip := HBoxContainer.new(); strip.add_theme_constant_override("separation", 0); strip.custom_minimum_size = Vector2(0, 84); vb.add_child(strip)
+	for c in [m["theme"]["ground"], cols[0], cols[1], cols[2]]:
+		var r := ColorRect.new(); r.color = MapBuilder._col(c); r.size_flags_horizontal = Control.SIZE_EXPAND_FILL; r.mouse_filter = Control.MOUSE_FILTER_IGNORE; strip.add_child(r)
+	var l := Label.new(); l.name = "nm"; l.add_theme_font_size_override("font_size", 20); l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; l.size_flags_vertical = Control.SIZE_EXPAND_FILL; l.mouse_filter = Control.MOUSE_FILTER_IGNORE; vb.add_child(l)
+	var btn := Button.new(); btn.set_anchors_preset(Control.PRESET_FULL_RECT); btn.focus_mode = Control.FOCUS_NONE; btn.flat = true
+	btn.add_theme_stylebox_override("normal", StyleBoxEmpty.new()); btn.add_theme_stylebox_override("hover", StyleBoxEmpty.new()); btn.add_theme_stylebox_override("pressed", UiTheme.flat(Color(1, 1, 1, 0.12), 20))
+	btn.pressed.connect(func(): map_idx = i; _refresh(); _build_preview())
+	pc.add_child(btn); return pc
 
 func _build_menu() -> void:
-	menu_root = Control.new(); menu_root.name = "Menu"; ui_root.add_child(menu_root); _bg_layer(menu_root, false)
+	menu_root = Control.new(); menu_root.name = "Menu"; menu_root.set_anchors_preset(Control.PRESET_FULL_RECT); menu_root.mouse_filter = Control.MOUSE_FILTER_IGNORE; ui_root.add_child(menu_root)
+	var dim := ColorRect.new(); dim.set_anchors_preset(Control.PRESET_FULL_RECT); dim.color = Color(0.03, 0.05, 0.1, 0.5); dim.mouse_filter = Control.MOUSE_FILTER_IGNORE; menu_root.add_child(dim)
 	var mg := MarginContainer.new(); mg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	for k in ["left", "right"]: mg.add_theme_constant_override("margin_" + k, 70)
-	for k in ["top", "bottom"]: mg.add_theme_constant_override("margin_" + k, 40)
+	for k in ["left", "right"]: mg.add_theme_constant_override("margin_" + k, 44)
+	for k in ["top", "bottom"]: mg.add_theme_constant_override("margin_" + k, 30)
 	menu_root.add_child(mg)
-	var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 60); mg.add_child(hb)
-	# ---- اليسار: الشعار + زر البدء ----
-	var left := VBoxContainer.new(); left.size_flags_horizontal = Control.SIZE_EXPAND_FILL; left.alignment = BoxContainer.ALIGNMENT_CENTER; left.add_theme_constant_override("separation", 18); hb.add_child(left)
-	var tag := Label.new(); tag.text = "RED  VS  BLUE"; tag.add_theme_font_size_override("font_size", 22); tag.add_theme_color_override("font_color", UiTheme.ACCENT2); left.add_child(tag)
-	_title = Label.new(); _title.text = "WARZONE"; _title.add_theme_font_size_override("font_size", 84); left.add_child(_title)
-	_sub = Label.new(); _sub.add_theme_font_size_override("font_size", 24); _sub.add_theme_color_override("font_color", UiTheme.MUTED); _sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; left.add_child(_sub)
-	var sp := Control.new(); sp.custom_minimum_size = Vector2(0, 18); left.add_child(sp)
-	_start_btn = Button.new(); _start_btn.custom_minimum_size = Vector2(0, 96); _start_btn.add_theme_font_size_override("font_size", 34); UiTheme.style_accent(_start_btn); UiTheme.juicy(_start_btn); _start_btn.pressed.connect(start_match); left.add_child(_start_btn)
-	# ---- اليمين: بطاقة الإعدادات ----
-	var right := _card(hb, 640); right.get_parent().get_parent().size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_settings_rows(right, true)
+	var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 36); mg.add_child(hb)
+	# ---- لوحة الإعدادات (زجاجية) ----
+	var panel := _card(hb, 600)
+	panel.get_parent().get_parent().size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var tag := Label.new(); tag.text = "RED  VS  BLUE"; tag.add_theme_font_size_override("font_size", 20); tag.add_theme_color_override("font_color", UiTheme.ACCENT2); panel.add_child(tag)
+	_title = Label.new(); _title.text = "WARZONE"; _title.add_theme_font_size_override("font_size", 70); panel.add_child(_title)
+	_sub = Label.new(); _sub.add_theme_font_size_override("font_size", 20); _sub.add_theme_color_override("font_color", UiTheme.MUTED); _sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; panel.add_child(_sub)
+	var sp := Control.new(); sp.size_flags_vertical = Control.SIZE_EXPAND_FILL; panel.add_child(sp)
+	_settings_rows(panel, true)
+	_start_btn = Button.new(); _start_btn.custom_minimum_size = Vector2(0, 92); _start_btn.add_theme_font_size_override("font_size", 34); UiTheme.style_accent(_start_btn); UiTheme.juicy(_start_btn); _start_btn.pressed.connect(start_match); panel.add_child(_start_btn)
+	# ---- الجهة الأخرى: معاينة حيّة للخريطة + شريط الخرائط ----
+	var right := VBoxContainer.new(); right.size_flags_horizontal = Control.SIZE_EXPAND_FILL; right.add_theme_constant_override("separation", 10); hb.add_child(right)
+	var top := Control.new(); top.size_flags_vertical = Control.SIZE_EXPAND_FILL; top.mouse_filter = Control.MOUSE_FILTER_IGNORE; right.add_child(top)
+	_map_title = _glass_label("", 46); right.add_child(_map_title)
+	_map_meta = _glass_label("", 20, UiTheme.MUTED); right.add_child(_map_meta)
+	_map_scroll = ScrollContainer.new(); _map_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED; _map_scroll.custom_minimum_size = Vector2(0, 168); right.add_child(_map_scroll)
+	var strip := HBoxContainer.new(); strip.add_theme_constant_override("separation", 14); _map_scroll.add_child(strip)
+	for i in maps.size() - 1:
+		var c := _map_card(i); strip.add_child(c); _map_cards.append(c)
 	_refresh()
 
 func _build_pause() -> void:
-	pause_root = Control.new(); pause_root.name = "Pause"; ui_root.add_child(pause_root); _bg_layer(pause_root, true)
+	pause_root = Control.new(); pause_root.name = "Pause"; pause_root.set_anchors_preset(Control.PRESET_FULL_RECT); pause_root.mouse_filter = Control.MOUSE_FILTER_IGNORE; ui_root.add_child(pause_root); _bg_layer(pause_root, true)
 	var cc := CenterContainer.new(); cc.set_anchors_preset(Control.PRESET_FULL_RECT); pause_root.add_child(cc)
 	var vb := _card(cc, 620)
 	_pause_title = Label.new(); _pause_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; _pause_title.add_theme_font_size_override("font_size", 44); vb.add_child(_pause_title)
@@ -163,11 +197,40 @@ func _refresh() -> void:
 	_sub.text = Settings.t("حرب فرق ثلاثية الأبعاد — الأحمر ضد الأزرق")
 	_start_btn.text = Settings.t("ابدأ اللعب")
 	for r in _rows:
-		r["lab"].text = Settings.t(r["ar"]); r["val"].text = r["get"].call()
+		r["lab"].text = Settings.t(r["ar"])
+		var o: Array = r["opts"].call(); var g: int = r["get"].call(); var chips: Array = r["chips"]
+		for i in chips.size():
+			(chips[i] as Button).text = str(o[i]); _style_chip(chips[i], i == g)
 	if _pause_title != null:
 		_pause_title.text = Settings.t("إيقاف مؤقت"); _res_btn.text = Settings.t("متابعة"); _menu_btn.text = Settings.t("القائمة الرئيسية")
+	for i in _map_cards.size():
+		var pc: PanelContainer = _map_cards[i]; var on := i == map_idx
+		pc.add_theme_stylebox_override("panel", UiTheme.flat(Color(0.2, 0.35, 0.75, 0.92) if on else Color(0.08, 0.1, 0.18, 0.82), 20, UiTheme.ACCENT if on else UiTheme.BORDER, 3 if on else 1, 12 if on else 0))
+		(pc.find_child("nm", true, false) as Label).text = Settings.t(maps[i]["name"])
+	if _map_title != null:
+		_map_title.text = Settings.t(maps[map_idx]["name"])
+		_map_meta.text = "%d × %d m" % [int(maps[map_idx]["W"]), int(maps[map_idx]["D"])]
+		if _map_scroll != null and map_idx < _map_cards.size(): _map_scroll.ensure_control_visible.call_deferred(_map_cards[map_idx])
 	var rtl := Settings.lang == 0
 	ui_root.layout_direction = Control.LAYOUT_DIRECTION_RTL if rtl else Control.LAYOUT_DIRECTION_LTR
+
+# معاينة ثلاثية الأبعاد حيّة خلف القائمة (كاميرا تدور ببطء)
+var prev_world: Node3D
+var prev_cam: Camera3D
+func _build_preview() -> void:
+	if prev_world != null and is_instance_valid(prev_world): prev_world.queue_free()
+	prev_world = Node3D.new(); prev_world.name = "Preview"; add_child(prev_world)
+	var m: Dictionary = maps[map_idx]
+	MapBuilder.build(m, prev_world)
+	prev_cam = Camera3D.new(); prev_cam.fov = 62.0; prev_cam.far = 600.0; prev_world.add_child(prev_cam); prev_cam.current = true
+	_orbit(0.0)
+
+func _orbit(t: float) -> void:
+	if prev_cam == null or not is_instance_valid(prev_cam): return
+	var m: Dictionary = maps[map_idx]; var r := minf(float(m["W"]), float(m["D"])) * 0.32
+	var a := t * 0.12
+	prev_cam.position = Vector3(cos(a) * r, 11.0 + r * 0.18, sin(a) * r)
+	prev_cam.look_at(Vector3(0, 1.5, 0))
 
 func _on_settings() -> void:
 	_refresh(); apply_quality()
@@ -180,7 +243,7 @@ func _show_menu() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE; get_tree().paused = false
 	if world != null: world.queue_free(); world = null
 	for f in fighters: if is_instance_valid(f): f.queue_free()
-	fighters.clear(); player = null; _refresh()
+	fighters.clear(); player = null; _refresh(); _build_preview()
 
 func open_pause() -> void:
 	if state != "play": return
@@ -192,6 +255,8 @@ func resume() -> void:
 
 # ---------------------------------------------------------------- بناء المباراة
 func start_match() -> void:
+	if prev_world != null and is_instance_valid(prev_world): prev_world.queue_free()
+	prev_world = null; prev_cam = null
 	if world != null: world.queue_free()
 	for f in fighters: if is_instance_valid(f): f.queue_free()
 	fighters.clear()
@@ -382,7 +447,8 @@ func _tree_points(m: Dictionary, nt: int) -> Array:
 	return out
 
 # ---------------------------------------------------------------- الحلقة
-func _process(_dt: float) -> void:
+func _process(dt: float) -> void:
+	if state == "menu" and prev_cam != null: _orbit(Time.get_ticks_msec() / 1000.0)
 	if menu_shot != "":
 		_mf += 1
 		if _mf == 30:
