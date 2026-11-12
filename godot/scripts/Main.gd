@@ -37,6 +37,7 @@ var _mf := 0
 var dbg_wpn := -1
 var dbg_rl := -1.0
 var dbg_ads := false
+var dbg_botcam := false
 
 func _ready() -> void:
 	var f := FileAccess.open("res://data/game.json", FileAccess.READ)
@@ -60,6 +61,7 @@ func _ready() -> void:
 		if a.begins_with("--wpn="): dbg_wpn = int(a.substr(6))
 		if a.begins_with("--rl="): dbg_rl = float(a.substr(5))
 		if a == "--ads": dbg_ads = true
+		if a == "--botcam": dbg_botcam = true
 	if not (selftest or shot_path != ""): _refresh(); _build_preview()
 	if selftest or shot_path != "":
 		start_match()
@@ -510,6 +512,10 @@ func _physics_process(dt: float) -> void:
 	if shot_path != "":
 		test_frames += 1
 		inp["mv"] = Vector2(0, -0.3)
+		if dbg_botcam and fighters.size() > 3:  # كاميرا ثالثة تتابع بوتاً من الجانب (لفحص حركة الجري والإطلاق)
+			var bt: Fighter = fighters[3]; player.global_position = Vector3(0, 80, 0); player.velocity = Vector3.ZERO
+			var side := bt.global_transform.basis.x * 2.4 + bt.global_transform.basis.z * -1.6 + Vector3(0, 1.3, 0)
+			player.cam.global_position = bt.global_position + side; player.cam.look_at(bt.global_position + Vector3(0, 1.05, 0)); player.gun_parts.visible = false; player.arm_r.visible = false; player.arm_l.visible = false
 		if test_frames == 150:
 			get_viewport().get_texture().get_image().save_png(shot_path); print("SHOT saved"); get_tree().quit(0)
 		return
