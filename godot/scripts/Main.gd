@@ -202,7 +202,8 @@ func _refresh() -> void:
 		for i in chips.size():
 			(chips[i] as Button).text = str(o[i]); _style_chip(chips[i], i == g)
 	if _pause_title != null:
-		_pause_title.text = Settings.t("إيقاف مؤقت"); _res_btn.text = Settings.t("متابعة"); _menu_btn.text = Settings.t("القائمة الرئيسية")
+		var ov := state == "over"
+		_pause_title.text = Settings.t("انتهت المباراة" if ov else "إيقاف مؤقت"); _res_btn.text = Settings.t("مباراة جديدة" if ov else "متابعة"); _menu_btn.text = Settings.t("القائمة الرئيسية")
 	for i in _map_cards.size():
 		var pc: PanelContainer = _map_cards[i]; var on := i == map_idx
 		pc.add_theme_stylebox_override("panel", UiTheme.flat(Color(0.2, 0.35, 0.75, 0.92) if on else Color(0.08, 0.1, 0.18, 0.82), 20, UiTheme.ACCENT if on else UiTheme.BORDER, 3 if on else 1, 12 if on else 0))
@@ -248,9 +249,16 @@ func _show_menu() -> void:
 func open_pause() -> void:
 	if state != "play": return
 	state = "pause"; pause_root.visible = true; over_label.text = ""; _fade_in(pause_root); get_tree().paused = true; Input.mouse_mode = Input.MOUSE_MODE_VISIBLE; hud.mouse_look = false
-	inp["fire"] = false; inp["mv"] = Vector2.ZERO; _refresh()
+	_release_inputs(); _refresh()
+
+# تفريغ كل المدخلات واللمسات العالقة (عند الإيقاف/نهاية المباراة) كي لا يبقى جويستيك أو إطلاق وهمي
+func _release_inputs() -> void:
+	inp["fire"] = false; inp["mv"] = Vector2.ZERO; inp["look"] = Vector2.ZERO; inp["ads"] = false; inp["sprint"] = false; inp["jump"] = false
+	hud.reset_touch()
 
 func resume() -> void:
+	if state == "over":  # بعد نهاية المباراة: الزر "مباراة جديدة" وليس متابعة المباراة المنتهية
+		get_tree().paused = false; start_match(); return
 	state = "play"; pause_root.visible = false; get_tree().paused = false
 
 # ---------------------------------------------------------------- بناء المباراة
@@ -352,7 +360,7 @@ func on_kill(src: Fighter, victim: Fighter, head: bool) -> void:
 
 func _end_match() -> void:
 	if state == "over": return
-	state = "over"; pause_root.visible = true; get_tree().paused = true; Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	state = "over"; pause_root.visible = true; get_tree().paused = true; Input.mouse_mode = Input.MOUSE_MODE_VISIBLE; hud.mouse_look = false; _release_inputs(); _refresh()
 	over_label.text = Settings.t("فاز الفريق الأحمر") if score[0] >= score[1] else Settings.t("فاز الفريق الأزرق")
 
 # ---------------------------------------------------------------- الجودة والمشاهد
@@ -474,6 +482,12 @@ func _physics_process(dt: float) -> void:
 	if selftest:
 		test_frames += 1
 		inp["fire"] = true; inp["mv"] = Vector2(0, -1); inp["look"] = Vector2(3, 0)
+		if test_frames == 20:  # نهاية المباراة ثم "مباراة جديدة": يجب أن تبدأ مباراة نظيفة
+			hud.touches[0] = {"role": "stick", "origin": Vector2.ZERO}; score[0] = score_lim; _end_match()
+			var ok1 := state == "over" and get_tree().paused and hud.touches.is_empty() and _res_btn.text == Settings.t("مباراة جديدة")
+			resume()
+			var ok2 := state == "play" and not get_tree().paused and score == [0, 0] and not pause_root.visible and fighters.size() == 10
+			print("OVERTEST ", "ok" if (ok1 and ok2) else "FAIL %s %s" % [ok1, ok2])
 		if test_frames == 1800:
 			print("SELFTEST ok map=", maps[map_idx]["name"], " fighters=", fighters.size(), " score=", score, " player_hp=", player.hp, " ammo=", player.ammo)
 			get_tree().quit(0)

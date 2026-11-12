@@ -26,6 +26,7 @@ jobs:
           godot --headless --import 2>&1 | tail -5 || true
           godot --headless -- --selftest 2>&1 | grep -v "mesh_get_surface_count\|Parameter \"m\" is null" | tee /tmp/selftest.log | tail -15
           grep -q "SELFTEST ok" /tmp/selftest.log
+          grep -q "OVERTEST ok" /tmp/selftest.log
           ! grep -q "SCRIPT ERROR" /tmp/selftest.log
       - name: Set up Android export
         run: |

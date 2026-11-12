@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths: ['godot/**', 'tools/make-lang.py', '.github/workflows/godot-ios.yml']
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   ios:
     runs-on: macos-latest
@@ -24,14 +26,28 @@ jobs:
           mkdir -p build-ios
           "$GODOT" --headless --path godot --export-debug "iOS" ../build-ios/Warzone.xcodeproj 2>&1 | grep -v 'mesh_get_surface_count\|Parameter "m" is null' | tail -20
           ls build-ios
-      - name: Unsigned simulator-free build check (arm64 device, no signing)
-        continue-on-error: true
+      - name: Build app (arm64 device, unsigned) and package IPA
         run: |
           cd build-ios
-          xcodebuild -project Warzone.xcodeproj -scheme Warzone -sdk iphoneos -configuration Debug CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build 2>&1 | tail -15
+          xcodebuild -project Warzone.xcodeproj -scheme Warzone -sdk iphoneos -configuration Debug -derivedDataPath "$PWD/dd" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build 2>&1 | tail -8
+          APP=$(find dd/Build/Products -maxdepth 2 -name "*.app" | head -1); echo "APP=$APP"; test -d "$APP"
+          # توقيع ad-hoc (تعيد أدوات التثبيت الجانبي مثل AltStore/Sideloadly توقيعه بحسابك)
+          codesign --force --deep --sign - "$APP" 2>&1 | tail -2 || true
+          rm -rf Payload; mkdir Payload; cp -R "$APP" Payload/Warzone.app
+          zip -qry ../Warzone-godot.ipa Payload
+          unzip -l ../Warzone-godot.ipa | tail -2
       - name: Package Xcode project
-        run: zip -qr warzone-godot-ios-xcodeproj.zip build-ios
+        run: zip -qr warzone-godot-ios-xcodeproj.zip build-ios -x "build-ios/dd/*" "build-ios/Payload/*"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: warzone-godot-ios-ipa
+          path: Warzone-godot.ipa
       - uses: actions/upload-artifact@v4
         with:
           name: warzone-godot-ios-xcodeproj
           path: warzone-godot-ios-xcodeproj.zip
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          files: Warzone-godot.ipa

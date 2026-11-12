@@ -20,6 +20,9 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
+func reset_touch() -> void:
+	touches.clear(); stick = Vector2.ZERO; stick_c = Vector2.ZERO
+
 func flash_damage() -> void: dmg_flash = 1.0
 func fire_flash() -> void: muzzle = 0.06
 func hitmark() -> void: hit_mark = 0.25

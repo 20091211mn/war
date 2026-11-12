@@ -126,6 +126,8 @@ E=[
 ("ابدأ اللعب","START GAME","JUGAR"),
 ("الحساسية ","Sensitivity ","Sensibilidad "),
 ("متابعة","Resume","Continuar"),
+("مباراة جديدة","New match","Nueva partida"),
+("انتهت المباراة","MATCH OVER","FIN DE LA PARTIDA"),
 ("القائمة الرئيسية","Main menu","Menú principal"),
 ("منظار","Optic","Mira"),
 ("فوهة","Muzzle","Boca"),

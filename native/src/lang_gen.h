@@ -121,6 +121,8 @@ static const TrE TR_TAB[]={
 {"ابدأ اللعب","START GAME","JUGAR"},
 {"الحساسية ","Sensitivity ","Sensibilidad "},
 {"متابعة","Resume","Continuar"},
+{"مباراة جديدة","New match","Nueva partida"},
+{"انتهت المباراة","MATCH OVER","FIN DE LA PARTIDA"},
 {"القائمة الرئيسية","Main menu","Menú principal"},
 {"منظار","Optic","Mira"},
 {"فوهة","Muzzle","Boca"},
@@ -170,4 +172,4 @@ static const TrE TR_TAB[]={
 {"Español","Español","Español"},
 {"تم حفظ الإعدادات","Settings saved","Ajustes guardados"},
 };
-static const int TR_N=167;
+static const int TR_N=169;

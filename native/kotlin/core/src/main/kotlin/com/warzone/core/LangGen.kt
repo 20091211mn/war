@@ -122,6 +122,8 @@ object LangGen {
         arrayOf("ابدأ اللعب", "START GAME", "JUGAR"),
         arrayOf("الحساسية ", "Sensitivity ", "Sensibilidad "),
         arrayOf("متابعة", "Resume", "Continuar"),
+        arrayOf("مباراة جديدة", "New match", "Nueva partida"),
+        arrayOf("انتهت المباراة", "MATCH OVER", "FIN DE LA PARTIDA"),
         arrayOf("القائمة الرئيسية", "Main menu", "Menú principal"),
         arrayOf("منظار", "Optic", "Mira"),
         arrayOf("فوهة", "Muzzle", "Boca"),
