@@ -1,0 +1,37 @@
+name: Build Godot (experimental) iOS project
+on:
+  push:
+    branches: [main]
+    paths: ['godot/**', 'tools/make-lang.py', '.github/workflows/godot-ios.yml']
+  workflow_dispatch:
+jobs:
+  ios:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Godot 4.3 + export templates
+        run: |
+          V=4.3-stable
+          curl -sL -o godot.zip https://github.com/godotengine/godot/releases/download/$V/Godot_v${V}_macos.universal.zip
+          curl -sL -o tpz.zip https://github.com/godotengine/godot/releases/download/$V/Godot_v${V}_export_templates.tpz
+          unzip -q godot.zip; unzip -q tpz.zip
+          T="$HOME/Library/Application Support/Godot/export_templates/4.3.stable"
+          mkdir -p "$T"; cp -R templates/* "$T/"
+          echo "GODOT=$PWD/Godot.app/Contents/MacOS/Godot" >> $GITHUB_ENV
+      - name: Export Xcode project
+        run: |
+          "$GODOT" --headless --path godot --import 2>&1 | tail -3 || true
+          mkdir -p build-ios
+          "$GODOT" --headless --path godot --export-debug "iOS" ../build-ios/Warzone.xcodeproj 2>&1 | grep -v 'mesh_get_surface_count\|Parameter "m" is null' | tail -20
+          ls build-ios
+      - name: Unsigned simulator-free build check (arm64 device, no signing)
+        continue-on-error: true
+        run: |
+          cd build-ios
+          xcodebuild -project Warzone.xcodeproj -scheme Warzone -sdk iphoneos -configuration Debug CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build 2>&1 | tail -15
+      - name: Package Xcode project
+        run: zip -qr warzone-godot-ios-xcodeproj.zip build-ios
+      - uses: actions/upload-artifact@v4
+        with:
+          name: warzone-godot-ios-xcodeproj
+          path: warzone-godot-ios-xcodeproj.zip

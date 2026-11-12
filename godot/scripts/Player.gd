@@ -15,6 +15,10 @@ var gun_parts: Node3D
 var sway := Vector2.ZERO
 var draw_t := 0.0
 var flash: MeshInstance3D
+var mag: MeshInstance3D
+var lh: Node3D
+var mag_home := Vector3.ZERO
+var lh_home := Vector3.ZERO
 
 func _ready() -> void:
 	collision_layer = 2; collision_mask = 1
@@ -47,8 +51,14 @@ func rebuild_viewmodel() -> void:
 	var skin := Color(0.78, 0.6, 0.48); var sleeve := Color(0.16, 0.2, 0.3)
 	_part(Vector3(0.075, 0.085, 0.1), Vector3(0.0, -0.17, -L * 0.2), skin)                    # يد القبضة
 	_part(Vector3(0.085, 0.09, 0.42), Vector3(0.05, -0.27, 0.12), sleeve).rotation.x = -0.35  # ساعد أيمن
-	_part(Vector3(0.07, 0.07, 0.11), Vector3(-0.03, -0.06, -L * 0.72), skin)                  # يد الإسناد
-	_part(Vector3(0.08, 0.08, 0.5), Vector3(-0.2, -0.2, -L * 0.2), sleeve).rotation = Vector3(-0.1, 0.45, 0) # ساعد أيسر
+	lh = Node3D.new(); gun_parts.add_child(lh); lh_home = Vector3(0, 0, 0); lh.position = lh_home
+	var hh := _part(Vector3(0.07, 0.07, 0.11), Vector3(-0.03, -0.06, -L * 0.72), skin); hh.reparent(lh, false)
+	var fa := _part(Vector3(0.08, 0.08, 0.5), Vector3(-0.2, -0.2, -L * 0.2), sleeve); fa.rotation = Vector3(-0.1, 0.45, 0); fa.reparent(lh, false)
+	mag = null
+	if kind != "launcher" and kind != "shotgun":
+		var mh := 0.2 if kind in ["lmg", "smg"] else 0.15
+		mag_home = Vector3(0, -0.13 - mh * 0.3, -L * 0.52 - (0.08 if kind in ["pistol", "magnum"] else 0.0))
+		mag = _part(Vector3(0.045, mh, 0.07), mag_home, Color(0.1, 0.1, 0.11))
 	flash = _part(Vector3(0.1, 0.1, 0.1), Vector3(0, H * 0.4, -L * 1.25), Color(1, 0.85, 0.4))
 	var fm := flash.material_override as StandardMaterial3D
 	fm.emission_enabled = true; fm.emission = Color(1, 0.7, 0.2); fm.emission_energy_multiplier = 3.0; flash.visible = false
@@ -96,15 +106,27 @@ func _physics_process(dt: float) -> void:
 	sway = sway.lerp(Vector2.ZERO, minf(1.0, dt * 8.0)) + look * 0.0005
 	sway = sway.clamp(Vector2(-0.04, -0.04), Vector2(0.04, 0.04))
 	draw_t = maxf(0.0, draw_t - dt * 3.5)
-	var rl := 0.0
+	var rl := 0.0; var bolt := 0.0
+	var rp := 0.0
 	if reload_t > 0.0:
-		var tot := maxf(0.1, float(weapon()["reload"])); rl = sin(clampf(1.0 - reload_t / tot, 0.0, 1.0) * PI)
+		var tot := maxf(0.1, float(weapon()["reload"])); rp = clampf(1.0 - reload_t / tot, 0.0, 1.0)
+		rl = clampf(rp / 0.15, 0.0, 1.0) * clampf((1.0 - rp) / 0.2, 0.0, 1.0)  # ينزل السلاح ويعود
+		if rp > 0.85: bolt = sin((rp - 0.85) / 0.15 * PI)
+	if mag != null:
+		var mp := mag_home; var lp := Vector3.ZERO; mag.visible = true
+		if rp > 0.0:
+			if rp < 0.3: mp = mag_home + Vector3(0, -0.4 * (rp / 0.3), 0.03); lp = Vector3(0.05, -0.1 * (rp / 0.3), 0.18 * (rp / 0.3))
+			elif rp < 0.5: mag.visible = false; lp = Vector3(0.05, -0.1, 0.18) * (1.0 - (rp - 0.3) / 0.2)
+			elif rp < 0.75: var k := (rp - 0.5) / 0.25; mp = mag_home + Vector3(0, -0.4 * (1.0 - k), 0.03 * (1.0 - k)); lp = Vector3(0.05, -0.1, 0.18) * (1.0 - k) * 0.6
+		mag.position = mp; lh.position = lh.position.lerp(lp, minf(1.0, dt * 16.0))
+	elif lh: lh.position = lh.position.lerp(Vector3(0, -0.12 * rl, 0.1 * rl), minf(1.0, dt * 10.0))
 	if flash: flash.visible = kick > 0.8
 	var tgt_pos := Vector3(0.0, -0.13, -0.42) if ads else Vector3(0.2, -0.22, -0.45)
-	tgt_pos += Vector3(-sway.x, sway.y, 0) * (0.3 if ads else 1.0) + Vector3(0, -0.35 * draw_t - 0.16 * rl, 0)
+	tgt_pos += Vector3(-sway.x, sway.y, 0) * (0.3 if ads else 1.0) + Vector3(0, -0.35 * draw_t - 0.08 * rl, 0.05 * bolt)
 	var bobv := Vector3(sin(bob) * 0.006, absf(cos(bob)) * 0.008, 0) * (1.0 if is_on_floor() else 0.0) * clampf(spd / 4.6, 0, 1.4)
 	gun_parts.position = gun_parts.position.lerp(tgt_pos + bobv + Vector3(0, 0, kick * 0.04), minf(1.0, dt * 14.0))
-	gun_parts.rotation.x = lerpf(gun_parts.rotation.x, (-0.35 if sprinting else 0.0) + kick * 0.06 + rl * 0.5 + draw_t * 0.6, minf(1.0, dt * 10.0))
+	gun_parts.rotation.z = lerpf(gun_parts.rotation.z, rl * 0.35, minf(1.0, dt * 10.0))
+	gun_parts.rotation.x = lerpf(gun_parts.rotation.x, (-0.35 if sprinting else 0.0) + kick * 0.06 + rl * 0.45 + draw_t * 0.6, minf(1.0, dt * 10.0))
 	var z := float(weapon()["zoom"])
 	var tfov := 75.0 / (z if ads and z > 1.0 else 1.0)
 	cam.fov = lerpf(cam.fov, tfov, minf(1.0, dt * 14.0))
