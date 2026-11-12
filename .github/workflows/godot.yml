@@ -7,9 +7,19 @@ on:
 jobs:
   test-and-android:
     runs-on: ubuntu-latest
-    container: barichello/godot-ci:4.3
+    env:
+      GODOT_VER: 4.7.2-stable
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - name: Install Godot + export templates
+        run: |
+          curl -sL -o g.zip https://github.com/godotengine/godot/releases/download/$GODOT_VER/Godot_v${GODOT_VER}_linux.x86_64.zip
+          curl -sL -o t.tpz https://github.com/godotengine/godot/releases/download/$GODOT_VER/Godot_v${GODOT_VER}_export_templates.tpz
+          unzip -q g.zip; sudo mv Godot_v${GODOT_VER}_linux.x86_64 /usr/local/bin/godot; chmod +x /usr/local/bin/godot
+          unzip -q t.tpz; mkdir -p ~/.local/share/godot/export_templates; mv templates ~/.local/share/godot/export_templates/${GODOT_VER/-/.}
+          godot --version
       - name: Import project + self-test (headless)
         working-directory: godot
         run: |
@@ -22,18 +32,17 @@ jobs:
           ls /usr/lib/android-sdk 2>/dev/null | head -3 || true
           echo "ANDROID_HOME=$ANDROID_HOME ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
           mkdir -p ~/.config/godot ~/.local/share/godot/export_templates
-          [ -d ~/.local/share/godot/export_templates/4.3.stable ] || mv /root/.local/share/godot/export_templates/4.3.stable ~/.local/share/godot/export_templates/ 2>/dev/null || true
-          [ -f /root/debug.keystore ] || keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android -keystore /root/debug.keystore -storepass android -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
+          [ -f $HOME/debug.keystore ] || keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android -keystore $HOME/debug.keystore -storepass android -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
           godot --headless --editor --quit --path godot 2>&1 | tail -3 || true
-          SDK="${ANDROID_HOME:-/usr/lib/android-sdk}"
-          JAVA="${JAVA_HOME:-$(dirname $(dirname $(readlink -f $(which javac))))}"
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          JAVA="$JAVA_HOME"
           echo "java path: $JAVA"
           F=$(ls ~/.config/godot/editor_settings-4*.tres | head -1)
           echo "settings file: $F"
           cat >> "$F" <<EOF
           export/android/android_sdk_path = "$SDK"
           export/android/java_sdk_path = "$JAVA"
-          export/android/debug_keystore = "/root/debug.keystore"
+          export/android/debug_keystore = "$HOME/debug.keystore"
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
           export/android/force_system_user = false

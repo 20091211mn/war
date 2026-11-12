@@ -9,13 +9,13 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Godot 4.3 + export templates
+      - name: Install Godot 4.7.2 + export templates
         run: |
-          V=4.3-stable
+          V=4.7.2-stable
           curl -sL -o godot.zip https://github.com/godotengine/godot/releases/download/$V/Godot_v${V}_macos.universal.zip
           curl -sL -o tpz.zip https://github.com/godotengine/godot/releases/download/$V/Godot_v${V}_export_templates.tpz
           unzip -q godot.zip; unzip -q tpz.zip
-          T="$HOME/Library/Application Support/Godot/export_templates/4.3.stable"
+          T="$HOME/Library/Application Support/Godot/export_templates/4.7.2.stable"
           mkdir -p "$T"; cp -R templates/* "$T/"
           echo "GODOT=$PWD/Godot.app/Contents/MacOS/Godot" >> $GITHUB_ENV
       - name: Export Xcode project
