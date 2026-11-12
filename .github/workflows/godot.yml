@@ -26,11 +26,13 @@ jobs:
           [ -f /root/debug.keystore ] || keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android -keystore /root/debug.keystore -storepass android -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -deststoretype pkcs12
           godot --headless --editor --quit --path godot 2>&1 | tail -3 || true
           SDK="${ANDROID_HOME:-/usr/lib/android-sdk}"
+          JAVA="${JAVA_HOME:-$(dirname $(dirname $(readlink -f $(which javac))))}"
+          echo "java path: $JAVA"
           F=$(ls ~/.config/godot/editor_settings-4*.tres | head -1)
           echo "settings file: $F"
           cat >> "$F" <<EOF
           export/android/android_sdk_path = "$SDK"
-          export/android/java_sdk_path = "$JAVA_HOME"
+          export/android/java_sdk_path = "$JAVA"
           export/android/debug_keystore = "/root/debug.keystore"
           export/android/debug_keystore_user = "androiddebugkey"
           export/android/debug_keystore_pass = "android"
