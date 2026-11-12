@@ -84,6 +84,8 @@ func _input(ev: InputEvent) -> void:
 			elif r == "look" or r == "fire":
 				inp["look"] = inp["look"] + d.relative
 	# ---- حاسوب ----
+	elif ev is InputEventMouse and (ev as InputEventMouse).device == InputEvent.DEVICE_ID_EMULATION:
+		return  # فأرة مُحاكاة من اللمس (لتعمل أزرار القوائم) — اللعب يستخدم أحداث اللمس مباشرة
 	elif ev is InputEventMouseMotion and mouse_look:
 		inp["look"] = inp["look"] + (ev as InputEventMouseMotion).relative
 	elif ev is InputEventMouseButton:
