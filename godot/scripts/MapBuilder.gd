@@ -42,7 +42,7 @@ static func build(m: Dictionary, root: Node3D) -> Dictionary:
 	var we := WorldEnvironment.new(); we.environment = env; we.name = "Env"; root.add_child(we)
 	var sun := DirectionalLight3D.new(); sun.name = "Sun"
 	var sd: Array = th["sun"]; var dir := Vector3(sd[0], sd[1], sd[2]).normalized()
-	sun.light_energy = float(th["sunI"]) * 0.45; sun.directional_shadow_max_distance = 90.0; sun.shadow_bias = 0.05
+	sun.light_energy = float(th["sunI"]) * 0.45; sun.directional_shadow_max_distance = 55.0; sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL; sun.shadow_bias = 0.05
 	root.add_child(sun); sun.look_at_from_position(dir * 50.0, Vector3.ZERO, Vector3.UP)
 	out["env"] = env; out["sun"] = sun; out["theme"] = th
 	return out

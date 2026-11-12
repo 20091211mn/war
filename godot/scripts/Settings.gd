@@ -1,7 +1,7 @@
 extends Node
 # إعدادات اللعبة: الجودة (0..4) واللغة (0 عربي، 1 English، 2 Español) — تُحفظ في user://settings.cfg
 signal changed
-var quality := 3
+var quality := (2 if OS.has_feature("mobile") else 3)
 var lang := 0
 var LANGS := ["العربية", "English", "Español"]
 var QUALS := ["ضعيفة جداً", "ضعيفة", "متوسطة", "عالية", "فائقة"]
@@ -13,7 +13,7 @@ func _ready() -> void:
 	if f: _tab = JSON.parse_string(f.get_as_text())
 	var c := ConfigFile.new()
 	if c.load(CFG) == OK:
-		quality = clampi(int(c.get_value("g", "quality", 3)), 0, 4)
+		quality = clampi(int(c.get_value("g", "quality", quality)), 0, 4)
 		lang = clampi(int(c.get_value("g", "lang", 0)), 0, 2)
 	_apply_locale()
 
@@ -33,7 +33,7 @@ func t(ar: String) -> String:
 # إعدادات الرسم حسب الجودة
 func res_scale() -> float: return [0.5, 0.65, 0.8, 1.0, 1.0][quality]
 func shadows() -> bool: return quality >= 2
-func msaa() -> int: return 2 if quality >= 3 else 0
+func msaa() -> int: return 2 if quality >= 4 else 0
 func fog_k() -> float: return [0.45, 0.7, 1.0, 1.5, 2.2][quality]
 func trees() -> int: return [0, 0, 10, 28, 60][quality]
 func windows() -> int: return [0, 0, 0, 150, 300][quality]

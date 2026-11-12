@@ -12,6 +12,9 @@ var kick := 0.0
 var vy := 0.0
 var sprinting := false
 var gun_parts: Node3D
+var sway := Vector2.ZERO
+var draw_t := 0.0
+var flash: MeshInstance3D
 
 func _ready() -> void:
 	collision_layer = 2; collision_mask = 1
@@ -41,13 +44,21 @@ func rebuild_viewmodel() -> void:
 	_part(Vector3(0.05, 0.13, 0.06), Vector3(0, -0.11, -L * 0.2), Color(0.18, 0.18, 0.2))     # القبضة
 	if kind in ["rifle", "dmr", "lmg", "sniper", "smg"]: _part(Vector3(0.045, 0.12, 0.07), Vector3(0, -0.11, -L * 0.5), Color(0.22, 0.2, 0.15))
 	if kind in ["sniper", "dmr"]: _part(Vector3(0.05, 0.05, 0.28), Vector3(0, H * 0.8, -L * 0.45), Color(0.08, 0.08, 0.09))
-	_part(Vector3(0.09, 0.09, 0.12), Vector3(0.0, -0.05, 0.02), Color(0.78, 0.6, 0.48))        # يد
+	var skin := Color(0.78, 0.6, 0.48); var sleeve := Color(0.16, 0.2, 0.3)
+	_part(Vector3(0.075, 0.085, 0.1), Vector3(0.0, -0.17, -L * 0.2), skin)                    # يد القبضة
+	_part(Vector3(0.085, 0.09, 0.42), Vector3(0.05, -0.27, 0.12), sleeve).rotation.x = -0.35  # ساعد أيمن
+	_part(Vector3(0.07, 0.07, 0.11), Vector3(-0.03, -0.06, -L * 0.72), skin)                  # يد الإسناد
+	_part(Vector3(0.08, 0.08, 0.5), Vector3(-0.2, -0.2, -L * 0.2), sleeve).rotation = Vector3(-0.1, 0.45, 0) # ساعد أيسر
+	flash = _part(Vector3(0.1, 0.1, 0.1), Vector3(0, H * 0.4, -L * 1.25), Color(1, 0.85, 0.4))
+	var fm := flash.material_override as StandardMaterial3D
+	fm.emission_enabled = true; fm.emission = Color(1, 0.7, 0.2); fm.emission_energy_multiplier = 3.0; flash.visible = false
+	draw_t = 1.0
 	gun_parts.position = Vector3(0.2, -0.22, -0.45); gun_parts.scale = Vector3.ONE * 0.62
 
-func _part(sz: Vector3, pos: Vector3, c: Color) -> void:
+func _part(sz: Vector3, pos: Vector3, c: Color) -> MeshInstance3D:
 	var mi := MeshInstance3D.new(); var bm := BoxMesh.new(); bm.size = sz; mi.mesh = bm; mi.position = pos
 	var m := StandardMaterial3D.new(); m.albedo_color = c; m.roughness = 0.5; m.metallic = 0.4; mi.material_override = m
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; gun_parts.add_child(mi)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; gun_parts.add_child(mi); return mi
 
 func _physics_process(dt: float) -> void:
 	super._physics_process(dt)
@@ -82,10 +93,18 @@ func _physics_process(dt: float) -> void:
 	bob += spd * dt * 1.6
 	# ---- سلاح ----
 	kick = maxf(0.0, kick - dt * 8.0)
+	sway = sway.lerp(Vector2.ZERO, minf(1.0, dt * 8.0)) + look * 0.0005
+	sway = sway.clamp(Vector2(-0.04, -0.04), Vector2(0.04, 0.04))
+	draw_t = maxf(0.0, draw_t - dt * 3.5)
+	var rl := 0.0
+	if reload_t > 0.0:
+		var tot := maxf(0.1, float(weapon()["reload"])); rl = sin(clampf(1.0 - reload_t / tot, 0.0, 1.0) * PI)
+	if flash: flash.visible = kick > 0.8
 	var tgt_pos := Vector3(0.0, -0.13, -0.42) if ads else Vector3(0.2, -0.22, -0.45)
+	tgt_pos += Vector3(-sway.x, sway.y, 0) * (0.3 if ads else 1.0) + Vector3(0, -0.35 * draw_t - 0.16 * rl, 0)
 	var bobv := Vector3(sin(bob) * 0.006, absf(cos(bob)) * 0.008, 0) * (1.0 if is_on_floor() else 0.0) * clampf(spd / 4.6, 0, 1.4)
 	gun_parts.position = gun_parts.position.lerp(tgt_pos + bobv + Vector3(0, 0, kick * 0.04), minf(1.0, dt * 14.0))
-	gun_parts.rotation.x = lerpf(gun_parts.rotation.x, (-0.35 if sprinting else 0.0) + kick * 0.06, minf(1.0, dt * 10.0))
+	gun_parts.rotation.x = lerpf(gun_parts.rotation.x, (-0.35 if sprinting else 0.0) + kick * 0.06 + rl * 0.5 + draw_t * 0.6, minf(1.0, dt * 10.0))
 	var z := float(weapon()["zoom"])
 	var tfov := 75.0 / (z if ads and z > 1.0 else 1.0)
 	cam.fov = lerpf(cam.fov, tfov, minf(1.0, dt * 14.0))
