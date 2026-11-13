@@ -124,6 +124,7 @@ E=[
 ("رجوع","Back","Atrás"),
 ("نسخة Kotlin (OpenGL ES)","Kotlin edition (OpenGL ES)","Edición Kotlin (OpenGL ES)"),
 ("ابدأ اللعب","START GAME","JUGAR"),
+("اختر الخريطة","Choose map","Elegir mapa"),
 ("الحساسية ","Sensitivity ","Sensibilidad "),
 ("متابعة","Resume","Continuar"),
 ("مباراة جديدة","New match","Nueva partida"),

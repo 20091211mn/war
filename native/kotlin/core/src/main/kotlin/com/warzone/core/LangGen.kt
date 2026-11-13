@@ -120,6 +120,7 @@ object LangGen {
         arrayOf("رجوع", "Back", "Atrás"),
         arrayOf("نسخة Kotlin (OpenGL ES)", "Kotlin edition (OpenGL ES)", "Edición Kotlin (OpenGL ES)"),
         arrayOf("ابدأ اللعب", "START GAME", "JUGAR"),
+        arrayOf("اختر الخريطة", "Choose map", "Elegir mapa"),
         arrayOf("الحساسية ", "Sensitivity ", "Sensibilidad "),
         arrayOf("متابعة", "Resume", "Continuar"),
         arrayOf("مباراة جديدة", "New match", "Nueva partida"),
