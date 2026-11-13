@@ -124,6 +124,10 @@ static const TrE TR_TAB[]={
 {"مسيّرة","Drone","Dron"},
 {"تفجير","Detonate","Detonar"},
 {"هبوط","Land","Aterrizar"},
+{"ارفع الدفع ثم اسحب الذراع للإقلاع","Raise throttle then pull back to take off","Sube el acelerador y tira para despegar"},
+{"نزلت من الطائرة — لديك RPG","You left the jet — you have an RPG","Bajaste del avión — tienes un RPG"},
+{"أسقطت طائرة!","Jet down!","¡Avión derribado!"},
+{"على المدرج — ارفع الدفع THR+ ثم اسحب للأعلى","On runway — raise THR+ then pull up","En pista — sube THR+ y tira hacia arriba"},
 {"تم زرع C4","C4 planted","C4 colocada"},
 {"اقترب من سطح","Get close to a surface","Acércate a una superficie"},
 {"ثلاث قتلات متتالية!","Triple streak!","¡Racha de tres!"},
@@ -191,4 +195,4 @@ static const TrE TR_TAB[]={
 {"Español","Español","Español"},
 {"تم حفظ الإعدادات","Settings saved","Ajustes guardados"},
 };
-static const int TR_N=188;
+static const int TR_N=192;

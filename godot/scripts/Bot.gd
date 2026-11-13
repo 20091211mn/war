@@ -162,7 +162,7 @@ func _animate(dt: float, spd: float, firing: bool) -> void:
 	_arm_to(arm_r, Vector3(0.27, 0.5, 0), rh); _arm_to(arm_l, Vector3(-0.27, 0.5, 0), lh)
 
 func _physics_process(dt: float) -> void:
-	if off: return
+	if off or jet != null: return
 	if net_ctrl: _puppet(dt); return
 	super._physics_process(dt)
 	if not alive: return

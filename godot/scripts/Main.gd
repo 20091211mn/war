@@ -5,13 +5,16 @@ var data: Dictionary
 var weapons: Array = []
 var maps: Array = []
 var state := "menu"        # menu | play | pause | over
-var inp := {"mv": Vector2.ZERO, "look": Vector2.ZERO, "fire": false, "jump": false, "reload": false, "ads": false, "sprint": false, "next": false, "use": false, "seat": false, "gren": false, "crouch": false, "c4": false, "det": false, "drone": false}
+var inp := {"mv": Vector2.ZERO, "look": Vector2.ZERO, "fire": false, "jump": false, "reload": false, "ads": false, "sprint": false, "next": false, "use": false, "seat": false, "gren": false, "crouch": false, "c4": false, "det": false, "drone": false, "tup": false, "tdn": false}
 var map_idx := 2
 var diff := 1
 var bots_per_team := 5
 var player: Player = null
 var fighters: Array = []
 var vehicles: Array = []
+var jets: Array = []
+var air := false
+var foot_t := 0.0
 var nav_map := RID()
 var nav_ready := false
 var hud: Hud
@@ -38,6 +41,9 @@ var sfx := {}
 var scenery: Node3D
 var selftest := false
 var gren_test := false
+var air_test := false
+var at_j: Jet = null
+var at_f := 0
 var gt_f := 0
 var lan_test := ""
 var test_frames := 0
@@ -84,6 +90,7 @@ func _ready() -> void:
 		if a.begins_with("--vshot="): veh_shot = a.substr(8)
 		if a.begins_with("--vehtest="): veh_test = int(a.substr(10))
 		if a == "--grentest": gren_test = true
+		if a == "--airtest": air_test = true
 		if a.begins_with("--vehcam="): dbg_vehcam = int(a.substr(9))
 		if a == "--lanhost": lan_test = "host"
 		if a.begins_with("--lanjoin="): lan_test = "join:" + a.substr(10)
@@ -257,7 +264,7 @@ func _build_menu() -> void:
 	var pk := _overlay("اختر الخريطة", 1060)
 	var sc := ScrollContainer.new(); sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED; sc.custom_minimum_size = Vector2(0, 350); pk.add_child(sc)
 	var gr := GridContainer.new(); gr.columns = 4; gr.add_theme_constant_override("h_separation", 14); gr.add_theme_constant_override("v_separation", 14); gr.size_flags_horizontal = Control.SIZE_EXPAND_FILL; sc.add_child(gr)
-	for i in maps.size() - 1:
+	for i in maps.size():
 		var c := _map_card(i); c.size_flags_horizontal = Control.SIZE_EXPAND_FILL; gr.add_child(c); _map_cards.append(c)
 	_map_picker = pk
 	mbtn.pressed.connect(func(): _open(pk))
@@ -347,7 +354,7 @@ func open_pause() -> void:
 
 # تفريغ كل المدخلات واللمسات العالقة (عند الإيقاف/نهاية المباراة) كي لا يبقى جويستيك أو إطلاق وهمي
 func _release_inputs() -> void:
-	inp["fire"] = false; inp["mv"] = Vector2.ZERO; inp["look"] = Vector2.ZERO; inp["ads"] = false; inp["sprint"] = false; inp["jump"] = false; inp["use"] = false; inp["seat"] = false; inp["gren"] = false; inp["crouch"] = false; inp["c4"] = false; inp["det"] = false; inp["drone"] = false
+	inp["fire"] = false; inp["mv"] = Vector2.ZERO; inp["look"] = Vector2.ZERO; inp["ads"] = false; inp["sprint"] = false; inp["jump"] = false; inp["use"] = false; inp["seat"] = false; inp["gren"] = false; inp["crouch"] = false; inp["c4"] = false; inp["det"] = false; inp["drone"] = false; inp["tup"] = false; inp["tdn"] = false
 	hud.reset_touch()
 
 func resume() -> void:
@@ -369,7 +376,7 @@ func start_match() -> void:
 	world = Node3D.new(); world.name = "World"; add_child(world)
 	var m: Dictionary = maps[map_idx]
 	map_info = MapBuilder.build(m, world); map_w = m["W"]; map_d = m["D"]
-	score = [0, 0]; time_left = 600.0; time_cap = 600.0; match_t = 0.0; resp_t = 0.0
+	score = [0, 0]; time_left = 600.0; time_cap = 600.0; match_t = 0.0; resp_t = 0.0; score_lim = 30
 	player = Player.new(); player.game = self; player.team = 0; player.fname = Settings.t("اللاعب"); world.add_child(player)
 	player.setup_weapon(0); fighters.append(player); player.respawn(spawn_point(0))
 	for t in 2:
@@ -377,8 +384,12 @@ func start_match() -> void:
 			var b := Bot.new(); b.game = self; b.team = t; b.fname = "BOT%d" % (fighters.size()); b.acc = [0.09, 0.055, 0.03][diff]
 			world.add_child(b); fighters.append(b); b.respawn(spawn_point(t))
 	scenery = Node3D.new(); world.add_child(scenery); build_scenery(); apply_quality()
-	spawn_vehicles(m)
-	nav_ready = false; nav_map = RID(); Nav.bake(self, m, world)
+	air = map_idx == 8; jets.clear()
+	if air:
+		nav_ready = false; air_init()
+	else:
+		spawn_vehicles(m)
+		nav_ready = false; nav_map = RID(); Nav.bake(self, m, world)
 	menu_root.visible = false; pause_root.visible = false; hud.visible = true; state = "play"
 	hud.say(Settings.t("اختر سلاحك") if false else m["name"])
 
@@ -389,7 +400,8 @@ func start_lan_match(role: int, slot: int, cfg: Dictionary) -> void:
 	if world != null: world.queue_free()
 	for f in fighters: if is_instance_valid(f): f.queue_free()
 	fighters.clear()
-	map_idx = int(cfg["map"]); world = Node3D.new(); world.name = "World"; add_child(world)
+	map_idx = int(cfg["map"]); if map_idx == 8: map_idx = 0   # حرب الجو لاعب واحد فقط حالياً
+	air = false; jets.clear(); world = Node3D.new(); world.name = "World"; add_child(world)
 	var m: Dictionary = maps[map_idx]
 	map_info = MapBuilder.build(m, world); map_w = m["W"]; map_d = m["D"]
 	score = [0, 0]; score_lim = int(cfg["lim"]); var mins := int(cfg["mins"]); time_cap = mins * 60.0; time_left = time_cap if mins > 0 else 1.0e9; match_t = 0.0; resp_t = 0.0
@@ -436,6 +448,14 @@ func hitscan(shooter: Fighter, from: Vector3, dir: Vector3, w: Dictionary, muz :
 	var q := PhysicsRayQueryParameters3D.create(from, to, 7, ex)
 	var r := get_world_3d().direct_space_state.intersect_ray(q)
 	var endp := to
+	if w["kind"] == "launcher" and not jets.is_empty():
+		var bd := (r["position"] as Vector3).distance_to(from) if not r.is_empty() else 220.0
+		for j in jets:
+			var J := j as Jet
+			if not J.alive or J.team == shooter.team: continue
+			var pv := J.position - from; var tc := pv.dot(dir)
+			if tc > 0.0 and tc < bd and (pv - dir * tc).length() < 6.5:
+				_explode(shooter, from + dir * tc); _tracer(from + dir * 0.8, from + dir * tc); return
 	if not r.is_empty():
 		endp = r["position"]
 		var c: Object = r["collider"]
@@ -483,7 +503,7 @@ func _explode(src: Fighter, p: Vector3) -> void:
 func blast(src: Fighter, p: Vector3, R: float, pd: float, vd: float) -> void:
 	sfx_play("boom", p)
 	for f in fighters:
-		if not is_instance_valid(f) or not f.alive: continue
+		if not is_instance_valid(f) or not f.alive or f.jet != null: continue
 		var d: float = f.global_position.distance_to(p)
 		if d < R and (f.team != src.team or f == src):
 			f.take_damage(pd * pow(1.0 - d / R, 0.9), src, false)
@@ -492,6 +512,11 @@ func blast(src: Fighter, p: Vector3, R: float, pd: float, vd: float) -> void:
 		if v.team >= 0 and v.team == src.team and not (v.driver == src or v.gunner == src): continue
 		var d := maxf(0.0, Vector2(v.global_position.x - p.x, v.global_position.z - p.z).length() - 1.6)
 		if d < R + 1.5: v.take_damage(vd * pow(1.0 - d / (R + 1.5), 1.1), src)
+	for j in jets.duplicate():
+		var J := j as Jet
+		if not is_instance_valid(J) or not J.alive or J.team == src.team: continue
+		var dj := J.position.distance_to(p)
+		if dj < R + 5.0: J.hurt(vd * 0.5 * (1.0 - dj / (R + 5.0)), src, true)
 	_spark(p, 14)
 
 # قذيفة مدفع الدبابة
@@ -536,6 +561,10 @@ func near_vehicle(f: Fighter) -> Vehicle:
 	return best
 
 func try_use(f: Fighter) -> void:
+	if air:
+		if f.jet != null: air_eject(f as Player); return
+		var J := near_jet(f)
+		if J != null: air_board(f as Player, J); return
 	if f.veh != null: (f.veh as Vehicle).leave(f); return
 	var v := near_vehicle(f)
 	if v != null: v.enter(f, v.seat_for(f))
@@ -603,7 +632,8 @@ func on_kill(src: Fighter, victim: Fighter, head: bool) -> void:
 		var hum := victim is Bot and (victim as Bot).net_ctrl
 		get_tree().create_timer(4.0 if hum else 3.0).timeout.connect(func():
 			if is_instance_valid(victim) and state != "menu" and not (victim as Bot).off:
-				if hum: lan.respawn_human(victim as Bot)
+				if air: air_spawn(victim)
+				elif hum: lan.respawn_human(victim as Bot)
 				else: (victim as Bot).respawn(spawn_point(victim.team)))
 	if score[0] >= score_lim or score[1] >= score_lim: _end_match()
 
@@ -712,6 +742,11 @@ func _process(dt: float) -> void:
 			_orbit(14.0 + map_idx * 3.0); ui_root.visible = false
 			for n in prev_world.get_children():
 				if n is WorldEnvironment: (n as WorldEnvironment).environment.fog_enabled = false
+			if map_idx == 8:
+				prev_cam.position = Vector3(-75, 45, 40); prev_cam.fov = 68.0; prev_cam.look_at(Vector3(-15, 55, -30))
+				for k in 4:
+					var pj := Jet.make(self, k & 1, prev_world); pj.alive = false; pj.yaw = -0.6 + k * 0.35; pj.pitch = 0.08; pj.roll = 0.5 - k * 0.3
+					pj.position = Vector3(-50 + k * 22, 52 + (k % 2) * 8, -10 - k * 14); pj._apply_tf()
 			if map_idx == 0:
 				var mw: float = maps[0]["W"]; var md: float = maps[0]["D"]
 				prev_cam.position = Vector3(-mw * 0.42, 5.2, md * 0.42); prev_cam.fov = 80.0; prev_cam.look_at(Vector3(mw * 0.05, 0.6, -md * 0.05))
@@ -734,7 +769,11 @@ func _physics_process(dt: float) -> void:
 		if time_left <= 0.0: _end_match()
 		if player != null and not player.alive:
 			resp_t -= dt
-			if resp_t <= 0.0: player.respawn(spawn_point(player.team))
+			if resp_t <= 0.0:
+				if air: air_spawn(player)
+				else: player.respawn(spawn_point(player.team))
+		if air and player != null and player.alive and player.jet == null:
+			foot_t += dt; _air_foot()
 	if shot_path != "":
 		test_frames += 1
 		inp["mv"] = Vector2(0, -0.3)
@@ -760,6 +799,20 @@ func _physics_process(dt: float) -> void:
 			print("LANTEST ", lan_test.get_slice(":", 0), " role=", lan.role, " state=", state, " slot=", lan.my_slot, " humans=", hum, " ", info, " me=", (str(player.global_position.snapped(Vector3(1, 1, 1))) if player != null else "-"), " fighters=", fighters.size(), " score=", score)
 			if test_frames == (500 if lan_test.begins_with("join:") else 1300): get_tree().quit(0)
 		return
+	if air_test and air:
+		at_f += 1
+		if at_f == 1: print("AT start")
+		if at_f == 100:
+			for j in jets.duplicate(): if j.pilot != null and j.pilot != player: (j as Jet).pilot.jet = null; jet_die(j, null)
+			at_j = Jet.make(self, 0); at_j.pilot = fighters[3]; at_j.position = Vector3(600, 150, 0); at_j.yaw = -1.5708; at_j.vel = Vector3(105, 0, 0); at_j.th = 0.7; jets.append(at_j)
+		if at_f > 100 and at_f % 120 == 0 and is_instance_valid(at_j): print("AT x=", int(at_j.position.x), " y=", int(at_j.position.y), " yaw=", snappedf(at_j.yaw, 0.01), " roll=", snappedf(at_j.roll, 0.01), " v=", int(at_j.speed()))
+		if at_f == 190 and not player.alive: air_spawn(player)
+		if at_f == 200: player.spawn_prot = 20.0; inp["use"] = true
+		if at_f == 230: print("AT eject: jet=", player.jet != null, " wi=", player.wi, " pos=", player.global_position.snapped(Vector3.ONE), " alive=", player.alive)
+		if at_f == 900: print("AT foot_t=", snappedf(foot_t, 0.1), " near=", near_jet(player) != null)
+		if at_f == 910 and near_jet(player) != null: inp["use"] = true
+		if at_f == 960: print("AT board: jet=", player.jet != null, " th=", (player.jet.th if player.jet != null else -1.0))
+		if at_f == 1200: get_tree().quit(0)
 	if gren_test:
 		gt_f += 1
 		var pl := player as Player
@@ -794,6 +847,10 @@ func _physics_process(dt: float) -> void:
 			resume()
 			var ok2 := state == "play" and not get_tree().paused and score == [0, 0] and not pause_root.visible and fighters.size() == 10
 			print("OVERTEST ", "ok" if (ok1 and ok2) else "FAIL %s %s" % [ok1, ok2])
+		if air and test_frames % 300 == 0:
+			var a := []
+			for j in jets: a.append("t%d%s p%.0f y%.0f v%.0f r%.2f" % [(j as Jet).team, "P" if (j as Jet).pilot != null else "-", (j as Jet).position.x, (j as Jet).position.y, (j as Jet).speed(), (j as Jet).roll])
+			print("AIR f=", test_frames, " n=", jets.size(), " score=", score, " ", a)
 		if test_frames == 1800:
 			for v in vehicles: print("VEH type=", v.vtype, " team=", v.team, " driver=", (v.driver.fname if v.driver != null else "-"), " gunner=", (v.gunner.fname if v.gunner != null else "-"), " hp=", int(v.hp), " moved=", snappedf(v.global_position.distance_to(v.home), 0.1), " dead=", v.dead)
 			if nav_ready:
@@ -802,3 +859,83 @@ func _physics_process(dt: float) -> void:
 			else: print("NAV not ready")
 			print("SELFTEST ok map=", maps[map_idx]["name"], " fighters=", fighters.size(), " score=", score, " player_hp=", player.hp, " ammo=", player.ammo)
 			get_tree().quit(0)
+
+# ---------------------------------------------------------------- حرب الجو (خريطة 8): مقاتلات F-35
+func air_init() -> void:
+	foot_t = 0.0
+	for f in fighters: air_spawn(f)
+	for k in 4: _jet_ground(k / 2, 6 + k % 2)
+	hud.say(Settings.t("دمّر 30 طائرة معادية بالمدفع"))
+
+func _jet_ground(tm: int, slot: int) -> void:
+	var arr: Array = maps[map_idx]["blue"] if tm != 0 else maps[map_idx]["red"]
+	var sp: Array = arr[slot % arr.size()]
+	var J := Jet.make(self, tm); J.yaw = 1.5708 if tm != 0 else -1.5708; J.position = Vector3(sp[0], 0.0, sp[1]); J.th = 0.0; J.spare = true; J.gnd = true; J.pilot = null
+	J._apply_tf(); jets.append(J)
+
+func air_spawn(f: Fighter) -> void:
+	var tm := f.team; var J := Jet.make(self, tm)
+	J.yaw = 1.5708 if tm != 0 else -1.5708
+	J.position = Vector3((1.0 if tm != 0 else -1.0) * (map_w * 0.5 - 150.0 - randf() * 70.0), 110.0 + randf() * 60.0, (randf() - 0.5) * map_d * 0.5)
+	J.vel = Vector3(-sin(J.yaw), 0, -cos(J.yaw)) * 105.0; J.th = 0.7; J.pilot = f; J._apply_tf(); jets.append(J)
+	f.hp = 100.0; f.alive = true; f.spawn_prot = 2.0; f.jet = J; f.collision_layer = 0
+	if f is Player: (f as Player).enter_jet(J)
+	else: f.visible = false; f.global_position = J.position
+
+func near_jet(f: Fighter) -> Jet:
+	var best: Jet = null; var bd := 18.0
+	for j in jets:
+		var J := j as Jet
+		if not J.alive or J.pilot != null or J.team != f.team or not J.gnd or J.speed() > 8.0: continue
+		var d := Vector2(J.position.x - f.global_position.x, J.position.z - f.global_position.z).length()
+		if d < bd: bd = d; best = J
+	return best
+
+func air_board(pl: Player, J: Jet) -> void:
+	J.pilot = pl; J.th = 0.0; J.vel = Vector3.ZERO; foot_t = 0.0; pl.enter_jet(J)
+	hud.say(Settings.t("ارفع الدفع ثم اسحب الذراع للإقلاع"))
+
+func air_eject(pl: Player) -> void:
+	var J := pl.jet as Jet; if J == null: return
+	var on_gnd := J.gnd and J.speed() < 10.0
+	J.pilot = null; J.th = 0.0
+	var pos := Vector3(J.position.x, 0.1, J.position.z)
+	if on_gnd: pos += J.basis.x * 9.0; J.vel = Vector3.ZERO; hud.say(Settings.t("نزلت من الطائرة — لديك RPG"))
+	else: hud.say(Settings.t("قفزت بالمظلة — الطائرة تحلّق بلا طيار"))
+	pl.exit_jet(pos, J.yaw); pl.setup_weapon(8); pl.rebuild_viewmodel(); foot_t = 0.0
+
+func _air_foot() -> void:
+	if foot_t > 10.0 and near_jet(player) == null:
+		var J := Jet.make(self, player.team); J.yaw = player.yaw; J.position = player.global_position + player.global_transform.basis.x * 12.0; J.position.y = 0.0
+		J.th = 0.0; J.spare = true; J.gnd = true; J._apply_tf(); jets.append(J); foot_t = 0.0
+		hud.say(Settings.t("وصلت طائرة بديلة بجانبك"))
+
+func jet_tracer(a: Vector3, b: Vector3) -> void:
+	var l := a.distance_to(b)
+	if l < 2.0: return
+	var mi := MeshInstance3D.new(); var bm := BoxMesh.new(); bm.size = Vector3(0.18, 0.18, l); mi.mesh = bm
+	var m := StandardMaterial3D.new(); m.albedo_color = Color(1, 0.9, 0.4, 0.9); m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; world.add_child(mi); mi.look_at_from_position((a + b) * 0.5, b, Vector3.UP)
+	var tw := create_tween(); tw.tween_property(m, "albedo_color:a", 0.0, 0.1); tw.tween_callback(mi.queue_free)
+
+func jet_die(J: Jet, by: Fighter) -> void:
+	if not J.alive: return
+	J.alive = false; jets.erase(J)
+	var pos := J.position; var p := J.pilot; J.pilot = null
+	fx_blast(pos, 2.4); sfx_play("boom", pos)
+	for k in 6: fx_blast(pos + Vector3(randf_range(-5, 5), randf_range(-2, 3), randf_range(-5, 5)), 0.9)
+	var jteam := J.team
+	if J.spare: get_tree().create_timer(25.0).timeout.connect(func(): if air and state == "play": _jet_ground(jteam, 6 + randi() % 2))
+	if p != null:
+		p.alive = false; p.deaths += 1; p.jet = null; p.collision_layer = 2
+		if p == player:
+			player.exit_jet(Vector3(pos.x, maxf(pos.y, 0.5), pos.z), J.yaw, true); hud.say(Settings.t("أُسقطت طائرتك!")); resp_t = 5.0
+		else:
+			p.visible = false
+			get_tree().create_timer(5.0).timeout.connect(func(): if is_instance_valid(p) and state == "play" and air and not p.alive: air_spawn(p))
+	if by != null and by.team != J.team:
+		by.kills += 1; score[by.team] += 1
+		hud.add_feed("%s  ✕  F-35 (%s)" % [by.fname, p.fname if p != null else Settings.t("طائرة")])
+		if by == player: hud.say("%s %d / %d" % [Settings.t("أسقطت طائرة!"), score[by.team], score_lim])
+		if score[0] >= score_lim or score[1] >= score_lim: _end_match()
+	J.queue_free()

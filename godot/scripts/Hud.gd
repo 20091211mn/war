@@ -48,14 +48,19 @@ func _btn(name: String) -> Dictionary:
 		"seat": return {"c": Vector2(s.x - 480, s.y - 200), "r": 38.0}
 		"c4": return {"c": Vector2(s.x - 480, s.y - 310), "r": 34.0}
 		"det": return {"c": Vector2(s.x - 360, s.y - 370), "r": 34.0}
+		"tup": return {"c": Vector2(130, s.y - 300), "r": 40.0}
+		"tdn": return {"c": Vector2(130, s.y - 420), "r": 40.0}
 		"drone": return {"c": Vector2(130, s.y - 500), "r": 34.0}
 		"gren": return {"c": Vector2(s.x - 360, s.y - 260), "r": 36.0}
 		"crouch": return {"c": Vector2(130, s.y - 420), "r": 36.0}
 	return {"c": Vector2.ZERO, "r": 0.0}
-const BTNS := ["fire", "jump", "ads", "reload", "sprint", "next", "pause", "use", "seat", "gren", "crouch", "c4", "det", "drone"]
+const BTNS := ["fire", "jump", "ads", "reload", "sprint", "next", "pause", "use", "seat", "gren", "crouch", "c4", "det", "drone", "tup", "tdn"]
 
 func _btn_on(n: String) -> bool:
-	if game == null or game.player == null: return n != "use" and n != "seat"
+	if game == null or game.player == null: return n != "use" and n != "seat" and n != "tup" and n != "tdn"
+	if game.player.jet != null: return n in ["fire", "ads", "pause", "use", "tup", "tdn"]
+	if n == "tup" or n == "tdn": return false
+	if n == "use" and game.air: return game.near_jet(game.player) != null
 	if n == "drone": return game.player.veh == null
 	if n == "gren" or n == "crouch" or n == "c4": return game.player.veh == null and (game.player as Player).drone == null
 	if n == "det": return game.player.veh == null and (game.player as Player).c4s.size() > 0
@@ -92,6 +97,8 @@ func _input(ev: InputEvent) -> void:
 					"pause": game.open_pause()
 					"use": inp["use"] = true
 					"seat": inp["seat"] = true
+					"tup": inp["tup"] = true
+					"tdn": inp["tdn"] = true
 					"gren": inp["gren"] = true
 					"drone": inp["drone"] = true
 					"c4": inp["c4"] = true
@@ -102,6 +109,8 @@ func _input(ev: InputEvent) -> void:
 				var r: String = touches[t.index]["role"]
 				if r == "stick": stick = Vector2.ZERO; inp["mv"] = Vector2.ZERO
 				if r == "fire": inp["fire"] = false
+				if r == "tup": inp["tup"] = false
+				if r == "tdn": inp["tdn"] = false
 				touches.erase(t.index)
 	elif ev is InputEventScreenDrag:
 		var d := ev as InputEventScreenDrag
@@ -128,7 +137,9 @@ func _input(ev: InputEvent) -> void:
 		var k := ev as InputEventKey
 		if k.echo: return
 		match k.keycode:
-			KEY_SPACE: if k.pressed: inp["jump"] = true
+			KEY_SPACE:
+				inp["tup"] = k.pressed
+				if k.pressed: inp["jump"] = true
 			KEY_R: if k.pressed: inp["reload"] = true
 			KEY_Q: if k.pressed: inp["next"] = true
 			KEY_E: if k.pressed: inp["use"] = true
@@ -137,7 +148,8 @@ func _input(ev: InputEvent) -> void:
 			KEY_V: if k.pressed: inp["drone"] = true
 			KEY_X: if k.pressed: inp["c4"] = true
 			KEY_Z: if k.pressed: inp["det"] = true
-			KEY_C: inp["crouch"] = k.pressed
+			KEY_C:
+				inp["crouch"] = k.pressed; inp["tdn"] = k.pressed
 			KEY_SHIFT: inp["sprint"] = k.pressed
 			KEY_ESCAPE: if k.pressed: game.open_pause()
 
@@ -171,6 +183,49 @@ func _hud_weapon(p: Fighter, s: Vector2) -> void:
 	_txt(Vector2(s.x - 340, s.y - 304), am, 30, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
 	if p is Player: _txt(Vector2(s.x - 340, s.y - 345), "💣 %d" % (p as Player).gren, 20, Color(1, 0.85, 0.5), HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
 
+func _hud_jet(p: Player, s: Vector2) -> void:
+	var J := p.jet as Jet
+	if J == null or not is_instance_valid(J): return
+	var cam := get_viewport().get_camera_3d(); if cam == null: return
+	var g := Color(0.35, 1.0, 0.5, 0.9)
+	# بيبر المدفع (نقطة على بعد 350 م أمام الأنف)
+	var aim := J.position + J.fwd() * 350.0
+	if not cam.is_position_behind(aim):
+		var a := cam.unproject_position(aim)
+		draw_arc(a, 22.0, 0, TAU, 28, g, 2.0); draw_circle(a, 2.5, g)
+		for d in [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]: draw_line(a + d * 22.0, a + d * 32.0, g, 2.0)
+	# أعداء: أقواس + مسافة
+	var near_d := 1.0e9
+	for j in game.jets:
+		var T := j as Jet
+		if not T.alive or T.team == J.team: continue
+		var dv := T.position - J.position; var dist := dv.length(); near_d = minf(near_d, dist)
+		var col := Color(1, 0.25, 0.2, 0.95)
+		if not cam.is_position_behind(T.position):
+			var sp := cam.unproject_position(T.position); var r := clampf(900.0 / maxf(dist, 50.0) + 10.0, 10.0, 34.0)
+			for sg in [Vector2(1, 1), Vector2(-1, 1), Vector2(1, -1), Vector2(-1, -1)]:
+				draw_polyline(PackedVector2Array([sp + sg * Vector2(r, r * 0.4), sp + sg * Vector2(r, r), sp + sg * Vector2(r * 0.4, r)]), col, 2.0)
+			_txt(sp + Vector2(-40, r + 22), "%d m" % int(dist), 16, col, HORIZONTAL_ALIGNMENT_CENTER, 80.0)
+		else:  # خلفك: سهم على الحافة
+			var loc := cam.global_transform.affine_inverse() * T.position; var ang := atan2(loc.x, -loc.y * 0.0 + 0.0001) if false else atan2(loc.x, maxf(0.01, absf(loc.y) + 0.01))
+			var ctr := s * 0.5; var dir2 := Vector2(loc.x, -loc.y).normalized() if Vector2(loc.x, -loc.y).length() > 0.01 else Vector2(0, 1)
+			var ep := ctr + dir2 * minf(s.x, s.y) * 0.42
+			draw_colored_polygon(PackedVector2Array([ep + dir2 * 14.0, ep + dir2.rotated(2.4) * 12.0, ep + dir2.rotated(-2.4) * 12.0]), col)
+	# أدوات الطيران: سرعة، ارتفاع، دفع، صحة، ذخيرة
+	var spd := J.speed() * 3.6
+	_txt(Vector2(24, s.y - 160), "%d km/h" % int(spd), 24, g)
+	_txt(Vector2(24, s.y - 132), "ALT %d m" % int(J.position.y), 22, g)
+	draw_rect(Rect2(24, s.y - 104, 160, 12), Color(0, 0, 0, 0.5)); draw_rect(Rect2(26, s.y - 102, 156.0 * J.th, 8), Color(1, 0.7, 0.2) if J.ab < 0.3 else Color(1, 0.35, 0.15))
+	_txt(Vector2(192, s.y - 108), "THR %d%%" % int(J.th * 100.0), 16, Color.WHITE)
+	var hpk := clampf(J.hp / 300.0, 0.0, 1.0)
+	draw_rect(Rect2(24, s.y - 86, 160, 12), Color(0, 0, 0, 0.5)); draw_rect(Rect2(26, s.y - 84, 156.0 * hpk, 8), Color(0.3, 0.85, 0.35) if hpk > 0.35 else Color(0.9, 0.25, 0.2))
+	_txt(Vector2(192, s.y - 90), "HP", 16, Color.WHITE)
+	_txt(Vector2(s.x - 340, s.y - 330), "F-35", 20, Color(0.7, 0.85, 1.0), HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
+	_txt(Vector2(s.x - 340, s.y - 304), "GUN %d" % J.gun, 28, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
+	if J.gnd: _txt(Vector2(s.x * 0.5 - 300, s.y * 0.72), Settings.t("على المدرج — ارفع الدفع THR+ ثم اسحب للأعلى"), 22, Color(1, 0.9, 0.4), HORIZONTAL_ALIGNMENT_CENTER, 600.0)
+	elif J.stall and J.speed() < 60.0: _txt(Vector2(s.x * 0.5 - 200, s.y * 0.2), "STALL", 34, Color(1, 0.3, 0.2), HORIZONTAL_ALIGNMENT_CENTER, 400.0)
+	if not J.gnd and J.vel.y < 0.0 and J.position.y < -J.vel.y * 6.0 + 40.0: _txt(Vector2(s.x * 0.5 - 200, s.y * 0.26), "PULL UP", 34, Color(1, 0.2, 0.15, 0.6 + 0.4 * sin(Time.get_ticks_msec() * 0.02)), HORIZONTAL_ALIGNMENT_CENTER, 400.0)
+
 func _draw() -> void:
 	if game == null or game.state != "play" or game.player == null: return
 	var p: Fighter = game.player
@@ -186,7 +241,7 @@ func _draw() -> void:
 		draw_line(Vector2(cx - rr, cy), Vector2(cx - 8, cy), Color(0, 0, 0, 0.9), 1.5); draw_line(Vector2(cx + 8, cy), Vector2(cx + rr, cy), Color(0, 0, 0, 0.9), 1.5)
 		draw_line(Vector2(cx, cy - rr), Vector2(cx, cy - 8), Color(0, 0, 0, 0.9), 1.5); draw_line(Vector2(cx, cy + 8), Vector2(cx, cy + rr), Color(0, 0, 0, 0.9), 1.5)
 		draw_circle(Vector2(cx, cy), 2.0, Color(1, 0.15, 0.15))
-	elif p.alive:
+	elif p.alive and p.jet == null:
 		var g := 6.0 + p.recoil * 10.0
 		var cc := Color(1, 1, 1, 0.9)
 		draw_line(Vector2(cx - g - 9, cy), Vector2(cx - g, cy), cc, 2.0); draw_line(Vector2(cx + g, cy), Vector2(cx + g + 9, cy), cc, 2.0)
@@ -200,7 +255,8 @@ func _draw() -> void:
 	var hp := clampf(p.hp / 100.0, 0.0, 1.0)
 	draw_rect(Rect2(24, s.y - 56, 260, 20), Color(0, 0, 0, 0.5)); draw_rect(Rect2(26, s.y - 54, 256.0 * hp, 16), Color(0.3, 0.85, 0.35) if hp > 0.35 else Color(0.9, 0.25, 0.2))
 	_txt(Vector2(292, s.y - 40), str(int(maxf(p.hp, 0.0))), 22, Color.WHITE)
-	if p.veh != null:
+	if p.jet != null: _hud_jet(p as Player, s)
+	elif p.veh != null:
 		var vv: Vehicle = p.veh as Vehicle
 		var vp := clampf(vv.hp / float(vv.P["hp"]), 0.0, 1.0)
 		draw_rect(Rect2(24, s.y - 90, 260, 14), Color(0, 0, 0, 0.5)); draw_rect(Rect2(26, s.y - 88, 256.0 * vp, 10), Color(0.95, 0.75, 0.2) if vp > 0.35 else Color(0.9, 0.25, 0.2))
@@ -248,7 +304,7 @@ func _draw() -> void:
 		_txt(sp + Vector2(-40, -12), f.fname, 14, Color(0.6, 0.85, 1.0), HORIZONTAL_ALIGNMENT_CENTER, 80.0)
 	# ---- أزرار اللمس ----
 	if DisplayServer.is_touchscreen_available() or game.show_touch:
-		var names := {"fire": "🔥", "jump": "⤒", "ads": "◎", "reload": "↻", "sprint": "»", "next": "⇄", "pause": "II", "use": "🚪", "seat": "⇅", "gren": "💣", "c4": "C4", "drone": "🛸", "det": "⚡", "crouch": "⤓"}
+		var names := {"fire": "🔥", "jump": "⤒", "ads": "◎", "reload": "↻", "sprint": "»", "next": "⇄", "pause": "II", "use": "🚪", "seat": "⇅", "gren": "💣", "c4": "C4", "tup": "THR+", "tdn": "THR-", "drone": "🛸", "det": "⚡", "crouch": "⤓"}
 		for n in BTNS:
 			if not _btn_on(n): continue
 			var b := _btn(n)

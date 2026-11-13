@@ -187,6 +187,7 @@ func _physics_process(dt: float) -> void:
 			if inpd["fire"]: inpd["fire"] = false; _drone_end(40.0, true)
 			elif not drone.step(dt, inpd): _drone_end(20.0, false)
 			else: velocity = Vector3(0, velocity.y - 18.0 * dt, 0); move_and_slide(); return
+	if jet != null: _jet_mode(dt); return
 	if veh != null: _drive_mode(dt); return
 	# ---- نظر ----
 	var look: Vector2 = inp["look"]; inp["look"] = Vector2.ZERO
@@ -309,6 +310,36 @@ func _step_up2(h: Vector3) -> void:
 		var up := global_transform.translated(Vector3(0, 0.55, 0))
 		if not test_move(up, h) and not test_move(global_transform, Vector3(0, 0.55, 0)):
 			global_position.y += 0.55
+
+# ---------------------------------------------------------------- الطيران (خريطة الجو)
+func enter_jet(J: Jet) -> void:
+	if drone != null: _drone_end(10.0, false)
+	jet = J; collision_layer = 0; alive = true; visible = true
+	cam.top_level = true; cam.far = 2500.0; cam.near = 0.3; vm.visible = false; cam.fov = 75.0
+	cam.global_position = J.position - J.fwd() * 14.0 + Vector3(0, 4.0, 0)
+	global_position = J.position; ads = false; game.inp["ads"] = false
+
+func exit_jet(pos: Vector3, yw: float, dead := false) -> void:
+	jet = null; collision_layer = 2
+	cam.top_level = false; cam.far = 400.0; cam.near = 0.03; vm.visible = true; cam.fov = 75.0
+	global_position = pos; velocity = Vector3.ZERO; yaw = yw; pitch = 0.0; rotation = Vector3(0, yw, 0)
+	cam.position = Vector3(0, EYE, 0); cam.rotation = Vector3.ZERO
+	if dead: alive = false
+
+func _jet_mode(dt: float) -> void:
+	var J := jet as Jet
+	if J == null or not is_instance_valid(J) or not J.alive: return
+	var inpj: Dictionary = game.inp
+	var mv: Vector2 = inpj["mv"]; var look: Vector2 = inpj["look"]; inpj["look"] = Vector2.ZERO
+	J.ctl = {"rc": -mv.x, "pc": mv.y, "yc": clampf(look.x * 0.05, -1.0, 1.0),
+		"thd": (1.0 if bool(inpj["tup"]) else 0.0) - (1.0 if bool(inpj["tdn"]) else 0.0), "ab": bool(inpj["ads"]) or bool(inpj["sprint"]), "fire": bool(inpj["fire"])}
+	global_position = J.position
+	# كاميرا مطاردة ناعمة (الأفق ثابت)
+	var f := J.fwd(); var tp := J.position - f * 15.0 + Vector3(0, 4.2, 0) + J.basis.y * 0.8
+	cam.global_position = cam.global_position.lerp(tp, 1.0 - exp(-9.0 * dt))
+	var look_t := J.position + f * 40.0
+	if cam.global_position.distance_to(look_t) > 0.5: cam.look_at(look_t, Vector3.UP.lerp(J.basis.y, 0.35).normalized())
+	cam.fov = lerpf(cam.fov, 72.0 + J.ab * 10.0 + J.speed() * 0.05, minf(1.0, dt * 4.0))
 
 func _drone_end(cd: float, boom: bool) -> void:
 	if drone == null: return

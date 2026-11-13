@@ -12,6 +12,7 @@ var reserve := 120
 var cd := 0.0
 var reload_t := 0.0
 var reveal := 0.0
+var jet: Node = null
 var kills := 0
 var deaths := 0
 var fname := "BOT"
