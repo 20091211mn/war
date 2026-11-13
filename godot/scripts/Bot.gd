@@ -28,6 +28,21 @@ var kick := 0.0
 var run_k := 0.0            # 0..1 شدّة الجري (تنعيم)
 var aim_pitch := 0.0
 var gun_key := -1
+var seat_drop := 0.0
+var veh_goal: Node = null     # مركبة يتجه لركوبها
+var vtarget: Node = null      # مركبة معادية يستهدفها (للقاذف)
+var flee_t := 0.0
+var path := PackedVector3Array()
+var path_i := 0
+var path_t := 0.0
+var path_goal := Vector3.INF
+var last_seen := Vector3.INF     # آخر موضع لعدو رأيته
+var last_seen_t := 0.0
+var hurt_t := 0.0
+var hurt_from := Vector3.ZERO
+var cover_goal := Vector3.INF
+var cover_t := 0.0
+var flee_from := Vector3.ZERO
 # ---- شبكة LAN ----
 var net_ctrl := false       # لاعب بشري (على المضيف) أو دمية (على العميل): لا ذكاء ولا فيزياء، يتبع الحالة المستلمة
 var human := false
@@ -139,6 +154,7 @@ func _animate(dt: float, spd: float, firing: bool) -> void:
 	model.rotation.x = -0.12 * k
 	model.position.y = absf(sin(walk_ph)) * 0.07 * k
 	torso.rotation.y = sin(walk_ph) * 0.07 * k
+	model.position.y -= seat_drop
 	kick = maxf(0.0, kick - dt * 9.0)
 	gunn.position = Vector3(0.13, 0.42 + sin(walk_ph * 2.0) * 0.012 * k, -0.4 + kick * 0.05)
 	gunn.rotation.x = aim_pitch + kick * 0.05 + 0.12 * k
@@ -150,27 +166,56 @@ func _physics_process(dt: float) -> void:
 	if net_ctrl: _puppet(dt); return
 	super._physics_process(dt)
 	if not alive: return
-	think -= dt; strafe_t -= dt
+	if veh != null: _seated(dt); return
+	think -= dt; strafe_t -= dt; flee_t = maxf(0.0, flee_t - dt); hurt_t = maxf(0.0, hurt_t - dt); cover_t = maxf(0.0, cover_t - dt); last_seen_t = maxf(0.0, last_seen_t - dt)
 	if think <= 0.0:
-		think = randf_range(0.25, 0.5); _pick_target()
+		think = randf_range(0.25, 0.5); _pick_target(); _consider_vehicle(); _vehicle_threat()
 	var mv := Vector3.ZERO
 	var aim := Vector3.ZERO
 	var see := false
-	if target != null and target.alive:
-		var to := target.global_position - global_position; to.y = 0.0
+	var tpos := Vector3.ZERO; var has_t := false; var aimp := Vector3.ZERO
+	if target != null and target.alive: has_t = true; tpos = target.global_position; aimp = target.eye_pos()
+	elif vtarget != null and is_instance_valid(vtarget) and not (vtarget as Vehicle).dead: has_t = true; tpos = vtarget.global_position; aimp = tpos + Vector3(0, 1.1, 0)
+	if has_t:
+		var to := tpos - global_position; to.y = 0.0
 		var d := to.length()
-		aim = (target.eye_pos() - eye_pos())
-		see = _los(target)
+		aim = aimp - eye_pos()
+		see = _los_pos(aimp)
+		if see: last_seen = tpos; last_seen_t = 8.0
 		yaw = lerp_angle(yaw, atan2(-to.x, -to.z), minf(1.0, dt * 8.0))
 		var want := 14.0 + (hash(fname) % 8)
-		if d > want + 4: mv = to.normalized()
+		if d > want + 4: mv = to.normalized() if see else _goal_dir(tpos, dt)
 		elif d < want - 6: mv = -to.normalized()
 		if strafe_t <= 0.0: strafe = -strafe; strafe_t = randf_range(0.8, 2.2)
-		mv += Vector3(-to.z, 0, to.x).normalized() * strafe * 0.7
+		mv += Vector3(-to.z, 0, to.x).normalized() * strafe * (0.7 if see else 0.2)
+	elif last_seen_t > 0.0 and last_seen != Vector3.INF:   # فقدت العدو: أتحرّى آخر موضع رأيته فيه
+		var to := last_seen - global_position; to.y = 0.0
+		if to.length() < 3.0: last_seen_t = 0.0
+		mv = _goal_dir(last_seen, dt); yaw = lerp_angle(yaw, atan2(-mv.x, -mv.z), minf(1.0, dt * 6.0))
 	else:
 		var to := wander - global_position; to.y = 0.0
-		if to.length() < 3.0: wander = game.random_point(); to = wander - global_position
-		mv = to.normalized(); yaw = lerp_angle(yaw, atan2(-mv.x, -mv.z), minf(1.0, dt * 6.0))
+		if to.length() < 3.0: wander = _next_goal(); to = wander - global_position
+		mv = _goal_dir(wander, dt); yaw = lerp_angle(yaw, atan2(-mv.x, -mv.z), minf(1.0, dt * 6.0))
+	if cover_t > 0.0 and cover_goal != Vector3.INF:   # أنسحب إلى غطاء وأعيد التعبئة
+		var tc := cover_goal - global_position; tc.y = 0.0
+		if tc.length() > 1.5: mv = _goal_dir(cover_goal, dt)
+		else:
+			mv = Vector3.ZERO
+			if ammo < int(weapon()["mag"]): start_reload()
+		if not see: yaw = lerp_angle(yaw, atan2(-mv.x, -mv.z) if mv.length() > 0.1 else yaw, minf(1.0, dt * 6.0))
+	if flee_t > 0.0:   # هروب من مركبة معادية (لا يملك قاذفاً)
+		var away := global_position - flee_from; away.y = 0.0
+		mv = away.normalized() + Vector3(-away.z, 0, away.x).normalized() * strafe * 0.8
+	if veh_goal != null and is_instance_valid(veh_goal):
+		var vg := veh_goal as Vehicle
+		if vg.seat_for(self) < 0: veh_goal = null
+		else:
+			var l := vg.to_local(global_position)
+			var dd := Vector2(maxf(0.0, absf(l.x) - float(vg.P["hw"])), maxf(0.0, absf(l.z) - float(vg.P["hl"]))).length()
+			if dd < 2.2: vg.enter(self, vg.seat_for(self)); veh_goal = null; return
+			mv = _goal_dir(vg.global_position, dt)
+			if not has_t or not see: yaw = lerp_angle(yaw, atan2(-mv.x, -mv.z), minf(1.0, dt * 6.0))
+	else: veh_goal = null
 	mv = _avoid(mv)
 	mv.y = 0.0
 	if mv.length() > 1.0: mv = mv.normalized()
@@ -187,7 +232,7 @@ func _physics_process(dt: float) -> void:
 	var far := global_position.distance_to(camp) > Settings.lod_dist()
 	if gun_key != wi and gunn != null: _build_gun()
 	# إطلاق
-	if see and target != null:
+	if see and has_t:
 		var dd := aim.length()
 		var w := weapon()
 		burst -= dt
@@ -202,8 +247,40 @@ func _physics_process(dt: float) -> void:
 	# تفاصيل حسب الجودة والمسافة
 	for n in far_hide: (n as Node3D).visible = not far
 	if not far:
-		aim_pitch = clampf(asin(clampf(aim.normalized().y, -1.0, 1.0)), -0.6, 0.6) if (see and target != null) else 0.0
+		aim_pitch = clampf(asin(clampf(aim.normalized().y, -1.0, 1.0)), -0.6, 0.6) if (see and has_t) else 0.0
 		_animate(dt, spd, see)
+
+# هدف تجوال ذكي: أحياناً نحو قاعدة العدو (هجوم) أو الوسط أو نقطة عشوائية
+func _next_goal() -> Vector3:
+	var r := randf()
+	var mp: Dictionary = game.maps[game.map_idx]
+	if r < 0.45:
+		var arr: Array = mp["blue"] if team == 0 else mp["red"]
+		var p: Array = arr[randi() % arr.size()]
+		return Vector3(float(p[0]) + randf_range(-8, 8), 0.3, float(p[1]) + randf_range(-8, 8))
+	if r < 0.65: return Vector3(randf_range(-12, 12), 0.3, randf_range(-12, 12))
+	return game.random_point()
+
+func set_seated(on: bool, vt: int, seat: int) -> void:
+	veh_goal = null; target = null; vtarget = null
+	if not on:
+		seat_drop = 0.0; model.position.y = 0.0; model.rotation.x = 0.0
+		for l in legs: (l as Node3D).visible = true
+		visible = alive; return
+	for l in legs: (l as Node3D).visible = false
+	seat_drop = 0.4 if (vt == 0 and seat != 1) else (0.35 if vt == 1 else 0.0)
+	visible = not (vt == 1 and seat == 0)
+	if vt == 0 and seat == 1: for l in legs: (l as Node3D).visible = true
+
+func _seated(dt: float) -> void:
+	if gun_key != wi and gunn != null: _build_gun()
+	var far := global_position.distance_to(game.cam_pos()) > Settings.lod_dist()
+	if far: return
+	aim_pitch = 0.0
+	var gv := veh as Vehicle
+	if gv.gunner == self: aim_pitch = gv.tp
+	_animate(dt, 0.0, false)
+	if gv.gunner == self and gv.vtype == 0: kick = 1.0 if gv.mg_cd > 0.07 else kick
 
 func _pick_target() -> void:
 	var best: Fighter = null; var bd := 1e9
@@ -212,6 +289,82 @@ func _pick_target() -> void:
 		var d := global_position.distance_to(f.global_position)
 		if d < bd and d < 70.0 and _los(f): best = f; bd = d
 	target = best
+	vtarget = null
+	if String(weapon()["kind"]) == "launcher":
+		var vb := 70.0
+		for v in game.vehicles:
+			if not is_instance_valid(v) or v.dead or v.team < 0 or v.team == team or v.occupant_count() == 0: continue
+			var dv: float = global_position.distance_to(v.global_position)
+			if dv < vb and _los_pos(v.global_position + Vector3(0, 1.1, 0)): vtarget = v; vb = dv
+
+# اتجاه الحركة نحو هدف: عبر NavMesh إن جاهزة (يلتف حول المباني) وإلا خط مستقيم
+func _goal_dir(goal: Vector3, dt: float) -> Vector3:
+	var flat := goal - global_position; flat.y = 0.0
+	if not game.nav_ready or flat.length() < 2.0: return flat.normalized()
+	path_t -= dt
+	if path_t <= 0.0 or path_goal.distance_to(goal) > 4.0:
+		path_t = randf_range(0.5, 0.9); path_goal = goal
+		path = NavigationServer3D.map_get_path(game.nav_map, global_position, goal, true); path_i = 1
+	while path_i < path.size() - 1 and Vector2(path[path_i].x - global_position.x, path[path_i].z - global_position.z).length() < 1.1: path_i += 1
+	if path_i < path.size():
+		var d := path[path_i] - global_position; d.y = 0.0
+		if d.length() > 0.05: return d.normalized()
+	return flat.normalized()
+
+# أقرب نقطة غطاء: لا يراها المهاجم (حاجز بينهما) وقريبة من موقعي
+func _find_cover(threat: Vector3) -> Vector3:
+	var best := Vector3.INF; var bd := 1e9
+	var space := get_world_3d().direct_space_state
+	for i in 14:
+		var a := TAU * i / 14.0 + randf() * 0.3; var r := randf_range(4.0, 11.0)
+		var p := global_position + Vector3(cos(a) * r, 0.0, sin(a) * r)
+		p.x = clampf(p.x, -game.map_w * 0.5 + 2.0, game.map_w * 0.5 - 2.0); p.z = clampf(p.z, -game.map_d * 0.5 + 2.0, game.map_d * 0.5 - 2.0)
+		if game.nav_ready:
+			p = NavigationServer3D.map_get_closest_point(game.nav_map, p)
+			if Vector2(p.x - global_position.x, p.z - global_position.z).length() > 14.0: continue
+		var q := PhysicsRayQueryParameters3D.create(threat + Vector3(0, 1.5, 0), p + Vector3(0, 1.4, 0), 1)
+		if space.intersect_ray(q).is_empty(): continue     # مكشوف
+		var d := global_position.distance_to(p)
+		if d < bd: bd = d; best = p
+	return best
+
+func take_damage(d: float, src: Fighter, head: bool) -> void:
+	var was := alive
+	super.take_damage(d, src, head)
+	if was and alive and src != null and src != self and not net_ctrl:
+		hurt_t = 3.0; hurt_from = src.global_position; last_seen = src.global_position; last_seen_t = 8.0
+		if hp < 45.0 and cover_t <= 0.0 and veh == null:
+			var c := _find_cover(hurt_from)
+			if c != Vector3.INF: cover_goal = c; cover_t = randf_range(3.0, 5.0)
+
+func _los_pos(p: Vector3) -> bool:
+	var q := PhysicsRayQueryParameters3D.create(eye_pos(), p - Vector3(0, 0.3, 0), 1)
+	return get_world_3d().direct_space_state.intersect_ray(q).is_empty()
+
+func _consider_vehicle() -> void:
+	if veh != null or game.vehicles.is_empty(): return
+	if veh_goal != null and is_instance_valid(veh_goal) and (veh_goal as Vehicle).seat_for(self) >= 0: return
+	veh_goal = null
+	if hash(fname) % 5 == 0 or hp < 40.0: return    # بعضهم يفضّل المشي
+	var best: Vehicle = null; var bd := 55.0
+	for v in game.vehicles:
+		if not is_instance_valid(v): continue
+		var s: int = v.seat_for(self)
+		if s < 0 or s > 1: continue
+		if s == 1 and not (v.driver is Bot or v.driver == game.player): continue
+		var d: float = global_position.distance_to(v.global_position)
+		if d < bd: best = v; bd = d
+	veh_goal = best
+
+# مركبة معادية مأهولة قريبة ومرئية وأنا بلا قاذف → أتراجع وأتفادى خط النار
+func _vehicle_threat() -> void:
+	if String(weapon()["kind"]) == "launcher": return
+	for v in game.vehicles:
+		if not is_instance_valid(v) or v.dead or v.team < 0 or v.team == team or v.occupant_count() == 0: continue
+		if v.vtype == 0 and v.gunner == null and absf(v.speed) < 6.0: continue
+		var d: float = global_position.distance_to(v.global_position)
+		if d < (50.0 if v.vtype == 1 else 30.0) and _los_pos(v.global_position + Vector3(0, 1.2, 0)):
+			flee_t = 1.4; flee_from = v.global_position; return
 
 func _los(f: Fighter) -> bool:
 	var q := PhysicsRayQueryParameters3D.create(eye_pos(), f.eye_pos() - Vector3(0, 0.3, 0), 1)
@@ -238,5 +391,6 @@ func _step_up(h: Vector3) -> void:
 			global_position.y += 0.55
 
 func respawn(p: Vector3) -> void:
+	if veh != null: (veh as Vehicle).leave(self)
 	global_position = p; velocity = Vector3.ZERO; hp = 100.0; alive = true; visible = true; spawn_prot = 2.0; target = null; spawn_seq += 1
-	setup_weapon(game.random_weapon()); wander = game.random_point()
+	setup_weapon(8 if (not game.vehicles.is_empty() and randf() < 0.16) else game.random_weapon()); wander = game.random_point(); veh_goal = null; vtarget = null; flee_t = 0.0

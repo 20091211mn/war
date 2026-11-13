@@ -16,6 +16,8 @@ var deaths := 0
 var fname := "BOT"
 var recoil := 0.0
 var spawn_prot := 0.0
+var veh: Node = null   # المركبة التي أركبها
+var veh_seat := 0
 var spawn_seq := 0   # يزيد مع كل ولادة (لمزامنة إعادة الظهور عبر الشبكة)
 const EYE := 1.62
 
@@ -72,5 +74,6 @@ func take_damage(d: float, src: Fighter, head: bool) -> void:
 	if self == game.player: game.hud.flash_damage()
 	if hp <= 0.0:
 		alive = false; deaths += 1
+		if veh != null: (veh as Vehicle).leave(self)
 		if src != null and src != self: src.kills += 1
 		game.on_kill(src, self, head)

@@ -15,6 +15,7 @@ var gun_parts: Node3D
 var sway := Vector2.ZERO
 var draw_t := 0.0
 var flash: Node3D
+var chase_idle := 0.0
 var mag: MeshInstance3D
 var bolt: MeshInstance3D
 var lh: Node3D            # اليد اليسرى (تتحرك أثناء التعبئة)
@@ -158,6 +159,9 @@ func _physics_process(dt: float) -> void:
 	if not alive:
 		cam.position.y = lerpf(cam.position.y, 0.3, dt * 4.0); return
 	var inp: Dictionary = game.inp
+	if inp["use"]: inp["use"] = false; game.try_use(self)
+	if inp["seat"]: inp["seat"] = false; if veh != null: (veh as Vehicle).switch_seat(self)
+	if veh != null: _drive_mode(dt); return
 	# ---- نظر ----
 	var look: Vector2 = inp["look"]; inp["look"] = Vector2.ZERO
 	var sens := 0.0042 * (0.5 if ads and float(weapon()["zoom"]) >= 2.0 else 1.0)
@@ -224,6 +228,42 @@ func _physics_process(dt: float) -> void:
 			kick = 1.0; fire_hold = 0.35; pitch += float(w["recoilV"]) * (1.0 if ads else 1.3) * 1.5; yaw += randf_range(-1, 1) * float(w["recoilH"]) * 1.5
 			game.hud.fire_flash(); game.eject_shell(gun_parts.to_global(ej_pt), gun_parts.global_transform.basis)
 		if not bool(w["auto"]): inp["fire"] = false
+
+func on_enter_vehicle(v: Vehicle) -> void:
+	ads = false; sprinting = false; kick = 0.0
+	gun_parts.visible = false; arm_r.visible = false; arm_l.visible = false
+	yaw = v.h; pitch = -0.2; chase_idle = 0.0; game.inp["fire"] = false
+
+func on_exit_vehicle() -> void:
+	cam.position = Vector3(0, EYE, 0); cam.rotation = Vector3(pitch, 0, 0); rotation.y = yaw; cam.fov = 75.0
+	gun_parts.visible = true; arm_r.visible = true; arm_l.visible = true; pitch = 0.0; velocity = Vector3.ZERO
+	game.inp["fire"] = false
+
+# قيادة/رماية من مركبة: كاميرا خلفية (أو من فوق الرشاش) وتحكّم بالنظر فقط؛ الحركة والإطلاق تتولاها المركبة
+func _drive_mode(dt: float) -> void:
+	var inp: Dictionary = game.inp
+	var v: Vehicle = veh as Vehicle
+	var look: Vector2 = inp["look"]; inp["look"] = Vector2.ZERO
+	var sens := 0.0042
+	yaw -= look.x * sens; pitch -= look.y * sens
+	var fp := v.vtype == 0 and veh_seat == 1
+	chase_idle = 0.0 if look.length() > 0.5 else chase_idle + dt
+	if v.vtype == 0 and veh_seat == 0 and chase_idle > 1.2:
+		yaw = lerp_angle(yaw, v.h, minf(1.0, dt * 1.6)); pitch = lerpf(pitch, -0.2, minf(1.0, dt * 1.6))
+	pitch = clampf(pitch, -0.5, 0.9) if fp else clampf(pitch, -1.0, 0.55)
+	var b := Basis.from_euler(Vector3(pitch, yaw, 0))
+	var pos: Vector3
+	if fp:
+		pos = v.mg_yaw.global_position + Vector3(0, 0.55, 0) + b * Vector3(0, 0, 1.1)
+	else:
+		var pivot: Vector3 = v.global_position + Vector3(0, 2.1 if v.vtype == 0 else 2.8, 0)
+		var want: Vector3 = pivot + b * Vector3(0, 0, 7.5 if v.vtype == 0 else 10.5)
+		var q := PhysicsRayQueryParameters3D.create(pivot, want, 1, [v.get_rid()])
+		var r := get_world_3d().direct_space_state.intersect_ray(q)
+		pos = want if r.is_empty() else (r["position"] as Vector3) + (pivot - want).normalized() * 0.4
+	cam.global_transform = Transform3D(b, pos)
+	cam.fov = lerpf(cam.fov, 68.0 if v.vtype == 1 and not fp else 75.0, minf(1.0, dt * 6.0))
+	rotation.y = yaw
 
 # موضع الفوهة في العالم (بداية الرصاصة المرئية)
 func muzzle_pos() -> Vector3:

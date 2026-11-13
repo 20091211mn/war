@@ -41,11 +41,20 @@ func _btn(name: String) -> Dictionary:
 		"sprint": return {"c": Vector2(130, s.y - 300), "r": 38.0}
 		"next": return {"c": Vector2(s.x - 360, s.y - 150), "r": 36.0}
 		"pause": return {"c": Vector2(s.x - 50, 50), "r": 30.0}
+		"use": return {"c": Vector2(s.x - 480, s.y - 90), "r": 44.0}
+		"seat": return {"c": Vector2(s.x - 480, s.y - 200), "r": 38.0}
 	return {"c": Vector2.ZERO, "r": 0.0}
-const BTNS := ["fire", "jump", "ads", "reload", "sprint", "next", "pause"]
+const BTNS := ["fire", "jump", "ads", "reload", "sprint", "next", "pause", "use", "seat"]
+
+func _btn_on(n: String) -> bool:
+	if game == null or game.player == null: return n != "use" and n != "seat"
+	if n == "use": return game.player.veh != null or game.near_vehicle(game.player) != null
+	if n == "seat": return game.player.veh != null and (game.player.veh as Vehicle).occupant_count() < 2 and (game.player.veh as Vehicle).vtype >= 0
+	return true
 
 func _hit(p: Vector2) -> String:
 	for n in BTNS:
+		if not _btn_on(n): continue
 		var b := _btn(n)
 		if p.distance_to(b["c"]) <= float(b["r"]) * 1.25: return n
 	return ""
@@ -70,6 +79,8 @@ func _input(ev: InputEvent) -> void:
 					"sprint": inp["sprint"] = not bool(inp["sprint"])
 					"next": inp["next"] = true
 					"pause": game.open_pause()
+					"use": inp["use"] = true
+					"seat": inp["seat"] = true
 		else:
 			if touches.has(t.index):
 				var r: String = touches[t.index]["role"]
@@ -104,6 +115,8 @@ func _input(ev: InputEvent) -> void:
 			KEY_SPACE: if k.pressed: inp["jump"] = true
 			KEY_R: if k.pressed: inp["reload"] = true
 			KEY_Q: if k.pressed: inp["next"] = true
+			KEY_E: if k.pressed: inp["use"] = true
+			KEY_F: if k.pressed: inp["seat"] = true
 			KEY_SHIFT: inp["sprint"] = k.pressed
 			KEY_ESCAPE: if k.pressed: game.open_pause()
 
@@ -127,6 +140,12 @@ func _txt(p: Vector2, s: String, sz: int, col: Color, align := HORIZONTAL_ALIGNM
 	var font := get_theme_default_font()
 	draw_string(font, p + Vector2(1.5, 1.5), s, align, w, sz, Color(0, 0, 0, 0.7))
 	draw_string(font, p, s, align, w, sz, col)
+
+func _hud_weapon(p: Fighter, s: Vector2) -> void:
+	var w := p.weapon()
+	_txt(Vector2(s.x - 340, s.y - 330), Settings.t(w["name"]), 20, Color(0.7, 0.85, 1.0), HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
+	var am := ("%d / %d" % [p.ammo, p.reserve]) if p.reload_t <= 0.0 else Settings.t("جارٍ التعبئة…")
+	_txt(Vector2(s.x - 340, s.y - 304), am, 30, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
 
 func _draw() -> void:
 	if game == null or game.state != "play" or game.player == null: return
@@ -157,10 +176,16 @@ func _draw() -> void:
 	var hp := clampf(p.hp / 100.0, 0.0, 1.0)
 	draw_rect(Rect2(24, s.y - 56, 260, 20), Color(0, 0, 0, 0.5)); draw_rect(Rect2(26, s.y - 54, 256.0 * hp, 16), Color(0.3, 0.85, 0.35) if hp > 0.35 else Color(0.9, 0.25, 0.2))
 	_txt(Vector2(292, s.y - 40), str(int(maxf(p.hp, 0.0))), 22, Color.WHITE)
+	if p.veh != null:
+		var vv: Vehicle = p.veh as Vehicle
+		var vp := clampf(vv.hp / float(vv.P["hp"]), 0.0, 1.0)
+		draw_rect(Rect2(24, s.y - 90, 260, 14), Color(0, 0, 0, 0.5)); draw_rect(Rect2(26, s.y - 88, 256.0 * vp, 10), Color(0.95, 0.75, 0.2) if vp > 0.35 else Color(0.9, 0.25, 0.2))
+		_txt(Vector2(292, s.y - 76), "%d km/h" % int(absf(vv.speed) * 3.6), 20, Color.WHITE)
+		if vv.vtype == 1 and vv.cannon_t > 0.0: draw_rect(Rect2(cx - 40, cy + 40, 80.0 * (1.0 - vv.cannon_t / 2.5), 5), Color(1, 0.8, 0.3, 0.9))
+		_txt(Vector2(s.x - 340, s.y - 330), Settings.t("مركبة") if vv.vtype == 0 else Settings.t("دبابة"), 20, Color(1, 0.85, 0.4), HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
+		_txt(Vector2(s.x - 340, s.y - 304), ("MG" if (vv.vtype == 0 and p.veh_seat == 1) else ("CANNON" if vv.vtype == 1 and (vv.gunner == p or (vv.gunner == null and vv.driver == p)) else "DRIVE")), 28, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
+	else: _hud_weapon(p, s)
 	var w := p.weapon()
-	_txt(Vector2(s.x - 340, s.y - 330), Settings.t(w["name"]), 20, Color(0.7, 0.85, 1.0), HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
-	var am := ("%d / %d" % [p.ammo, p.reserve]) if p.reload_t <= 0.0 else Settings.t("جارٍ التعبئة…")
-	_txt(Vector2(s.x - 340, s.y - 304), am, 30, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
 	# ---- النتيجة والوقت ----
 	_txt(Vector2(cx - 170, 36), "%d" % game.score[0], 30, Color(1, 0.35, 0.35), HORIZONTAL_ALIGNMENT_RIGHT, 100.0)
 	_txt(Vector2(cx - 60, 36), "%d:%02d" % [int(game.time_left if game.time_cap > 0.0 else game.match_t) / 60, int(game.time_left if game.time_cap > 0.0 else game.match_t) % 60], 26, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, 120.0)
@@ -170,6 +195,7 @@ func _draw() -> void:
 	for f in feed: _txt(Vector2(s.x - 360, fy), f[0], 18, Color(1, 1, 1, clampf(f[1], 0, 1)), HORIZONTAL_ALIGNMENT_RIGHT, 300.0); fy += 24
 	if msg_t > 0.0: _txt(Vector2(cx - 300, s.y * 0.3), msg, 30, Color(1, 0.9, 0.4, clampf(msg_t, 0, 1)), HORIZONTAL_ALIGNMENT_CENTER, 600.0)
 	if not p.alive: _txt(Vector2(cx - 300, s.y * 0.5), Settings.t("أُصبت! عودة بعد ") + str(ceili(game.resp_t)), 34, Color(1, 0.4, 0.4), HORIZONTAL_ALIGNMENT_CENTER, 600.0)
+	if p.alive and p.veh == null and game.near_vehicle(p) != null: _txt(Vector2(cx - 200, s.y * 0.66), Settings.t("اضغط للركوب") + "  [E]", 24, Color(1, 0.9, 0.5), HORIZONTAL_ALIGNMENT_CENTER, 400.0)
 	# ---- علامات الحلفاء ----
 	for f in game.fighters:
 		if f == p or not f.alive or f.team != p.team: continue
@@ -180,8 +206,9 @@ func _draw() -> void:
 		_txt(sp + Vector2(-40, -12), f.fname, 14, Color(0.6, 0.85, 1.0), HORIZONTAL_ALIGNMENT_CENTER, 80.0)
 	# ---- أزرار اللمس ----
 	if DisplayServer.is_touchscreen_available() or game.show_touch:
-		var names := {"fire": "🔥", "jump": "⤒", "ads": "◎", "reload": "↻", "sprint": "»", "next": "⇄", "pause": "II"}
+		var names := {"fire": "🔥", "jump": "⤒", "ads": "◎", "reload": "↻", "sprint": "»", "next": "⇄", "pause": "II", "use": "🚪", "seat": "⇅"}
 		for n in BTNS:
+			if not _btn_on(n): continue
 			var b := _btn(n)
 			var on: bool = (n == "ads" and bool(game.inp["ads"])) or (n == "sprint" and bool(game.inp["sprint"]))
 			draw_circle(b["c"], b["r"], Color(1, 1, 1, 0.32 if on else 0.14)); draw_arc(b["c"], b["r"], 0, TAU, 40, Color(1, 1, 1, 0.5), 2.0)

@@ -5,12 +5,15 @@ var data: Dictionary
 var weapons: Array = []
 var maps: Array = []
 var state := "menu"        # menu | play | pause | over
-var inp := {"mv": Vector2.ZERO, "look": Vector2.ZERO, "fire": false, "jump": false, "reload": false, "ads": false, "sprint": false, "next": false}
+var inp := {"mv": Vector2.ZERO, "look": Vector2.ZERO, "fire": false, "jump": false, "reload": false, "ads": false, "sprint": false, "next": false, "use": false, "seat": false}
 var map_idx := 2
 var diff := 1
 var bots_per_team := 5
 var player: Player = null
 var fighters: Array = []
+var vehicles: Array = []
+var nav_map := RID()
+var nav_ready := false
 var hud: Hud
 var world: Node3D
 var map_w := 100.0
@@ -43,6 +46,9 @@ var dbg_wpn := -1
 var dbg_rl := -1.0
 var dbg_ads := false
 var dbg_botcam := false
+var dbg_vehcam := -1
+var veh_test := -1
+var veh_shot := ""
 
 func _ready() -> void:
 	var f := FileAccess.open("res://data/game.json", FileAccess.READ)
@@ -69,6 +75,9 @@ func _ready() -> void:
 		if a.begins_with("--rl="): dbg_rl = float(a.substr(5))
 		if a == "--ads": dbg_ads = true
 		if a == "--botcam": dbg_botcam = true
+		if a.begins_with("--vshot="): veh_shot = a.substr(8)
+		if a.begins_with("--vehtest="): veh_test = int(a.substr(10))
+		if a.begins_with("--vehcam="): dbg_vehcam = int(a.substr(9))
 		if a == "--lanhost": lan_test = "host"
 		if a.begins_with("--lanjoin="): lan_test = "join:" + a.substr(10)
 	if not (selftest or shot_path != ""): _refresh(); _build_preview()
@@ -282,7 +291,7 @@ func open_pause() -> void:
 
 # تفريغ كل المدخلات واللمسات العالقة (عند الإيقاف/نهاية المباراة) كي لا يبقى جويستيك أو إطلاق وهمي
 func _release_inputs() -> void:
-	inp["fire"] = false; inp["mv"] = Vector2.ZERO; inp["look"] = Vector2.ZERO; inp["ads"] = false; inp["sprint"] = false; inp["jump"] = false
+	inp["fire"] = false; inp["mv"] = Vector2.ZERO; inp["look"] = Vector2.ZERO; inp["ads"] = false; inp["sprint"] = false; inp["jump"] = false; inp["use"] = false; inp["seat"] = false
 	hud.reset_touch()
 
 func resume() -> void:
@@ -300,7 +309,7 @@ func start_match() -> void:
 	prev_world = null; prev_cam = null
 	if world != null: world.queue_free()
 	for f in fighters: if is_instance_valid(f): f.queue_free()
-	fighters.clear()
+	fighters.clear(); vehicles.clear()
 	world = Node3D.new(); world.name = "World"; add_child(world)
 	var m: Dictionary = maps[map_idx]
 	map_info = MapBuilder.build(m, world); map_w = m["W"]; map_d = m["D"]
@@ -312,6 +321,8 @@ func start_match() -> void:
 			var b := Bot.new(); b.game = self; b.team = t; b.fname = "BOT%d" % (fighters.size()); b.acc = [0.09, 0.055, 0.03][diff]
 			world.add_child(b); fighters.append(b); b.respawn(spawn_point(t))
 	scenery = Node3D.new(); world.add_child(scenery); build_scenery(); apply_quality()
+	spawn_vehicles(m)
+	nav_ready = false; nav_map = RID(); Nav.bake(self, m, world)
 	menu_root.visible = false; pause_root.visible = false; hud.visible = true; state = "play"
 	hud.say(Settings.t("اختر سلاحك") if false else m["name"])
 
@@ -360,11 +371,13 @@ func switch_weapon(f: Fighter, d: int) -> void:
 	if f is Player: (f as Player).rebuild_viewmodel(); hud.say(Settings.t(f.weapon()["name"]))
 
 # ---------------------------------------------------------------- الإطلاق والضرر
-func hitscan(shooter: Fighter, from: Vector3, dir: Vector3, w: Dictionary) -> void:
+func hitscan(shooter: Fighter, from: Vector3, dir: Vector3, w: Dictionary, muz := Vector3.INF) -> void:
 	if lan.role == 2 and shooter == player: lan.send_fire(from, dir, shooter.wi)   # العميل: المضيف يحسم الضرر
 	if lan.role == 1: lan.send_fx(fighters.find(shooter), from, dir)
 	var to := from + dir * 220.0
-	var q := PhysicsRayQueryParameters3D.create(from, to, 3, [shooter.get_rid()])
+	var ex: Array = [shooter.get_rid()]
+	if shooter.veh != null: ex.append((shooter.veh as Vehicle).hit_body.get_rid()); ex.append(shooter.veh.get_rid())
+	var q := PhysicsRayQueryParameters3D.create(from, to, 7, ex)
 	var r := get_world_3d().direct_space_state.intersect_ray(q)
 	var endp := to
 	if not r.is_empty():
@@ -381,10 +394,15 @@ func hitscan(shooter: Fighter, from: Vector3, dir: Vector3, w: Dictionary) -> vo
 			f.take_damage(float(w["dmg"]) * k * (float(w["head"]) if head else 1.0), shooter, head)
 			if shooter == player: hud.hitmark()
 			elif lan.role == 1 and shooter is Bot and (shooter as Bot).human: lan.send_hit(fighters.find(shooter), head)
+		elif c is StaticBody3D and (c as StaticBody3D).has_meta("veh"):
+			var v: Vehicle = (c as StaticBody3D).get_meta("veh")
+			if v.team < 0 or v.team != shooter.team: v.take_hit(float(w["dmg"]), int(r["shape"]), shooter)
+			_spark(endp)
 		else:
 			_spark(endp)
 	if shooter == player or from.distance_to(cam_pos()) < 60.0:
-		var st: Vector3 = (shooter as Fighter).muzzle_pos() if shooter.has_method("muzzle_pos") else from + dir * 0.8
+		var st: Vector3 = muz
+		if st == Vector3.INF: st = (shooter as Fighter).muzzle_pos() if shooter.has_method("muzzle_pos") else from + dir * 0.8
 		_tracer(st, endp); _bullet(st, endp)
 
 # مؤثرات طلقة لاعب آخر على العميل (رسم فقط بلا ضرر)
@@ -402,12 +420,69 @@ func fx_shot(slot: int, from: Vector3, dir: Vector3) -> void:
 		_tracer(st, endp); _bullet(st, endp)
 
 func _explode(src: Fighter, p: Vector3) -> void:
+	blast(src, p, 5.0, float(weapons[8]["dmg"]), 420.0)
+	fx_blast(p, 0.7)
+
+# انفجار عام: أذى للمقاتلين (بلا أذى للفريق إلا الذات) وللمركبات
+func blast(src: Fighter, p: Vector3, R: float, pd: float, vd: float) -> void:
 	sfx_play("boom", p)
 	for f in fighters:
+		if not is_instance_valid(f) or not f.alive: continue
 		var d: float = f.global_position.distance_to(p)
-		if d < 5.0 and f.team != src.team or f == src and d < 5.0:
-			f.take_damage(float(weapons[8]["dmg"]) * (1.0 - d / 5.0), src, false)
+		if d < R and (f.team != src.team or f == src):
+			f.take_damage(pd * pow(1.0 - d / R, 0.9), src, false)
+	for v in vehicles:
+		if not is_instance_valid(v) or v.dead: continue
+		if v.team >= 0 and v.team == src.team and not (v.driver == src or v.gunner == src): continue
+		var d := maxf(0.0, Vector2(v.global_position.x - p.x, v.global_position.z - p.z).length() - 1.6)
+		if d < R + 1.5: v.take_damage(vd * pow(1.0 - d / (R + 1.5), 1.1), src)
 	_spark(p, 14)
+
+# قذيفة مدفع الدبابة
+func cannon_hit(src: Fighter, p: Vector3, from_v: Vehicle) -> void:
+	blast(src, p, 6.5, 230.0, 420.0)
+	fx_blast(p, 0.9)
+
+# كرة نار + دخان + شظايا + وميض ضوئي
+func fx_blast(p: Vector3, s: float) -> void:
+	if world == null or Settings.quality < 1 and s < 0.9: return
+	var ball := MeshInstance3D.new(); var sm := SphereMesh.new(); sm.radius = 1.0; sm.height = 2.0; sm.radial_segments = 12; sm.rings = 6; ball.mesh = sm
+	var m := StandardMaterial3D.new(); m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; m.albedo_color = Color(1, 0.6, 0.2, 0.9); m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD; ball.material_override = m
+	ball.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; world.add_child(ball); ball.global_position = p; ball.scale = Vector3.ONE * 0.3 * s
+	var tw := create_tween(); tw.set_parallel(true)
+	tw.tween_property(ball, "scale", Vector3.ONE * 3.2 * s, 0.35).set_ease(Tween.EASE_OUT)
+	tw.tween_property(m, "albedo_color:a", 0.0, 0.5)
+	tw.chain().tween_callback(ball.queue_free)
+	if Settings.quality >= 2:
+		var l := OmniLight3D.new(); l.light_color = Color(1, 0.65, 0.3); l.light_energy = 6.0 * s; l.omni_range = 18.0 * s; l.shadow_enabled = false; world.add_child(l); l.global_position = p + Vector3(0, 1.0, 0)
+		var tl := create_tween(); tl.tween_property(l, "light_energy", 0.0, 0.5); tl.tween_callback(l.queue_free)
+	var sp := CPUParticles3D.new(); sp.one_shot = true; sp.emitting = true; sp.amount = int(20 * s * [0.3, 0.6, 1.0, 1.2, 1.5][Settings.quality]) + 4; sp.lifetime = 2.4; sp.explosiveness = 0.9; sp.direction = Vector3.UP; sp.spread = 50.0
+	sp.initial_velocity_min = 2.0 * s; sp.initial_velocity_max = 6.0 * s; sp.gravity = Vector3(0, 0.6, 0); sp.scale_amount_min = 1.2 * s; sp.scale_amount_max = 2.6 * s
+	var qm := QuadMesh.new(); var pm := StandardMaterial3D.new(); pm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; pm.vertex_color_use_as_albedo = true; pm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES; pm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; pm.cull_mode = BaseMaterial3D.CULL_DISABLED; qm.material = pm; sp.mesh = qm
+	var g := Gradient.new(); g.set_color(0, Color(0.25, 0.22, 0.2, 0.85)); g.set_color(1, Color(0.1, 0.1, 0.1, 0.0)); sp.color_ramp = g
+	sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; world.add_child(sp); sp.global_position = p
+	get_tree().create_timer(3.0).timeout.connect(sp.queue_free)
+	if s >= 0.9: _spark(p, 30)
+
+func spawn_vehicles(m: Dictionary) -> void:
+	if lan != null and lan.role != 0: return   # المركبات في اللعب الفردي (LAN لاحقاً)
+	for vd in m["vehicles"]:
+		var v := Vehicle.new(); world.add_child(v); v.setup(self, int(vd[3]), float(vd[0]), float(vd[1]), float(vd[2])); vehicles.append(v)
+
+# ركوب/نزول: أقرب مركبة ضمن 2.8م من الجسم
+func near_vehicle(f: Fighter) -> Vehicle:
+	var best: Vehicle = null; var bd := 2.8
+	for v in vehicles:
+		if not is_instance_valid(v) or v.seat_for(f) < 0: continue
+		var l: Vector3 = v.to_local(f.global_position)
+		var dd := Vector2(maxf(0.0, absf(l.x) - float(v.P["hw"])), maxf(0.0, absf(l.z) - float(v.P["hl"]))).length()
+		if dd < bd and l.y < 2.3: bd = dd; best = v
+	return best
+
+func try_use(f: Fighter) -> void:
+	if f.veh != null: (f.veh as Vehicle).leave(f); return
+	var v := near_vehicle(f)
+	if v != null: v.enter(f, v.seat_for(f))
 
 func _spark(p: Vector3, n := 3) -> void:
 	if Settings.quality < 1: return
@@ -437,7 +512,7 @@ func eject_shell(p: Vector3, bs: Basis) -> void:
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; world.add_child(mi); mi.global_position = p
 	var v := bs.x.normalized() * randf_range(1.6, 2.4) + bs.y.normalized() * randf_range(1.0, 1.8) + bs.z.normalized() * randf_range(0.2, 0.6)
 	var spin := Vector3(randf_range(-9, 9), randf_range(-9, 9), randf_range(-9, 9))
-	var tw := create_tween(); tw.tween_method(func(t: float):
+	var tw := mi.create_tween(); tw.tween_method(func(t: float):
 		if is_instance_valid(mi): mi.global_position = p + v * t + Vector3(0, -4.9 * t * t, 0); mi.rotation = spin * t, 0.0, 0.7, 0.7)
 	tw.tween_callback(mi.queue_free)
 
@@ -588,6 +663,10 @@ func _physics_process(dt: float) -> void:
 			var bt: Fighter = fighters[3]; player.global_position = Vector3(0, 80, 0); player.velocity = Vector3.ZERO
 			var side := bt.global_transform.basis.x * 2.4 + bt.global_transform.basis.z * -1.6 + Vector3(0, 1.3, 0)
 			player.cam.global_position = bt.global_position + side; player.cam.look_at(bt.global_position + Vector3(0, 1.05, 0)); player.gun_parts.visible = false; player.arm_r.visible = false; player.arm_l.visible = false
+		if dbg_vehcam >= 0 and dbg_vehcam < vehicles.size():
+			var vv: Vehicle = vehicles[dbg_vehcam]; player.global_position = Vector3(0, 80, 0); player.velocity = Vector3.ZERO
+			var sd := vv.global_transform.basis.x * 6.5 + vv.global_transform.basis.z * -4.5 + Vector3(0, 2.8, 0)
+			player.cam.global_position = vv.global_position + sd; player.cam.look_at(vv.global_position + Vector3(0, 1.0, 0)); player.gun_parts.visible = false; player.arm_r.visible = false; player.arm_l.visible = false
 		if test_frames == 150:
 			get_viewport().get_texture().get_image().save_png(shot_path); print("SHOT saved"); get_tree().quit(0)
 		return
@@ -602,6 +681,18 @@ func _physics_process(dt: float) -> void:
 			print("LANTEST ", lan_test.get_slice(":", 0), " role=", lan.role, " state=", state, " slot=", lan.my_slot, " humans=", hum, " ", info, " me=", (str(player.global_position.snapped(Vector3(1, 1, 1))) if player != null else "-"), " fighters=", fighters.size(), " score=", score)
 			if test_frames == (500 if lan_test.begins_with("join:") else 1300): get_tree().quit(0)
 		return
+	if veh_test >= 0:
+		test_frames += 1
+		var vv: Vehicle = vehicles[veh_test]
+		if test_frames == 5: player.global_position = vv.to_global(Vector3(-3.5 if vv.vtype == 0 else -3.9, 0.3, 0)); inp["use"] = true
+		if test_frames == 12: print("VT entered=", player.veh != null, " seat=", player.veh_seat if player.veh != null else -1, " team=", vv.team)
+		if test_frames > 20 and test_frames < 220: inp["mv"] = Vector2(0.0, -1.0); inp["look"] = Vector2(0.4, 0) if test_frames > 100 else Vector2.ZERO
+		if test_frames > 150 and test_frames < 215 and vv.vtype == 1: inp["fire"] = true
+		if test_frames == 100: print("VT t=100 speed=", snappedf(vv.speed, 0.1), " pos=", vv.global_position.snapped(Vector3(0.1, 0.1, 0.1)), " cam=", player.cam.global_position.snapped(Vector3(0.1, 0.1, 0.1)))
+		if test_frames == 220: print("VT t=220 speed=", snappedf(vv.speed, 0.1), " pos=", vv.global_position.snapped(Vector3(0.1, 0.1, 0.1)), " hp=", int(vv.hp), " turret=", snappedf(vv.ty, 0.01), " h=", snappedf(vv.h, 0.01)); inp["mv"] = Vector2.ZERO; inp["fire"] = false; inp["use"] = true
+		if test_frames == 240: print("VT exited=", player.veh == null, " pos=", player.global_position.snapped(Vector3(0.1, 0.1, 0.1)), " camY=", player.cam.position.y); get_tree().quit(0)
+		if test_frames == 200 and veh_shot != "": get_viewport().get_texture().get_image().save_png(veh_shot)
+		return
 	if selftest:
 		test_frames += 1
 		inp["fire"] = true; inp["mv"] = Vector2(0, -1); inp["look"] = Vector2(3, 0)
@@ -612,5 +703,10 @@ func _physics_process(dt: float) -> void:
 			var ok2 := state == "play" and not get_tree().paused and score == [0, 0] and not pause_root.visible and fighters.size() == 10
 			print("OVERTEST ", "ok" if (ok1 and ok2) else "FAIL %s %s" % [ok1, ok2])
 		if test_frames == 1800:
+			for v in vehicles: print("VEH type=", v.vtype, " team=", v.team, " driver=", (v.driver.fname if v.driver != null else "-"), " gunner=", (v.gunner.fname if v.gunner != null else "-"), " hp=", int(v.hp), " moved=", snappedf(v.global_position.distance_to(v.home), 0.1), " dead=", v.dead)
+			if nav_ready:
+				var pa := NavigationServer3D.map_get_path(nav_map, Vector3(-60, 0, 0), Vector3(60, 0, 0), true)
+				print("NAV ready path_pts=", pa.size(), " straight=", 120, " len=", snappedf(Vector3(-60, 0, 0).distance_to(pa[0]) if pa.size() > 0 else 0.0, 0.1))
+			else: print("NAV not ready")
 			print("SELFTEST ok map=", maps[map_idx]["name"], " fighters=", fighters.size(), " score=", score, " player_hp=", player.hp, " ammo=", player.ammo)
 			get_tree().quit(0)
