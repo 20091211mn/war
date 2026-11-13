@@ -42,6 +42,7 @@ var test_frames := 0
 var shot_path := ""
 var menu_shot := ""
 var dbg_picker := false
+var thumb_path := ""
 var _mf := 0
 var dbg_wpn := -1
 var dbg_rl := -1.0
@@ -70,6 +71,7 @@ func _ready() -> void:
 		if a.begins_with("--shot="): shot_path = a.substr(7)
 		if a.begins_with("--menushot="): menu_shot = a.substr(11)
 		if a == "--picker": dbg_picker = true
+		if a.begins_with("--thumb="): thumb_path = a.substr(8)
 		if a.begins_with("--quality="): Settings.quality = int(a.substr(10))
 		if a.begins_with("--lang="): Settings.lang = int(a.substr(7))
 		if a.begins_with("--map="): map_idx = int(a.substr(6))
@@ -178,13 +180,17 @@ var _map_picker: Control
 var _map_title: Label
 var _map_meta: Label
 
+func _thumb(i: int, h: float) -> Control:
+	var path := "res://assets/maps/map%d.png" % i
+	var tr := TextureRect.new(); tr.mouse_filter = Control.MOUSE_FILTER_IGNORE; tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE; tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED; tr.custom_minimum_size = Vector2(0, h)
+	if ResourceLoader.exists(path): tr.texture = load(path)
+	return tr
+
 func _map_card(i: int) -> Control:
 	var m: Dictionary = maps[i]; var cols: Array = m["theme"]["cols"]
 	var pc := PanelContainer.new(); pc.custom_minimum_size = Vector2(230, 160); pc.clip_contents = true
 	var vb := VBoxContainer.new(); vb.add_theme_constant_override("separation", 0); pc.add_child(vb)
-	var strip := HBoxContainer.new(); strip.add_theme_constant_override("separation", 0); strip.custom_minimum_size = Vector2(0, 84); vb.add_child(strip)
-	for c in [m["theme"]["ground"], cols[0], cols[1], cols[2]]:
-		var r := ColorRect.new(); r.color = MapBuilder._col(c); r.size_flags_horizontal = Control.SIZE_EXPAND_FILL; r.mouse_filter = Control.MOUSE_FILTER_IGNORE; strip.add_child(r)
+	vb.add_child(_thumb(i, 96))
 	var l := Label.new(); l.name = "nm"; l.add_theme_font_size_override("font_size", 20); l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; l.size_flags_vertical = Control.SIZE_EXPAND_FILL; l.mouse_filter = Control.MOUSE_FILTER_IGNORE; vb.add_child(l)
 	var btn := Button.new(); btn.set_anchors_preset(Control.PRESET_FULL_RECT); btn.focus_mode = Control.FOCUS_NONE; btn.flat = true
@@ -233,7 +239,7 @@ func _build_menu() -> void:
 	_map_lab = Label.new(); _map_lab.add_theme_font_size_override("font_size", 19); _map_lab.add_theme_color_override("font_color", UiTheme.MUTED); panel.add_child(_map_lab)
 	var mc := PanelContainer.new(); mc.custom_minimum_size = Vector2(0, 96); panel.add_child(mc); _map_main = mc
 	var mh := HBoxContainer.new(); mh.add_theme_constant_override("separation", 14); mh.mouse_filter = Control.MOUSE_FILTER_IGNORE; mc.add_child(mh)
-	_map_strip = HBoxContainer.new(); _map_strip.add_theme_constant_override("separation", 0); _map_strip.custom_minimum_size = Vector2(96, 0); _map_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE; mh.add_child(_map_strip)
+	_map_strip = HBoxContainer.new(); _map_strip.add_theme_constant_override("separation", 0); _map_strip.custom_minimum_size = Vector2(160, 0); _map_strip.clip_contents = true; _map_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE; mh.add_child(_map_strip)
 	var tv := VBoxContainer.new(); tv.alignment = BoxContainer.ALIGNMENT_CENTER; tv.size_flags_horizontal = Control.SIZE_EXPAND_FILL; tv.mouse_filter = Control.MOUSE_FILTER_IGNORE; mh.add_child(tv)
 	_map_title = Label.new(); _map_title.add_theme_font_size_override("font_size", 28); _map_title.mouse_filter = Control.MOUSE_FILTER_IGNORE; tv.add_child(_map_title)
 	_map_meta = Label.new(); _map_meta.add_theme_font_size_override("font_size", 17); _map_meta.add_theme_color_override("font_color", UiTheme.MUTED); _map_meta.mouse_filter = Control.MOUSE_FILTER_IGNORE; tv.add_child(_map_meta)
@@ -290,9 +296,7 @@ func _refresh() -> void:
 		_map_meta.text = "%d × %d m" % [int(maps[map_idx]["W"]), int(maps[map_idx]["D"])]
 		_map_main.add_theme_stylebox_override("panel", UiTheme.flat(Color(1, 1, 1, 0.07), 18, UiTheme.BORDER, 1, 10))
 		for c in _map_strip.get_children(): c.queue_free()
-		var mp: Dictionary = maps[map_idx]
-		for cc in [mp["theme"]["ground"], mp["theme"]["cols"][0], mp["theme"]["cols"][1], mp["theme"]["cols"][2]]:
-			var r := ColorRect.new(); r.color = MapBuilder._col(cc); r.size_flags_horizontal = Control.SIZE_EXPAND_FILL; r.mouse_filter = Control.MOUSE_FILTER_IGNORE; _map_strip.add_child(r)
+		var th := _thumb(map_idx, 0); th.size_flags_horizontal = Control.SIZE_EXPAND_FILL; _map_strip.add_child(th)
 	var rtl := Settings.lang == 0
 	ui_root.layout_direction = Control.LAYOUT_DIRECTION_RTL if rtl else Control.LAYOUT_DIRECTION_LTR
 
@@ -687,7 +691,18 @@ func _tree_points(m: Dictionary, nt: int) -> Array:
 
 # ---------------------------------------------------------------- الحلقة
 func _process(dt: float) -> void:
-	if state == "menu" and prev_cam != null: _orbit(Time.get_ticks_msec() / 1000.0)
+	if state == "menu" and prev_cam != null and thumb_path == "": _orbit(Time.get_ticks_msec() / 1000.0)
+	if thumb_path != "":
+		_mf += 1
+		if state == "menu" and _mf == 5:
+			_orbit(14.0 + map_idx * 3.0); ui_root.visible = false
+			for n in prev_world.get_children():
+				if n is WorldEnvironment: (n as WorldEnvironment).environment.fog_enabled = false
+			if map_idx == 0:
+				var mw: float = maps[0]["W"]; var md: float = maps[0]["D"]
+				prev_cam.position = Vector3(-mw * 0.42, 5.2, md * 0.42); prev_cam.fov = 80.0; prev_cam.look_at(Vector3(mw * 0.05, 0.6, -md * 0.05))
+		if _mf == 25:
+			var im := get_viewport().get_texture().get_image(); im.resize(512, 288, Image.INTERPOLATE_LANCZOS); im.save_png(thumb_path); get_tree().quit(0)
 	if menu_shot != "":
 		if dbg_picker and _map_picker != null: _open(_map_picker)
 		_mf += 1
