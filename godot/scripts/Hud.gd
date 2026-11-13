@@ -181,7 +181,75 @@ func _hud_weapon(p: Fighter, s: Vector2) -> void:
 	_txt(Vector2(s.x - 340, s.y - 330), Settings.t(w["name"]), 20, Color(0.7, 0.85, 1.0), HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
 	var am := ("%d / %d" % [p.ammo, p.reserve]) if p.reload_t <= 0.0 else Settings.t("جارٍ التعبئة…")
 	_txt(Vector2(s.x - 340, s.y - 304), am, 30, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
-	if p is Player: _txt(Vector2(s.x - 340, s.y - 362), "💣 %d" % (p as Player).gren, 20, Color(1, 0.85, 0.5), HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
+	if p is Player:
+		var gx := s.x - 28.0; var gy := s.y - 378.0; var gc := Color(1, 0.8, 0.4)
+		_txt(Vector2(gx - 320, gy - 12), "x%d" % (p as Player).gren, 20, gc, HORIZONTAL_ALIGNMENT_RIGHT, 296.0)
+		draw_circle(Vector2(gx - 12, gy + 2), 7.0, gc); draw_rect(Rect2(gx - 15, gy - 9, 6, 4), gc)
+
+const BTN_COL := {"fire": Color(1.0, 0.32, 0.25), "gren": Color(1.0, 0.7, 0.25), "c4": Color(1.0, 0.55, 0.2), "det": Color(1.0, 0.85, 0.25), "drone": Color(0.4, 0.9, 1.0),
+	"use": Color(0.5, 1.0, 0.6), "seat": Color(0.5, 1.0, 0.6), "reload": Color(0.55, 0.8, 1.0), "tup": Color(1.0, 0.75, 0.3), "tdn": Color(0.6, 0.8, 1.0)}
+
+func _pl(pts: Array, col: Color, w := 3.0, closed := false) -> void:
+	var a := PackedVector2Array(pts)
+	if closed: a.append(a[0])
+	draw_polyline(a, col, w, true)
+
+func _btn_draw(n: String, c: Vector2, r: float, on: bool) -> void:
+	var ac: Color = BTN_COL.get(n, Color(0.85, 0.92, 1.0))
+	draw_circle(c + Vector2(0, 3), r + 2.0, Color(0, 0, 0, 0.28))
+	draw_circle(c, r, Color(0.06, 0.09, 0.14, 0.62))
+	draw_circle(c, r * 0.88, Color(ac.r, ac.g, ac.b, 0.34 if on else 0.10))
+	draw_arc(c, r, 0, TAU, 48, Color(ac.r, ac.g, ac.b, 0.95 if on else 0.6), 3.0 if on else 2.2, true)
+	draw_arc(c, r - 4.0, -2.4, -0.7, 16, Color(1, 1, 1, 0.35), 2.0, true)
+	var k := r * 0.42; var col := Color(1, 1, 1, 0.96) if on else Color(ac.lerp(Color.WHITE, 0.55), 0.95); var w := 3.2
+	match n:
+		"fire":
+			draw_arc(c, k * 0.95, 0, TAU, 24, col, w, true); draw_circle(c, k * 0.28, col)
+			for d in [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]: draw_line(c + d * k * 1.15, c + d * k * 1.7, col, w)
+		"jump":
+			_pl([c + Vector2(-k, k * 0.3), c + Vector2(0, -k * 0.5), c + Vector2(k, k * 0.3)], col, w + 0.6); _pl([c + Vector2(-k, k * 1.0), c + Vector2(0, k * 0.2), c + Vector2(k, k * 1.0)], Color(col, 0.55), w)
+		"ads":
+			draw_arc(c, k, 0, TAU, 28, col, w, true); draw_circle(c, 2.5, col)
+			for d in [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]: draw_line(c + d * k * 0.45, c + d * k * 1.5, col, w * 0.8)
+		"reload":
+			draw_arc(c, k, -0.4, 4.6, 28, col, w, true); var e := c + Vector2(cos(-0.4), sin(-0.4)) * k
+			_pl([e + Vector2(-k * 0.1, -k * 0.65), e, e + Vector2(k * 0.7, -k * 0.1)], col, w)
+		"sprint":
+			for o in [-k * 0.55, k * 0.35]: _pl([c + Vector2(o - k * 0.25, -k * 0.9), c + Vector2(o + k * 0.55, 0), c + Vector2(o - k * 0.25, k * 0.9)], col, w + 0.4)
+		"next":
+			_pl([c + Vector2(-k, -k * 0.45), c + Vector2(k, -k * 0.45)], col, w); _pl([c + Vector2(k * 0.4, -k * 0.95), c + Vector2(k, -k * 0.45), c + Vector2(k * 0.4, k * 0.05)], col, w)
+			_pl([c + Vector2(k, k * 0.45), c + Vector2(-k, k * 0.45)], col, w); _pl([c + Vector2(-k * 0.4, -k * 0.05), c + Vector2(-k, k * 0.45), c + Vector2(-k * 0.4, k * 0.95)], col, w)
+		"pause":
+			draw_rect(Rect2(c + Vector2(-k * 0.65, -k * 0.8), Vector2(k * 0.45, k * 1.6)), col); draw_rect(Rect2(c + Vector2(k * 0.2, -k * 0.8), Vector2(k * 0.45, k * 1.6)), col)
+		"use":
+			_pl([c + Vector2(k * 0.2, -k), c + Vector2(k, -k), c + Vector2(k, k), c + Vector2(k * 0.2, k)], col, w)
+			_pl([c + Vector2(-k, 0), c + Vector2(k * 0.5, 0)], col, w); _pl([c + Vector2(-k * 0.1, -k * 0.6), c + Vector2(k * 0.5, 0), c + Vector2(-k * 0.1, k * 0.6)], col, w)
+		"seat":
+			_pl([c + Vector2(-k * 0.6, -k * 0.2), c + Vector2(-k * 0.6, -k), c + Vector2(-k * 1.0, -k * 0.55)], col, w); _pl([c + Vector2(-k * 0.6, -k), c + Vector2(-k * 0.2, -k * 0.55)], col, w)
+			_pl([c + Vector2(k * 0.6, k * 0.2), c + Vector2(k * 0.6, k), c + Vector2(k * 1.0, k * 0.55)], col, w); _pl([c + Vector2(k * 0.6, k), c + Vector2(k * 0.2, k * 0.55)], col, w)
+			_pl([c + Vector2(-k * 0.6, -k * 0.2), c + Vector2(k * 0.6, k * 0.2)], Color(col, 0.5), w)
+		"gren":
+			draw_circle(c + Vector2(0, k * 0.25), k * 0.85, col); draw_rect(Rect2(c + Vector2(-k * 0.28, -k * 0.95), Vector2(k * 0.56, k * 0.4)), col)
+			_pl([c + Vector2(k * 0.28, -k * 0.8), c + Vector2(k * 1.0, -k * 0.5), c + Vector2(k * 1.0, k * 0.1)], col, w)
+			draw_arc(c + Vector2(0, k * 0.25), k * 0.45, 0.4, 1.6, 8, Color(0.06, 0.09, 0.14, 0.8), 2.0)
+		"c4":
+			draw_rect(Rect2(c + Vector2(-k * 1.05, -k * 0.6), Vector2(k * 2.1, k * 1.2)), col, false, w)
+			for i in 3: draw_circle(c + Vector2(-k * 0.55 + i * k * 0.55, 0), k * 0.16, col)
+			draw_circle(c + Vector2(k * 0.85, -k * 0.95), k * 0.14, Color(1, 0.25, 0.2)); _pl([c + Vector2(k * 0.85, -k * 0.8), c + Vector2(k * 0.85, -k * 0.6)], col, 2.0)
+		"det":
+			draw_colored_polygon(PackedVector2Array([c + Vector2(k * 0.25, -k * 1.1), c + Vector2(-k * 0.7, k * 0.15), c + Vector2(-k * 0.05, k * 0.15), c + Vector2(-k * 0.3, k * 1.1), c + Vector2(k * 0.75, -k * 0.2), c + Vector2(k * 0.1, -k * 0.2)]), col)
+		"tup", "tdn":
+			var sg := -1.0 if n == "tup" else 1.0
+			_pl([c + Vector2(-k * 0.85, sg * k * 0.25), c + Vector2(0, -sg * k * 0.55), c + Vector2(k * 0.85, sg * k * 0.25)], col, w + 0.6)
+			for i in 3: draw_line(c + Vector2(-k * 0.55 + i * k * 0.55, sg * k * 0.75), c + Vector2(-k * 0.55 + i * k * 0.55, sg * k * (0.75 + 0.25 * (i + 1))), Color(col, 0.7), w)
+		"drone":
+			draw_line(c + Vector2(-k, -k), c + Vector2(k, k), col, w); draw_line(c + Vector2(k, -k), c + Vector2(-k, k), col, w)
+			for d in [Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1), Vector2(1, 1)]: draw_arc(c + d * k, k * 0.42, 0, TAU, 14, col, 2.4, true)
+			draw_circle(c, k * 0.3, col)
+		"crouch":
+			_pl([c + Vector2(-k, -k * 0.3), c + Vector2(0, k * 0.5), c + Vector2(k, -k * 0.3)], col, w + 0.6); draw_line(c + Vector2(-k, k * 1.0), c + Vector2(k, k * 1.0), Color(col, 0.7), w)
+		_:
+			_txt(c + Vector2(-r, 8), n, 18, col, HORIZONTAL_ALIGNMENT_CENTER, r * 2.0)
 
 func _hud_jet(p: Player, s: Vector2) -> void:
 	var J := p.jet as Jet
@@ -304,12 +372,10 @@ func _draw() -> void:
 		_txt(sp + Vector2(-40, -12), f.fname, 14, Color(0.6, 0.85, 1.0), HORIZONTAL_ALIGNMENT_CENTER, 80.0)
 	# ---- أزرار اللمس ----
 	if DisplayServer.is_touchscreen_available() or game.show_touch:
-		var names := {"fire": "🔥", "jump": "⤒", "ads": "◎", "reload": "↻", "sprint": "»", "next": "⇄", "pause": "II", "use": "🚪", "seat": "⇅", "gren": "💣", "c4": "C4", "tup": "THR+", "tdn": "THR-", "drone": "🛸", "det": "⚡", "crouch": "⤓"}
 		for n in BTNS:
 			if not _btn_on(n): continue
 			var b := _btn(n)
 			var on: bool = (n == "ads" and bool(game.inp["ads"])) or (n == "sprint" and bool(game.inp["sprint"])) or (n == "crouch" and bool(game.inp["crouch"]))
-			draw_circle(b["c"], b["r"], Color(1, 1, 1, 0.32 if on else 0.14)); draw_arc(b["c"], b["r"], 0, TAU, 40, Color(1, 1, 1, 0.5), 2.0)
-			_txt(b["c"] + Vector2(-b["r"], 8), "FIRE" if n == "fire" else names[n], 22 if n != "fire" else 20, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, b["r"] * 2.0)
+			_btn_draw(n, b["c"], b["r"], on)
 		if stick_c != Vector2.ZERO and touches.values().any(func(v): return v["role"] == "stick"):
 			draw_circle(stick_c, 70, Color(1, 1, 1, 0.1)); draw_circle(stick_c + stick * 60.0, 30, Color(1, 1, 1, 0.3))

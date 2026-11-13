@@ -87,6 +87,7 @@ func _ready() -> void:
 		if a.begins_with("--rl="): dbg_rl = float(a.substr(5))
 		if a == "--ads": dbg_ads = true
 		if a == "--botcam": dbg_botcam = true
+		if a == "--touch": show_touch = true
 		if a.begins_with("--vshot="): veh_shot = a.substr(8)
 		if a.begins_with("--vehtest="): veh_test = int(a.substr(10))
 		if a == "--grentest": gren_test = true
@@ -198,7 +199,7 @@ func _thumb(i: int, h: float) -> Control:
 
 func _map_card(i: int) -> Control:
 	var m: Dictionary = maps[i]; var cols: Array = m["theme"]["cols"]
-	var pc := PanelContainer.new(); pc.custom_minimum_size = Vector2(230, 160); pc.clip_contents = true
+	var pc := PanelContainer.new(); pc.custom_minimum_size = Vector2(200, 150); pc.clip_contents = true
 	var vb := VBoxContainer.new(); vb.add_theme_constant_override("separation", 0); pc.add_child(vb)
 	vb.add_child(_thumb(i, 96))
 	var l := Label.new(); l.name = "nm"; l.add_theme_font_size_override("font_size", 20); l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -261,9 +262,9 @@ func _build_menu() -> void:
 	lan.add_menu_buttons(panel)
 	_start_btn = Button.new(); _start_btn.custom_minimum_size = Vector2(0, 88); _start_btn.add_theme_font_size_override("font_size", 34); UiTheme.style_accent(_start_btn); UiTheme.juicy(_start_btn); _start_btn.pressed.connect(start_match); panel.add_child(_start_btn)
 	# ---- شاشة اختيار الخرائط (شبكة بطاقات) + الإعدادات ----
-	var pk := _overlay("اختر الخريطة", 1060)
-	var sc := ScrollContainer.new(); sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED; sc.custom_minimum_size = Vector2(0, 350); pk.add_child(sc)
-	var gr := GridContainer.new(); gr.columns = 4; gr.add_theme_constant_override("h_separation", 14); gr.add_theme_constant_override("v_separation", 14); gr.size_flags_horizontal = Control.SIZE_EXPAND_FILL; sc.add_child(gr)
+	var pk := _overlay("اختر الخريطة", 1180)
+	var sc := ScrollContainer.new(); sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED; sc.custom_minimum_size = Vector2(0, 400); pk.add_child(sc)
+	var gr := GridContainer.new(); gr.columns = 5; gr.add_theme_constant_override("h_separation", 14); gr.add_theme_constant_override("v_separation", 14); gr.size_flags_horizontal = Control.SIZE_EXPAND_FILL; sc.add_child(gr)
 	for i in maps.size():
 		var c := _map_card(i); c.size_flags_horizontal = Control.SIZE_EXPAND_FILL; gr.add_child(c); _map_cards.append(c)
 	_map_picker = pk
