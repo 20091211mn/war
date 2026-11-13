@@ -328,9 +328,24 @@ func _find_cover(threat: Vector3) -> Vector3:
 		if d < bd: bd = d; best = p
 	return best
 
+func play_death(from: Vector3) -> void:
+	collision_layer = 0
+	var away := (global_position - from); away.y = 0.0
+	var loc := global_transform.basis.inverse() * (away.normalized() if away.length() > 0.1 else Vector3.BACK)
+	var tw := create_tween(); tw.set_parallel(true)
+	# يسقط بعيداً عن مصدر الإطلاق: دوران حول المحور الأفقي المتعامد مع الاتجاه
+	var axis := Vector3(loc.z, 0, -loc.x).normalized() if absf(loc.x) + absf(loc.z) > 0.01 else Vector3.RIGHT
+	var tb := model.transform; var tgt := Transform3D(Basis(axis, deg_to_rad(88.0)) * tb.basis, tb.origin + Vector3(loc.x, 0.0, loc.z) * 0.5 + Vector3(0, 0.12, 0))
+	tw.tween_method(func(t: float): model.transform = tb.interpolate_with(tgt, t), 0.0, 1.0, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+
+func _flinch() -> void:
+	if model == null or not alive: return
+	var tw := create_tween(); tw.tween_property(model, "rotation:x", -0.18, 0.05); tw.tween_property(model, "rotation:x", 0.0, 0.18)
+
 func take_damage(d: float, src: Fighter, head: bool) -> void:
 	var was := alive
 	super.take_damage(d, src, head)
+	if was and alive and d > 4.0: _flinch()
 	if was and alive and src != null and src != self and not net_ctrl:
 		hurt_t = 3.0; hurt_from = src.global_position; last_seen = src.global_position; last_seen_t = 8.0
 		if hp < 45.0 and cover_t <= 0.0 and veh == null:
@@ -392,5 +407,7 @@ func _step_up(h: Vector3) -> void:
 
 func respawn(p: Vector3) -> void:
 	if veh != null: (veh as Vehicle).leave(self)
+	if model != null: model.transform = Transform3D.IDENTITY
+	collision_layer = 2 if jet == null else 0
 	global_position = p; velocity = Vector3.ZERO; hp = 100.0; alive = true; visible = true; spawn_prot = 2.0; target = null; spawn_seq += 1
 	setup_weapon(8 if (not game.vehicles.is_empty() and randf() < 0.16) else game.random_weapon()); wander = game.random_point(); veh_goal = null; vtarget = null; flee_t = 0.0

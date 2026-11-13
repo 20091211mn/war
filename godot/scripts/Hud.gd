@@ -181,7 +181,7 @@ func _hud_weapon(p: Fighter, s: Vector2) -> void:
 	_txt(Vector2(s.x - 340, s.y - 330), Settings.t(w["name"]), 20, Color(0.7, 0.85, 1.0), HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
 	var am := ("%d / %d" % [p.ammo, p.reserve]) if p.reload_t <= 0.0 else Settings.t("جارٍ التعبئة…")
 	_txt(Vector2(s.x - 340, s.y - 304), am, 30, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
-	if p is Player: _txt(Vector2(s.x - 340, s.y - 345), "💣 %d" % (p as Player).gren, 20, Color(1, 0.85, 0.5), HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
+	if p is Player: _txt(Vector2(s.x - 340, s.y - 362), "💣 %d" % (p as Player).gren, 20, Color(1, 0.85, 0.5), HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
 
 func _hud_jet(p: Player, s: Vector2) -> void:
 	var J := p.jet as Jet

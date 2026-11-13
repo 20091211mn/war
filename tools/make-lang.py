@@ -1,4 +1,4 @@
-# مصدر الترجمة الوحيد (عربي → إنجليزي/إسبانية). يولّد: native/src/lang_gen.h (C++: PS4/iOS) و native/kotlin/core/.../LangGen.kt (Kotlin)
+# مصدر الترجمة الوحيد (عربي → إنجليزي/إسبانية). يولّد: native/src/lang_gen.h (C++: PS4) و godot/data/lang.json (Godot)
 # التشغيل: python3 tools/make-lang.py
 import json,sys
 E=[
@@ -218,10 +218,5 @@ if __name__=='__main__':
     for a,en,es in out: h.append('{"%s","%s","%s"},'%(cesc(a),cesc(en),cesc(es)))
     h.append('};'); h.append('static const int TR_N=%d;'%len(out))
     open('/home/claude/war/native/src/lang_gen.h','w').write('\n'.join(h)+'\n')
-    k=['// مولَّد من tools/make-lang.py — لا تعدّل يدوياً','package com.warzone.core','','object LangGen {','    @JvmField val TAB: Array<Array<String>> = arrayOf(']
-    def kesc(s): return s.replace('\\','\\\\').replace('"','\\"').replace('$','\\$')
-    for a,en,es in out: k.append('        arrayOf("%s", "%s", "%s"),'%(kesc(a),kesc(en),kesc(es)))
-    k.append('    )'); k.append('}')
-    open('/home/claude/war/native/kotlin/core/src/main/kotlin/com/warzone/core/LangGen.kt','w').write('\n'.join(k)+'\n')
     import json as _j; _j.dump({a:[en,es] for a,en,es in out},open('/home/claude/war/godot/data/lang.json','w',encoding='utf8'),ensure_ascii=False)
     print(len(out),'entries')

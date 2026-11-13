@@ -628,7 +628,8 @@ func on_kill(src: Fighter, victim: Fighter, head: bool) -> void:
 	if lan.role == 1: lan.send_feed("%s  ✕  %s%s" % [kn, victim.fname, "  ★" if head else ""])
 	if victim == player: resp_t = 4.0
 	else:
-		victim.visible = false
+		if victim is Bot and not air: (victim as Bot).play_death(src.global_position if src != null else victim.global_position)
+		get_tree().create_timer(2.2).timeout.connect(func(): if is_instance_valid(victim) and not victim.alive: victim.visible = false)
 		var hum := victim is Bot and (victim as Bot).net_ctrl
 		get_tree().create_timer(4.0 if hum else 3.0).timeout.connect(func():
 			if is_instance_valid(victim) and state != "menu" and not (victim as Bot).off:
@@ -785,6 +786,8 @@ func _physics_process(dt: float) -> void:
 			var vv: Vehicle = vehicles[dbg_vehcam]; player.global_position = Vector3(0, 80, 0); player.velocity = Vector3.ZERO
 			var sd := vv.global_transform.basis.x * 6.5 + vv.global_transform.basis.z * -4.5 + Vector3(0, 2.8, 0)
 			player.cam.global_position = vv.global_position + sd; player.cam.look_at(vv.global_position + Vector3(0, 1.0, 0)); player.gun_parts.visible = false; player.arm_r.visible = false; player.arm_l.visible = false
+		if dbg_botcam and test_frames == 120 and fighters.size() > 3:
+			(fighters[3] as Bot).alive = false; (fighters[3] as Bot).play_death(fighters[3].global_position + Vector3(0, 0, -3))
 		if test_frames == 150:
 			get_viewport().get_texture().get_image().save_png(shot_path); print("SHOT saved"); get_tree().quit(0)
 		return

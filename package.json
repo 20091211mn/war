@@ -1,11 +1,10 @@
 {
   "name": "warzone-native",
   "version": "2.0.0",
-  "description": "Warzone - لعبة تصويب ثلاثية الأبعاد (أحمر ضد أزرق) أصلية: PS4 / iOS / Android (Kotlin)",
+  "description": "Warzone - لعبة تصويب ثلاثية الأبعاد (أحمر ضد أزرق) أصلية: Godot (أندرويد/iOS/سطح المكتب) + PS4",
   "type": "module",
   "scripts": {
-    "export:native": "node tools/export-native.js",
-    "export:kotlin": "node tools/export-kotlin.js"
+    "export:native": "node tools/export-native.js"
   },
   "engines": { "node": ">=18" },
   "license": "MIT"
