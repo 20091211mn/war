@@ -131,6 +131,7 @@ E=[
 ("هبوط","Land","Aterrizar"),
 ("دمّر 30 طائرة معادية بالمدفع","Shoot down 30 enemy jets with the cannon","Derriba 30 aviones enemigos con el cañón"),
 ("ارفع الدفع ثم اسحب الذراع للإقلاع","Raise throttle then pull back to take off","Sube el acelerador y tira para despegar"),
+("الدفع كامل — اسحب العصا للأسفل عند 150 كم/س للإقلاع","Full throttle — pull the stick down at 150 km/h to take off","Empuje máximo — tira de la palanca hacia abajo a 150 km/h para despegar"),
 ("نزلت من الطائرة — لديك RPG","You left the jet — you have an RPG","Bajaste del avión — tienes un RPG"),
 ("قفزت بالمظلة — الطائرة تحلّق بلا طيار","You bailed out — the jet flies on unmanned","Saltaste en paracaídas — el avión vuela sin piloto"),
 ("وصلت طائرة بديلة بجانبك","A replacement jet arrived beside you","Llegó un avión de reemplazo a tu lado"),

@@ -314,7 +314,7 @@ func _step_up2(h: Vector3) -> void:
 # ---------------------------------------------------------------- الطيران (خريطة الجو)
 func enter_jet(J: Jet) -> void:
 	if drone != null: _drone_end(10.0, false)
-	jet = J; collision_layer = 0; alive = true; visible = true
+	jet = J; collision_layer = 0; alive = true; visible = true; jc = Vector2.ZERO
 	cam.top_level = true; cam.far = 2500.0; cam.near = 0.3; vm.visible = false; cam.fov = 75.0
 	cam.global_position = J.position - J.fwd() * 14.0 + Vector3(0, 4.0, 0)
 	global_position = J.position; ads = false; game.inp["ads"] = false
@@ -326,12 +326,18 @@ func exit_jet(pos: Vector3, yw: float, dead := false) -> void:
 	cam.position = Vector3(0, EYE, 0); cam.rotation = Vector3.ZERO
 	if dead: alive = false
 
+var jc := Vector2.ZERO   # عصا الطيران بعد منطقة ميتة ومنحنى وتنعيم
+static func _jcurve(v: float) -> float:
+	var a := maxf(0.0, absf(v) - 0.08) / 0.92
+	return signf(v) * pow(a, 1.6)
+
 func _jet_mode(dt: float) -> void:
 	var J := jet as Jet
 	if J == null or not is_instance_valid(J) or not J.alive: return
 	var inpj: Dictionary = game.inp
 	var mv: Vector2 = inpj["mv"]; var look: Vector2 = inpj["look"]; inpj["look"] = Vector2.ZERO
-	J.ctl = {"rc": -mv.x, "pc": mv.y, "yc": clampf(look.x * 0.05, -1.0, 1.0),
+	jc = jc.lerp(Vector2(_jcurve(mv.x), _jcurve(mv.y)), 1.0 - exp(-9.0 * dt))
+	J.ctl = {"rc": -jc.x, "pc": jc.y, "yc": clampf(look.x * 0.05, -1.0, 1.0),
 		"thd": (1.0 if bool(inpj["tup"]) else 0.0) - (1.0 if bool(inpj["tdn"]) else 0.0), "ab": bool(inpj["ads"]) or bool(inpj["sprint"]), "fire": bool(inpj["fire"])}
 	global_position = J.position
 	# كاميرا مطاردة ناعمة (الأفق ثابت)

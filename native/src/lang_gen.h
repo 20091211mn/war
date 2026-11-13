@@ -125,6 +125,7 @@ static const TrE TR_TAB[]={
 {"تفجير","Detonate","Detonar"},
 {"هبوط","Land","Aterrizar"},
 {"ارفع الدفع ثم اسحب الذراع للإقلاع","Raise throttle then pull back to take off","Sube el acelerador y tira para despegar"},
+{"الدفع كامل — اسحب العصا للأسفل عند 150 كم/س للإقلاع","Full throttle — pull the stick down at 150 km/h to take off","Empuje máximo — tira de la palanca hacia abajo a 150 km/h para despegar"},
 {"نزلت من الطائرة — لديك RPG","You left the jet — you have an RPG","Bajaste del avión — tienes un RPG"},
 {"أسقطت طائرة!","Jet down!","¡Avión derribado!"},
 {"على المدرج — ارفع الدفع THR+ ثم اسحب للأعلى","On runway — raise THR+ then pull up","En pista — sube THR+ y tira hacia arriba"},
@@ -195,4 +196,4 @@ static const TrE TR_TAB[]={
 {"Español","Español","Español"},
 {"تم حفظ الإعدادات","Settings saved","Ajustes guardados"},
 };
-static const int TR_N=192;
+static const int TR_N=193;

@@ -42,7 +42,9 @@ var scenery: Node3D
 var selftest := false
 var gren_test := false
 var air_test := false
+var to_test := false
 var at_j: Jet = null
+var near = null
 var at_f := 0
 var gt_f := 0
 var lan_test := ""
@@ -92,6 +94,7 @@ func _ready() -> void:
 		if a.begins_with("--vehtest="): veh_test = int(a.substr(10))
 		if a == "--grentest": gren_test = true
 		if a == "--airtest": air_test = true
+		if a == "--takeofftest": to_test = true
 		if a.begins_with("--vehcam="): dbg_vehcam = int(a.substr(9))
 		if a == "--lanhost": lan_test = "host"
 		if a.begins_with("--lanjoin="): lan_test = "join:" + a.substr(10)
@@ -803,6 +806,20 @@ func _physics_process(dt: float) -> void:
 			print("LANTEST ", lan_test.get_slice(":", 0), " role=", lan.role, " state=", state, " slot=", lan.my_slot, " humans=", hum, " ", info, " me=", (str(player.global_position.snapped(Vector3(1, 1, 1))) if player != null else "-"), " fighters=", fighters.size(), " score=", score)
 			if test_frames == (500 if lan_test.begins_with("join:") else 1300): get_tree().quit(0)
 		return
+	if to_test and air and player != null:
+		at_f += 1
+		if at_f == 5:
+			var sj: Jet = null
+			for j in jets: if (j as Jet).spare and (j as Jet).team == player.team: sj = j; break
+			if player.jet != null: air_eject(player as Player)
+			player.global_position = sj.position + Vector3(6, 0.2, 0); near = sj
+			air_board(player as Player, sj); at_j = sj
+		if at_f > 5 and is_instance_valid(at_j):
+			inp["tup"] = at_f < 200
+			inp["mv"] = Vector2(0, 1.0 if (at_j.vel.length() > 60.0 and at_j.position.y < 150.0) else 0.0)
+			if at_f % 60 == 0: print("TO f=", at_f, " y=", snappedf(at_j.position.y, 0.1), " v=", snappedf(at_j.vel.length(), 0.1), " th=", snappedf(at_j.th, 0.01), " pitch=", snappedf(at_j.pitch, 0.01), " gnd=", at_j.gnd, " alive=", at_j.alive)
+		if at_f == 1500: get_tree().quit(0)
+		return
 	if air_test and air:
 		at_f += 1
 		if at_f == 1: print("AT start")
@@ -896,8 +913,8 @@ func near_jet(f: Fighter) -> Jet:
 	return best
 
 func air_board(pl: Player, J: Jet) -> void:
-	J.pilot = pl; J.th = 0.0; J.vel = Vector3.ZERO; foot_t = 0.0; pl.enter_jet(J)
-	hud.say(Settings.t("ارفع الدفع ثم اسحب الذراع للإقلاع"))
+	J.pilot = pl; J.th = 1.0; J.vel = Vector3.ZERO; foot_t = 0.0; pl.enter_jet(J)
+	hud.say(Settings.t("الدفع كامل — اسحب العصا للأسفل عند 150 كم/س للإقلاع"))
 
 func air_eject(pl: Player) -> void:
 	var J := pl.jet as Jet; if J == null: return

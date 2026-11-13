@@ -100,8 +100,8 @@ func step(dt: float, rc: float, pc0: float, yc: float, thd: float, aft: bool) ->
 	if gnd:
 		var hs := Vector2(vel.x, vel.z).length(); var ax := thrust * 0.8 - 0.7 - CD0 * hs * hs; hs = maxf(0.0, hs + ax * dt)
 		if th < 0.02: hs = maxf(0.0, hs - 6.0 * dt)
-		yaw -= rc * 0.6 * minf(1.0, hs / 18.0) * dt; roll *= exp(-6.0 * dt)
-		if hs > 55.0 and pc > 0.1: pitch += pc * 0.5 * dt
+		yaw += rc * 0.6 * minf(1.0, hs / 18.0) * dt; roll *= exp(-6.0 * dt)   # rc>0 = يسار (نفس اتجاه الميلان في الجو)
+		if hs > 42.0 and pc > 0.1: pitch += pc * 0.6 * dt
 		else: pitch = maxf(0.0, pitch * exp(-3.0 * dt))
 		pitch = clampf(pitch, 0.0, 0.45)
 		vel.x = -sin(yaw) * hs; vel.z = -cos(yaw) * hs
