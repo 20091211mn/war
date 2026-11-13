@@ -11,6 +11,7 @@ var ammo := 30
 var reserve := 120
 var cd := 0.0
 var reload_t := 0.0
+var reveal := 0.0
 var kills := 0
 var deaths := 0
 var fname := "BOT"
@@ -35,7 +36,7 @@ func eye_pos() -> Vector3:
 
 func _physics_process(dt: float) -> void:
 	cd = maxf(0.0, cd - dt)
-	spawn_prot = maxf(0.0, spawn_prot - dt)
+	spawn_prot = maxf(0.0, spawn_prot - dt); reveal = maxf(0.0, reveal - dt)
 	recoil = maxf(0.0, recoil - dt * 3.0)
 	if reload_t > 0.0:
 		reload_t -= dt

@@ -48,14 +48,16 @@ func _btn(name: String) -> Dictionary:
 		"seat": return {"c": Vector2(s.x - 480, s.y - 200), "r": 38.0}
 		"c4": return {"c": Vector2(s.x - 480, s.y - 310), "r": 34.0}
 		"det": return {"c": Vector2(s.x - 360, s.y - 370), "r": 34.0}
+		"drone": return {"c": Vector2(130, s.y - 500), "r": 34.0}
 		"gren": return {"c": Vector2(s.x - 360, s.y - 260), "r": 36.0}
 		"crouch": return {"c": Vector2(130, s.y - 420), "r": 36.0}
 	return {"c": Vector2.ZERO, "r": 0.0}
-const BTNS := ["fire", "jump", "ads", "reload", "sprint", "next", "pause", "use", "seat", "gren", "crouch", "c4", "det"]
+const BTNS := ["fire", "jump", "ads", "reload", "sprint", "next", "pause", "use", "seat", "gren", "crouch", "c4", "det", "drone"]
 
 func _btn_on(n: String) -> bool:
 	if game == null or game.player == null: return n != "use" and n != "seat"
-	if n == "gren" or n == "crouch" or n == "c4": return game.player.veh == null
+	if n == "drone": return game.player.veh == null
+	if n == "gren" or n == "crouch" or n == "c4": return game.player.veh == null and (game.player as Player).drone == null
 	if n == "det": return game.player.veh == null and (game.player as Player).c4s.size() > 0
 	if n == "use": return game.player.veh != null or game.near_vehicle(game.player) != null
 	if n == "seat": return game.player.veh != null and (game.player.veh as Vehicle).occupant_count() < 2 and (game.player.veh as Vehicle).vtype >= 0
@@ -91,6 +93,7 @@ func _input(ev: InputEvent) -> void:
 					"use": inp["use"] = true
 					"seat": inp["seat"] = true
 					"gren": inp["gren"] = true
+					"drone": inp["drone"] = true
 					"c4": inp["c4"] = true
 					"det": inp["det"] = true
 					"crouch": inp["crouch"] = not bool(inp["crouch"])
@@ -131,6 +134,7 @@ func _input(ev: InputEvent) -> void:
 			KEY_E: if k.pressed: inp["use"] = true
 			KEY_F: if k.pressed: inp["seat"] = true
 			KEY_G: if k.pressed: inp["gren"] = true
+			KEY_V: if k.pressed: inp["drone"] = true
 			KEY_X: if k.pressed: inp["c4"] = true
 			KEY_Z: if k.pressed: inp["det"] = true
 			KEY_C: inp["crouch"] = k.pressed
@@ -213,6 +217,20 @@ func _draw() -> void:
 	# ---- سجل القتل والرسالة ----
 	var fy := 90.0
 	for f in feed: _txt(Vector2(s.x - 360, fy), f[0], 18, Color(1, 1, 1, clampf(f[1], 0, 1)), HORIZONTAL_ALIGNMENT_RIGHT, 300.0); fy += 24
+	# كشف الأعداء (المسيّرة) + شاشة المسيّرة
+	var ac := get_viewport().get_camera_3d()
+	if ac != null:
+		for f in game.fighters:
+			if is_instance_valid(f) and f.alive and f.reveal > 0.0 and f.team != p.team:
+				var wp: Vector3 = f.global_position + Vector3(0, 2.0, 0)
+				if not ac.is_position_behind(wp):
+					var sp := ac.unproject_position(wp); var dpx := 14.0
+					draw_colored_polygon(PackedVector2Array([sp + Vector2(0, dpx), sp + Vector2(-dpx * 0.7, -dpx * 0.4), sp + Vector2(dpx * 0.7, -dpx * 0.4)]), Color(1, 0.15, 0.1, clampf(f.reveal, 0.0, 1.0)))
+	if p is Player and (p as Player).drone != null:
+		var dr: Drone = (p as Player).drone
+		draw_rect(Rect2(Vector2.ZERO, s), Color(0, 0.1, 0.05, 0.12))
+		draw_arc(Vector2(cx, cy), 26.0, 0, TAU, 32, Color(0.3, 1, 0.5, 0.8), 2.0)
+		_txt(Vector2(cx - 300, 40), Settings.t("مسيّرة") + "  %d s   [FIRE] = " % ceili(dr.t) + Settings.t("تفجير") + "   [V] = " + Settings.t("هبوط"), 20, Color(0.4, 1, 0.6), HORIZONTAL_ALIGNMENT_CENTER, 600.0)
 	for h in hits:
 		var rel: Vector3 = (p as Node3D).global_transform.affine_inverse() * (h[0] as Vector3)
 		var ang := atan2(rel.x, -rel.z) - PI * 0.5
@@ -230,7 +248,7 @@ func _draw() -> void:
 		_txt(sp + Vector2(-40, -12), f.fname, 14, Color(0.6, 0.85, 1.0), HORIZONTAL_ALIGNMENT_CENTER, 80.0)
 	# ---- أزرار اللمس ----
 	if DisplayServer.is_touchscreen_available() or game.show_touch:
-		var names := {"fire": "🔥", "jump": "⤒", "ads": "◎", "reload": "↻", "sprint": "»", "next": "⇄", "pause": "II", "use": "🚪", "seat": "⇅", "gren": "💣", "c4": "C4", "det": "⚡", "crouch": "⤓"}
+		var names := {"fire": "🔥", "jump": "⤒", "ads": "◎", "reload": "↻", "sprint": "»", "next": "⇄", "pause": "II", "use": "🚪", "seat": "⇅", "gren": "💣", "c4": "C4", "drone": "🛸", "det": "⚡", "crouch": "⤓"}
 		for n in BTNS:
 			if not _btn_on(n): continue
 			var b := _btn(n)

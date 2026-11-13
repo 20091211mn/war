@@ -5,7 +5,7 @@ var data: Dictionary
 var weapons: Array = []
 var maps: Array = []
 var state := "menu"        # menu | play | pause | over
-var inp := {"mv": Vector2.ZERO, "look": Vector2.ZERO, "fire": false, "jump": false, "reload": false, "ads": false, "sprint": false, "next": false, "use": false, "seat": false, "gren": false, "crouch": false, "c4": false, "det": false}
+var inp := {"mv": Vector2.ZERO, "look": Vector2.ZERO, "fire": false, "jump": false, "reload": false, "ads": false, "sprint": false, "next": false, "use": false, "seat": false, "gren": false, "crouch": false, "c4": false, "det": false, "drone": false}
 var map_idx := 2
 var diff := 1
 var bots_per_team := 5
@@ -347,7 +347,7 @@ func open_pause() -> void:
 
 # تفريغ كل المدخلات واللمسات العالقة (عند الإيقاف/نهاية المباراة) كي لا يبقى جويستيك أو إطلاق وهمي
 func _release_inputs() -> void:
-	inp["fire"] = false; inp["mv"] = Vector2.ZERO; inp["look"] = Vector2.ZERO; inp["ads"] = false; inp["sprint"] = false; inp["jump"] = false; inp["use"] = false; inp["seat"] = false; inp["gren"] = false; inp["crouch"] = false; inp["c4"] = false; inp["det"] = false
+	inp["fire"] = false; inp["mv"] = Vector2.ZERO; inp["look"] = Vector2.ZERO; inp["ads"] = false; inp["sprint"] = false; inp["jump"] = false; inp["use"] = false; inp["seat"] = false; inp["gren"] = false; inp["crouch"] = false; inp["c4"] = false; inp["det"] = false; inp["drone"] = false
 	hud.reset_touch()
 
 func resume() -> void:
@@ -763,10 +763,16 @@ func _physics_process(dt: float) -> void:
 	if gren_test:
 		gt_f += 1
 		var pl := player as Player
+		pl.spawn_prot = 5.0; pl.drone_cd = 0.0 if gt_f < 466 else pl.drone_cd
 		if gt_f >= 400 and gt_f < 460: inp["crouch"] = true
 		if gt_f == 30: inp["gren"] = true
 		if gt_f == 460: print("GT after gren=", pl.gren, " crouch_t=", snappedf(pl.crouch_t, 0.01), " camy=", snappedf(pl.cam.position.y, 0.01), " nodes=", get_tree().get_nodes_in_group("x").size())
-		if gt_f == 461: get_tree().quit(0)
+		if gt_f == 465: inp["drone"] = true
+		if gt_f == 470 or gt_f == 500: print("GT d? ", pl.drone != null, " cd=", pl.drone_cd, " veh=", pl.veh, " t=", (pl.drone.t if pl.drone != null else -1.0), " alive=", pl.alive)
+		if gt_f > 466 and gt_f < 560: inp["mv"] = Vector2(0, -1); inp["fire"] = false
+		if gt_f == 560: print("GT drone=", pl.drone != null, " dpos=", pl.drone.global_position.snapped(Vector3(0.1, 0.1, 0.1)) if pl.drone != null else "-", " cur=", get_viewport().get_camera_3d() == (pl.drone.cam if pl.drone != null else null)); inp["fire"] = true
+		if gt_f == 575: print("GT after boom drone=", pl.drone != null, " cd=", snappedf(pl.drone_cd, 0.1), " cam=", get_viewport().get_camera_3d() == pl.cam)
+		if gt_f == 580: get_tree().quit(0)
 	if veh_test >= 0:
 		test_frames += 1
 		var vv: Vehicle = vehicles[veh_test]
@@ -781,7 +787,7 @@ func _physics_process(dt: float) -> void:
 		return
 	if selftest:
 		test_frames += 1
-		inp["fire"] = true; inp["mv"] = Vector2(0, -1); inp["look"] = Vector2(3, 0)
+		if not (gren_test and gt_f > 460): inp["fire"] = true; inp["mv"] = Vector2(0, -1); inp["look"] = Vector2(3, 0)
 		if test_frames == 20:  # نهاية المباراة ثم "مباراة جديدة": يجب أن تبدأ مباراة نظيفة
 			hud.touches[0] = {"role": "stick", "origin": Vector2.ZERO}; score[0] = score_lim; _end_match()
 			var ok1 := state == "over" and get_tree().paused and hud.touches.is_empty() and _res_btn.text == Settings.t("مباراة جديدة")

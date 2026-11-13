@@ -120,6 +120,10 @@ static const TrE TR_TAB[]={
 {"نسخة Kotlin (OpenGL ES)","Kotlin edition (OpenGL ES)","Edición Kotlin (OpenGL ES)"},
 {"ابدأ اللعب","START GAME","JUGAR"},
 {"اختر الخريطة","Choose map","Elegir mapa"},
+{"المسيّرة تُشحن ","Drone recharging ","Dron recargando "},
+{"مسيّرة","Drone","Dron"},
+{"تفجير","Detonate","Detonar"},
+{"هبوط","Land","Aterrizar"},
 {"تم زرع C4","C4 planted","C4 colocada"},
 {"اقترب من سطح","Get close to a surface","Acércate a una superficie"},
 {"ثلاث قتلات متتالية!","Triple streak!","¡Racha de tres!"},
@@ -157,7 +161,6 @@ static const TrE TR_TAB[]={
 {"مسدس G17","G17 Pistol","Pistola G17"},
 {"ماغنوم .357","Magnum .357","Magnum .357"},
 {"قاذف RPG-7","RPG-7 Launcher","Lanzacohetes RPG-7"},
-{"المسيّرة تُشحن ","Drone recharging ","Dron recargando "},
 {"أسقطت طائرة! ","Jet down! ","¡Avión derribado! "},
 {"سلاح البداية","Starting weapon","Arma inicial"},
 {"قوة الضرر","Damage scale","Daño"},
@@ -188,4 +191,4 @@ static const TrE TR_TAB[]={
 {"Español","Español","Español"},
 {"تم حفظ الإعدادات","Settings saved","Ajustes guardados"},
 };
-static const int TR_N=185;
+static const int TR_N=188;

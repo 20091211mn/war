@@ -33,6 +33,8 @@ var sight_y := 0.09
 var ads_adj := 0.0
 var fire_hold := 0.0
 var gren := 2
+var drone: Drone
+var drone_cd := 0.0
 var c4n := 3
 var c4s: Array = []
 var gren_t := 0.0
@@ -169,6 +171,22 @@ func _physics_process(dt: float) -> void:
 	var inp: Dictionary = game.inp
 	if inp["use"]: inp["use"] = false; game.try_use(self)
 	if inp["seat"]: inp["seat"] = false; if veh != null: (veh as Vehicle).switch_seat(self)
+	drone_cd = maxf(0.0, drone_cd - dt)
+	if inp["drone"]:
+		inp["drone"] = false
+		if drone != null: _drone_end(10.0, false)
+		elif veh == null:
+			if drone_cd > 0.0: game.hud.say(Settings.t("المسيّرة تُشحن ") + str(ceili(drone_cd)))
+			else:
+				drone = Drone.make(game, self, cam.global_position + Vector3(0, 0.6, 0), yaw); drone.pitch = pitch; drone.cam.make_current(); inp["fire"] = false
+				game.sfx_play("reload", global_position)
+	if drone != null:
+		if veh != null: _drone_end(40.0, false)
+		else:
+			var inpd: Dictionary = game.inp
+			if inpd["fire"]: inpd["fire"] = false; _drone_end(40.0, true)
+			elif not drone.step(dt, inpd): _drone_end(20.0, false)
+			else: velocity = Vector3(0, velocity.y - 18.0 * dt, 0); move_and_slide(); return
 	if veh != null: _drive_mode(dt); return
 	# ---- نظر ----
 	var look: Vector2 = inp["look"]; inp["look"] = Vector2.ZERO
@@ -292,6 +310,11 @@ func _step_up2(h: Vector3) -> void:
 		if not test_move(up, h) and not test_move(global_transform, Vector3(0, 0.55, 0)):
 			global_position.y += 0.55
 
+func _drone_end(cd: float, boom: bool) -> void:
+	if drone == null: return
+	if boom: drone.detonate()
+	drone.shut(); drone = null; drone_cd = cd; cam.make_current()
+
 func _c4_clear() -> void:
 	for c in c4s:
 		if is_instance_valid(c): c.queue_free()
@@ -337,6 +360,7 @@ func _grenade(dt: float) -> void:
 			game.sfx_play("reload", global_position)
 
 func respawn(p: Vector3) -> void:
+	if drone != null: _drone_end(10.0, false)
 	c4n = 3; _c4_clear()
 	gren = 2; gren_t = 0.0; crouch_t = 0.0
 	global_position = p; velocity = Vector3.ZERO; hp = 100.0; alive = true; spawn_prot = 2.0; spawn_seq += 1
