@@ -71,7 +71,9 @@ func take_damage(d: float, src: Fighter, head: bool) -> void:
 	if not alive or spawn_prot > 0.0: return
 	if game.lan != null and game.lan.role == 2: return  # العميل لا يطبّق الضرر: المضيف هو الحَكَم
 	hp -= d
-	if self == game.player: game.hud.flash_damage()
+	if self == game.player:
+		game.hud.flash_damage()
+		if src != null and src != self: game.hud.hit_from(src.global_position)
 	if hp <= 0.0:
 		alive = false; deaths += 1
 		if veh != null: (veh as Vehicle).leave(self)

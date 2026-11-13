@@ -5,7 +5,7 @@ var data: Dictionary
 var weapons: Array = []
 var maps: Array = []
 var state := "menu"        # menu | play | pause | over
-var inp := {"mv": Vector2.ZERO, "look": Vector2.ZERO, "fire": false, "jump": false, "reload": false, "ads": false, "sprint": false, "next": false, "use": false, "seat": false}
+var inp := {"mv": Vector2.ZERO, "look": Vector2.ZERO, "fire": false, "jump": false, "reload": false, "ads": false, "sprint": false, "next": false, "use": false, "seat": false, "gren": false, "crouch": false, "c4": false, "det": false}
 var map_idx := 2
 var diff := 1
 var bots_per_team := 5
@@ -37,6 +37,8 @@ var over_label: Label
 var sfx := {}
 var scenery: Node3D
 var selftest := false
+var gren_test := false
+var gt_f := 0
 var lan_test := ""
 var test_frames := 0
 var shot_path := ""
@@ -81,6 +83,7 @@ func _ready() -> void:
 		if a == "--botcam": dbg_botcam = true
 		if a.begins_with("--vshot="): veh_shot = a.substr(8)
 		if a.begins_with("--vehtest="): veh_test = int(a.substr(10))
+		if a == "--grentest": gren_test = true
 		if a.begins_with("--vehcam="): dbg_vehcam = int(a.substr(9))
 		if a == "--lanhost": lan_test = "host"
 		if a.begins_with("--lanjoin="): lan_test = "join:" + a.substr(10)
@@ -344,7 +347,7 @@ func open_pause() -> void:
 
 # تفريغ كل المدخلات واللمسات العالقة (عند الإيقاف/نهاية المباراة) كي لا يبقى جويستيك أو إطلاق وهمي
 func _release_inputs() -> void:
-	inp["fire"] = false; inp["mv"] = Vector2.ZERO; inp["look"] = Vector2.ZERO; inp["ads"] = false; inp["sprint"] = false; inp["jump"] = false; inp["use"] = false; inp["seat"] = false
+	inp["fire"] = false; inp["mv"] = Vector2.ZERO; inp["look"] = Vector2.ZERO; inp["ads"] = false; inp["sprint"] = false; inp["jump"] = false; inp["use"] = false; inp["seat"] = false; inp["gren"] = false; inp["crouch"] = false; inp["c4"] = false; inp["det"] = false
 	hud.reset_touch()
 
 func resume() -> void:
@@ -581,7 +584,18 @@ func on_kill(src: Fighter, victim: Fighter, head: bool) -> void:
 	if src != null and src != victim: score[src.team] += 1
 	var kn := (src.fname if src != null else "-")
 	hud.add_feed("%s  ✕  %s%s" % [kn, victim.fname, "  ★" if head else ""])
-	if src == player: hud.say(Settings.t("تصويبة رأس!") if head else victim.fname)
+	if src != null and src != victim:
+		var ms: int = int(src.get_meta("streak", 0)) + 1; src.set_meta("streak", ms)
+		var lt := Time.get_ticks_msec() / 1000.0; var multi: int = (int(src.get_meta("multi", 0)) + 1) if lt - float(src.get_meta("lastk", -9.0)) < 4.0 else 1
+		src.set_meta("multi", multi); src.set_meta("lastk", lt)
+		if src == player:
+			var sm := {3: "ثلاث قتلات متتالية!", 5: "خمس قتلات - لا يُوقف!", 7: "سلسلة مرعبة x7", 10: "أسطورة! عشر قتلات"}
+			var mm := {2: "قتل مزدوج", 3: "قتل ثلاثي", 4: "قتل رباعي"}
+			if sm.has(ms): hud.say(Settings.t(sm[ms]))
+			elif mm.has(multi): hud.say(Settings.t(mm[multi]))
+			else: hud.say(Settings.t("تصويبة رأس!") if head else victim.fname)
+	victim.set_meta("streak", 0); victim.set_meta("multi", 0)
+	if false: pass
 	if lan.role == 1: lan.send_feed("%s  ✕  %s%s" % [kn, victim.fname, "  ★" if head else ""])
 	if victim == player: resp_t = 4.0
 	else:
@@ -746,6 +760,13 @@ func _physics_process(dt: float) -> void:
 			print("LANTEST ", lan_test.get_slice(":", 0), " role=", lan.role, " state=", state, " slot=", lan.my_slot, " humans=", hum, " ", info, " me=", (str(player.global_position.snapped(Vector3(1, 1, 1))) if player != null else "-"), " fighters=", fighters.size(), " score=", score)
 			if test_frames == (500 if lan_test.begins_with("join:") else 1300): get_tree().quit(0)
 		return
+	if gren_test:
+		gt_f += 1
+		var pl := player as Player
+		if gt_f >= 400 and gt_f < 460: inp["crouch"] = true
+		if gt_f == 30: inp["gren"] = true
+		if gt_f == 460: print("GT after gren=", pl.gren, " crouch_t=", snappedf(pl.crouch_t, 0.01), " camy=", snappedf(pl.cam.position.y, 0.01), " nodes=", get_tree().get_nodes_in_group("x").size())
+		if gt_f == 461: get_tree().quit(0)
 	if veh_test >= 0:
 		test_frames += 1
 		var vv: Vehicle = vehicles[veh_test]

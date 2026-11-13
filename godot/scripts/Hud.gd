@@ -23,7 +23,10 @@ func _ready() -> void:
 func reset_touch() -> void:
 	touches.clear(); stick = Vector2.ZERO; stick_c = Vector2.ZERO
 
+var hits: Array = []
 func flash_damage() -> void: dmg_flash = 1.0
+func hit_from(p: Vector3) -> void:
+	hits.append([p, 1.6]); if hits.size() > 4: hits.pop_front()
 func fire_flash() -> void: muzzle = 0.06
 func hitmark() -> void: hit_mark = 0.25
 func say(s: String) -> void: msg = s; msg_t = 2.5
@@ -43,11 +46,17 @@ func _btn(name: String) -> Dictionary:
 		"pause": return {"c": Vector2(s.x - 50, 50), "r": 30.0}
 		"use": return {"c": Vector2(s.x - 480, s.y - 90), "r": 44.0}
 		"seat": return {"c": Vector2(s.x - 480, s.y - 200), "r": 38.0}
+		"c4": return {"c": Vector2(s.x - 480, s.y - 310), "r": 34.0}
+		"det": return {"c": Vector2(s.x - 360, s.y - 370), "r": 34.0}
+		"gren": return {"c": Vector2(s.x - 360, s.y - 260), "r": 36.0}
+		"crouch": return {"c": Vector2(130, s.y - 420), "r": 36.0}
 	return {"c": Vector2.ZERO, "r": 0.0}
-const BTNS := ["fire", "jump", "ads", "reload", "sprint", "next", "pause", "use", "seat"]
+const BTNS := ["fire", "jump", "ads", "reload", "sprint", "next", "pause", "use", "seat", "gren", "crouch", "c4", "det"]
 
 func _btn_on(n: String) -> bool:
 	if game == null or game.player == null: return n != "use" and n != "seat"
+	if n == "gren" or n == "crouch" or n == "c4": return game.player.veh == null
+	if n == "det": return game.player.veh == null and (game.player as Player).c4s.size() > 0
 	if n == "use": return game.player.veh != null or game.near_vehicle(game.player) != null
 	if n == "seat": return game.player.veh != null and (game.player.veh as Vehicle).occupant_count() < 2 and (game.player.veh as Vehicle).vtype >= 0
 	return true
@@ -81,6 +90,10 @@ func _input(ev: InputEvent) -> void:
 					"pause": game.open_pause()
 					"use": inp["use"] = true
 					"seat": inp["seat"] = true
+					"gren": inp["gren"] = true
+					"c4": inp["c4"] = true
+					"det": inp["det"] = true
+					"crouch": inp["crouch"] = not bool(inp["crouch"])
 		else:
 			if touches.has(t.index):
 				var r: String = touches[t.index]["role"]
@@ -117,6 +130,10 @@ func _input(ev: InputEvent) -> void:
 			KEY_Q: if k.pressed: inp["next"] = true
 			KEY_E: if k.pressed: inp["use"] = true
 			KEY_F: if k.pressed: inp["seat"] = true
+			KEY_G: if k.pressed: inp["gren"] = true
+			KEY_X: if k.pressed: inp["c4"] = true
+			KEY_Z: if k.pressed: inp["det"] = true
+			KEY_C: inp["crouch"] = k.pressed
 			KEY_SHIFT: inp["sprint"] = k.pressed
 			KEY_ESCAPE: if k.pressed: game.open_pause()
 
@@ -132,6 +149,8 @@ func _process(dt: float) -> void:
 				if not DisplayServer.is_touchscreen_available() or kx != 0 or ky != 0: inp["mv"] = Vector2(kx, ky).normalized() if (kx != 0 or ky != 0) else Vector2.ZERO
 	dmg_flash = maxf(0.0, dmg_flash - dt * 1.5); muzzle = maxf(0.0, muzzle - dt); hit_mark = maxf(0.0, hit_mark - dt)
 	msg_t = maxf(0.0, msg_t - dt)
+	for h in hits: h[1] -= dt
+	hits = hits.filter(func(h): return h[1] > 0.0)
 	for f in feed: f[1] -= dt
 	feed = feed.filter(func(f): return f[1] > 0.0)
 	queue_redraw()
@@ -146,6 +165,7 @@ func _hud_weapon(p: Fighter, s: Vector2) -> void:
 	_txt(Vector2(s.x - 340, s.y - 330), Settings.t(w["name"]), 20, Color(0.7, 0.85, 1.0), HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
 	var am := ("%d / %d" % [p.ammo, p.reserve]) if p.reload_t <= 0.0 else Settings.t("جارٍ التعبئة…")
 	_txt(Vector2(s.x - 340, s.y - 304), am, 30, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
+	if p is Player: _txt(Vector2(s.x - 340, s.y - 345), "💣 %d" % (p as Player).gren, 20, Color(1, 0.85, 0.5), HORIZONTAL_ALIGNMENT_RIGHT, 320.0)
 
 func _draw() -> void:
 	if game == null or game.state != "play" or game.player == null: return
@@ -193,6 +213,10 @@ func _draw() -> void:
 	# ---- سجل القتل والرسالة ----
 	var fy := 90.0
 	for f in feed: _txt(Vector2(s.x - 360, fy), f[0], 18, Color(1, 1, 1, clampf(f[1], 0, 1)), HORIZONTAL_ALIGNMENT_RIGHT, 300.0); fy += 24
+	for h in hits:
+		var rel: Vector3 = (p as Node3D).global_transform.affine_inverse() * (h[0] as Vector3)
+		var ang := atan2(rel.x, -rel.z) - PI * 0.5
+		draw_arc(Vector2(cx, cy), 150.0, ang - 0.28, ang + 0.28, 12, Color(1, 0.1, 0.1, clampf(float(h[1]), 0.0, 1.0) * 0.85), 10.0)
 	if msg_t > 0.0: _txt(Vector2(cx - 300, s.y * 0.3), msg, 30, Color(1, 0.9, 0.4, clampf(msg_t, 0, 1)), HORIZONTAL_ALIGNMENT_CENTER, 600.0)
 	if not p.alive: _txt(Vector2(cx - 300, s.y * 0.5), Settings.t("أُصبت! عودة بعد ") + str(ceili(game.resp_t)), 34, Color(1, 0.4, 0.4), HORIZONTAL_ALIGNMENT_CENTER, 600.0)
 	if p.alive and p.veh == null and game.near_vehicle(p) != null: _txt(Vector2(cx - 200, s.y * 0.66), Settings.t("اضغط للركوب") + "  [E]", 24, Color(1, 0.9, 0.5), HORIZONTAL_ALIGNMENT_CENTER, 400.0)
@@ -206,11 +230,11 @@ func _draw() -> void:
 		_txt(sp + Vector2(-40, -12), f.fname, 14, Color(0.6, 0.85, 1.0), HORIZONTAL_ALIGNMENT_CENTER, 80.0)
 	# ---- أزرار اللمس ----
 	if DisplayServer.is_touchscreen_available() or game.show_touch:
-		var names := {"fire": "🔥", "jump": "⤒", "ads": "◎", "reload": "↻", "sprint": "»", "next": "⇄", "pause": "II", "use": "🚪", "seat": "⇅"}
+		var names := {"fire": "🔥", "jump": "⤒", "ads": "◎", "reload": "↻", "sprint": "»", "next": "⇄", "pause": "II", "use": "🚪", "seat": "⇅", "gren": "💣", "c4": "C4", "det": "⚡", "crouch": "⤓"}
 		for n in BTNS:
 			if not _btn_on(n): continue
 			var b := _btn(n)
-			var on: bool = (n == "ads" and bool(game.inp["ads"])) or (n == "sprint" and bool(game.inp["sprint"]))
+			var on: bool = (n == "ads" and bool(game.inp["ads"])) or (n == "sprint" and bool(game.inp["sprint"])) or (n == "crouch" and bool(game.inp["crouch"]))
 			draw_circle(b["c"], b["r"], Color(1, 1, 1, 0.32 if on else 0.14)); draw_arc(b["c"], b["r"], 0, TAU, 40, Color(1, 1, 1, 0.5), 2.0)
 			_txt(b["c"] + Vector2(-b["r"], 8), "FIRE" if n == "fire" else names[n], 22 if n != "fire" else 20, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, b["r"] * 2.0)
 		if stick_c != Vector2.ZERO and touches.values().any(func(v): return v["role"] == "stick"):

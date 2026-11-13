@@ -120,6 +120,15 @@ static const TrE TR_TAB[]={
 {"نسخة Kotlin (OpenGL ES)","Kotlin edition (OpenGL ES)","Edición Kotlin (OpenGL ES)"},
 {"ابدأ اللعب","START GAME","JUGAR"},
 {"اختر الخريطة","Choose map","Elegir mapa"},
+{"تم زرع C4","C4 planted","C4 colocada"},
+{"اقترب من سطح","Get close to a surface","Acércate a una superficie"},
+{"ثلاث قتلات متتالية!","Triple streak!","¡Racha de tres!"},
+{"خمس قتلات - لا يُوقف!","Five kills - unstoppable!","¡Cinco bajas - imparable!"},
+{"سلسلة مرعبة x7","Terrifying streak x7","Racha aterradora x7"},
+{"أسطورة! عشر قتلات","Legend! Ten kills","¡Leyenda! Diez bajas"},
+{"قتل مزدوج","Double kill","Doble baja"},
+{"قتل ثلاثي","Triple kill","Triple baja"},
+{"قتل رباعي","Quad kill","Cuádruple baja"},
 {"الحساسية ","Sensitivity ","Sensibilidad "},
 {"متابعة","Resume","Continuar"},
 {"مباراة جديدة","New match","Nueva partida"},
@@ -179,4 +188,4 @@ static const TrE TR_TAB[]={
 {"Español","Español","Español"},
 {"تم حفظ الإعدادات","Settings saved","Ajustes guardados"},
 };
-static const int TR_N=176;
+static const int TR_N=185;

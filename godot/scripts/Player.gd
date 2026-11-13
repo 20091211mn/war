@@ -32,13 +32,21 @@ var ej_pt := Vector3.ZERO    # فتحة طرد الظرف
 var sight_y := 0.09
 var ads_adj := 0.0
 var fire_hold := 0.0
+var gren := 2
+var c4n := 3
+var c4s: Array = []
+var gren_t := 0.0
+var gren_thrown := true
+var crouch_t := 0.0
+var cshape: CapsuleShape3D
+var cshape_node: CollisionShape3D
 var dbg_rp := -1.0           # للّقطات: تجميد تقدّم التعبئة
 const SHOULDER_R := Vector3(0.52, -0.95, 0.5)
 const SHOULDER_L := Vector3(-0.55, -0.9, 0.45)
 
 func _ready() -> void:
 	collision_layer = 2; collision_mask = 1
-	var cs := CollisionShape3D.new(); var sh := CapsuleShape3D.new(); sh.radius = 0.35; sh.height = 1.75; cs.shape = sh; cs.position = Vector3(0, 0.875, 0); add_child(cs)
+	var cs := CollisionShape3D.new(); var sh := CapsuleShape3D.new(); sh.radius = 0.35; sh.height = 1.75; cs.shape = sh; cs.position = Vector3(0, 0.875, 0); add_child(cs); cshape = sh; cshape_node = cs
 	floor_snap_length = 0.4
 	cam = Camera3D.new(); cam.position = Vector3(0, EYE, 0); cam.fov = 75.0; cam.near = 0.03; cam.far = 400.0; add_child(cam)
 	vm = Node3D.new(); cam.add_child(vm)
@@ -171,7 +179,12 @@ func _physics_process(dt: float) -> void:
 	var mv: Vector2 = inp["mv"]
 	ads = bool(inp["ads"])
 	sprinting = bool(inp["sprint"]) and mv.y < -0.3 and not ads
+	var crouching := bool(inp["crouch"]) and veh == null
+	if crouching: sprinting = false
+	crouch_t = move_toward(crouch_t, 1.0 if crouching else 0.0, dt * 6.0)
+	var hgt := lerpf(1.75, 1.15, crouch_t); cshape.height = hgt; cshape_node.position.y = hgt * 0.5
 	var sp := 7.0 if sprinting else 4.6
+	if crouching: sp *= 0.55
 	if ads: sp *= 0.6
 	var dirv := (global_transform.basis * Vector3(mv.x, 0, mv.y))
 	dirv.y = 0.0
@@ -204,10 +217,11 @@ func _physics_process(dt: float) -> void:
 	lh.position = lh.position.lerp(rpose["lh"], minf(1.0, dt * (30.0 if rp > 0.0 else 12.0)))
 	rh.position = rh_home
 	if flash: flash.visible = kick > 0.8
+	var thr := sin(clampf(1.0 - gren_t / 0.6, 0.0, 1.0) * PI) if gren_t > 0.0 else 0.0
 	var spr_pose := sprinting and fire_hold <= 0.0 and rp <= 0.0
 	var tgt_pos := Vector3(0.0, -sight_y * 0.62 - 0.035 + ads_adj, -0.42) if ads else Vector3(0.2, -0.22, -0.45)
 	if spr_pose: tgt_pos = Vector3(0.14, -0.3, -0.38)
-	tgt_pos += Vector3(-sway.x, sway.y, 0) * (0.3 if ads else 1.0) + Vector3(-0.03 * rl, -0.35 * draw_t + 0.04 * rl, 0.05 * float(rpose["bolt"]) + 0.04 * rl)
+	tgt_pos += Vector3(-sway.x, sway.y, 0) * (0.3 if ads else 1.0) + Vector3(-0.03 * rl, -0.35 * draw_t + 0.04 * rl - 0.45 * thr, 0.05 * float(rpose["bolt"]) + 0.04 * rl)
 	var bobv := Vector3(sin(bob) * 0.006, absf(cos(bob)) * 0.008, 0) * (1.0 if is_on_floor() else 0.0) * clampf(Vector2(velocity.x, velocity.z).length() / 4.6, 0, 1.4)
 	if spr_pose: bobv *= 2.2
 	gun_parts.position = gun_parts.position.lerp(tgt_pos + bobv + Vector3(0, 0, kick * 0.04), minf(1.0, dt * 14.0))
@@ -221,6 +235,8 @@ func _physics_process(dt: float) -> void:
 	var scoped := ads and z >= 3.4
 	gun_parts.visible = not scoped; arm_r.visible = not ads; arm_l.visible = not ads
 	if inp["reload"]: start_reload(); inp["reload"] = false
+	_grenade(dt)
+	cam.position.y = EYE - 0.5 * crouch_t
 	if inp["next"]: game.switch_weapon(self, 1); inp["next"] = false
 	if inp["fire"]:  # الإطلاق مسموح أثناء الجري
 		var w := weapon()
@@ -276,6 +292,52 @@ func _step_up2(h: Vector3) -> void:
 		if not test_move(up, h) and not test_move(global_transform, Vector3(0, 0.55, 0)):
 			global_position.y += 0.55
 
+func _c4_clear() -> void:
+	for c in c4s:
+		if is_instance_valid(c): c.queue_free()
+	c4s.clear()
+
+func _c4(dt: float) -> void:
+	var inp: Dictionary = game.inp
+	if inp["c4"]:
+		inp["c4"] = false
+		if c4n > 0 and gren_t <= 0.0:
+			var o := cam.global_position; var d := -cam.global_transform.basis.z
+			var q := PhysicsRayQueryParameters3D.create(o, o + d * 4.5, 1 | 2 | 4); q.exclude = [get_rid()]
+			var h := get_world_3d().direct_space_state.intersect_ray(q)
+			if not h.is_empty():
+				c4n -= 1; gren_t = 0.45; gren_thrown = true
+				c4s.append(C4.make(game, self, h["position"], h["normal"]))
+				game.hud.say(Settings.t("تم زرع C4"))
+				game.sfx_play("reload", global_position)
+			else: game.hud.say(Settings.t("اقترب من سطح"))
+	if inp["det"]:
+		inp["det"] = false
+		var n := 0
+		for c in c4s:
+			if is_instance_valid(c):
+				n += 1; var pos: Vector3 = (c as C4).global_position
+				get_tree().create_timer(0.12 * n).timeout.connect(func(): game.blast(self, pos, 8.0, 210.0, 380.0); game.fx_blast(pos, 1.3))
+				c.queue_free()
+		c4s.clear()
+
+func _grenade(dt: float) -> void:
+	_c4(dt)
+	var inp: Dictionary = game.inp
+	if inp["gren"]:
+		inp["gren"] = false
+		if gren > 0 and gren_t <= 0.0: gren_t = 0.6; gren_thrown = false
+	if gren_t > 0.0:
+		gren_t -= dt
+		if not gren_thrown and gren_t < 0.3:
+			gren_thrown = true; gren -= 1
+			var d := -cam.global_transform.basis.z
+			var v := (d + Vector3(0, 0.22, 0)).normalized() * 17.0 + Vector3(velocity.x, 0, velocity.z) * 0.5
+			Grenade.make(game, self, cam.global_position + d * 0.5 + Vector3(0, -0.15, 0), v)
+			game.sfx_play("reload", global_position)
+
 func respawn(p: Vector3) -> void:
+	c4n = 3; _c4_clear()
+	gren = 2; gren_t = 0.0; crouch_t = 0.0
 	global_position = p; velocity = Vector3.ZERO; hp = 100.0; alive = true; spawn_prot = 2.0; spawn_seq += 1
 	cam.position.y = EYE; setup_weapon(wi); rebuild_viewmodel()
