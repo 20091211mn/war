@@ -135,6 +135,7 @@ func _ready() -> void:
 		if dbg_ads: inp["ads"] = true
 
 func cam_pos() -> Vector3:
+	if state == "menu" and prev_cam != null and is_instance_valid(prev_cam): return prev_cam.global_position
 	if player != null and player.cam != null: return player.cam.global_position
 	return Vector3.ZERO
 
@@ -272,7 +273,7 @@ func _icon_btn(kind: String, sz: Vector2) -> Button:
 
 func _build_menu() -> void:
 	menu_root = Control.new(); menu_root.name = "Menu"; menu_root.set_anchors_preset(Control.PRESET_FULL_RECT); menu_root.mouse_filter = Control.MOUSE_FILTER_IGNORE; ui_root.add_child(menu_root)
-	_vig = MenuFx.vignette(menu_root); MenuFx.embers(menu_root)
+	MenuFx.grade(menu_root); _vig = MenuFx.vignette(menu_root); MenuFx.embers(menu_root)
 	var mg := MarginContainer.new(); mg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	for k in ["left", "right"]: mg.add_theme_constant_override("margin_" + k, 56)
 	for k in ["top", "bottom"]: mg.add_theme_constant_override("margin_" + k, 34)
@@ -440,13 +441,39 @@ func _build_preview() -> void:
 	MapBuilder.build(m, prev_world)
 	prev_cam = Camera3D.new(); prev_cam.fov = 62.0; prev_cam.far = 600.0; prev_world.add_child(prev_cam); prev_cam.current = true
 	_orbit(0.0)
+	_menu_actors_build()
+
+# جنود حيّون خلف القائمة (دمى شبكية: نفس الموديل والأنيميشن) يتقدّم الفريقان نحو بعضهما
+var _actors: Array = []
+func _menu_actors_build() -> void:
+	_actors.clear()
+	var m: Dictionary = maps[map_idx]; var W := float(m["W"]); var D := float(m["D"])
+	for k in 6:
+		var t := k & 1; var b := Bot.new(); b.game = self; b.team = t; b.fname = "M%d" % k; b.net_ctrl = true; b.alive = true
+		prev_world.add_child(b)
+		var lane := (float(k / 2) - 1.0) * D * 0.09
+		b.set_meta("lane", lane); b.set_meta("ph", k * 1.7); b.set_meta("sx", -1.0 if t == 0 else 1.0); b.set_meta("w", W)
+		b.global_position = Vector3(-b.get_meta("sx") * W * 0.11, 0.3, lane); b.net_pos = b.global_position
+		_actors.append(b)
+
+func _menu_actors_step() -> void:
+	var tt := Time.get_ticks_msec() / 1000.0
+	for a in _actors:
+		var b := a as Bot
+		if b == null or not is_instance_valid(b): continue
+		var sx: float = b.get_meta("sx"); var W: float = b.get_meta("w"); var lane: float = b.get_meta("lane"); var ph: float = b.get_meta("ph")
+		var u := fmod(tt * 0.045 + ph * 0.13, 1.0)             # 0→1 تقدّم من نقطة البدء نحو الوسط ثم يعيد
+		var x := lerpf(-sx * W * 0.11, -sx * W * 0.015, u)
+		var z := lane + sin(tt * 0.7 + ph) * 3.0
+		b.net_pos = Vector3(x, 0.3, z); b.net_yaw = -sx * PI / 2.0   # يتحرك باتجاه sx على المحور x
+		b.net_aim = 0.0
 
 func _orbit(t: float) -> void:
 	if prev_cam == null or not is_instance_valid(prev_cam): return
 	var m: Dictionary = maps[map_idx]; var r := minf(float(m["W"]), float(m["D"])) * 0.32
 	var a := t * 0.12
-	prev_cam.position = Vector3(cos(a) * r, 11.0 + r * 0.18, sin(a) * r)
-	prev_cam.look_at(Vector3(0, 1.5, 0))
+	prev_cam.h_offset = 6.0; prev_cam.position = Vector3(cos(a) * r, 5.0 + r * 0.1, sin(a) * r)
+	prev_cam.look_at(Vector3(0, 1.4, 0))
 
 # حركة كاميرا سينمائية أثناء الافتتاحية: اقتراب منخفض سريع فوق الخريطة
 func _cine(t: float) -> void:
@@ -907,6 +934,7 @@ func _process(dt: float) -> void:
 	if state == "menu" and prev_cam != null and thumb_path == "":
 		if cine_t >= 0.0: cine_t += dt; _cine(cine_t)
 		else: _orbit(Time.get_ticks_msec() / 1000.0)
+		_menu_actors_step()
 		var tt := Time.get_ticks_msec() / 1000.0; var gl := 3.0 + 1.5 * sin(tt * 1.3) + (9.0 if fmod(tt, 7.0) < 0.1 else 0.0)
 		for k in _title_fx.size(): (_title_fx[k] as Label).offset_left = (-gl if k == 0 else gl); (_title_fx[k] as Label).offset_right = (-gl if k == 0 else gl)
 		if dbg_intro_at >= 0.0 and cine_t >= dbg_intro_at: get_viewport().get_texture().get_image().save_png(menu_shot); get_tree().quit(0)
