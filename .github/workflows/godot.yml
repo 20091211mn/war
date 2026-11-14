@@ -50,13 +50,29 @@ jobs:
           EOF
           sed -i 's/^          //' "$F"
           tail -8 "$F"
-      - name: Export Android APK
+      - name: Export Android APKs (debug-signed + release-signed)
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
         run: |
           mkdir -p build
-          godot --headless --path godot --export-debug "Android" ../build/warzone-godot.apk 2>&1 | grep -v "mesh_get_surface_count\|Parameter \"m\" is null" | tail -25
+          # 1) نسخة موقّعة بمفتاح debug
+          godot --headless --path godot --export-debug "Android" ../build/Warzone-godot-debug.apk 2>&1 | grep -v "mesh_get_surface_count\|Parameter \"m\" is null" | tail -15
+          # 2) نسخة release موقّعة بمفتاح الإصدار (سرّ المستودع إن وُجد، وإلا المفتاح الثابت tools/signing)
+          if [ -n "$KS_B64" ]; then echo "$KS_B64" | base64 -d > $HOME/release.jks; PASS="$KS_PASS"; else cp tools/signing/warzone-release.jks $HOME/release.jks; PASS=warzone2026; fi
+          export GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$HOME/release.jks GODOT_ANDROID_KEYSTORE_RELEASE_USER=warzone GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD="$PASS"
+          godot --headless --path godot --export-release "Android" ../build/Warzone-godot-release.apk 2>&1 | grep -v "mesh_get_surface_count\|Parameter \"m\" is null" | tail -15
           ls -la build/
-          test -s build/warzone-godot.apk
+          test -s build/Warzone-godot-debug.apk; test -s build/Warzone-godot-release.apk
+          APKSIGNER=$(ls ${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools/*/apksigner | tail -1)
+          for f in debug release; do echo "== $f"; $APKSIGNER verify --print-certs build/Warzone-godot-$f.apk | grep -i "DN:\|SHA-256" | head -2; done
       - uses: actions/upload-artifact@v4
         with:
           name: warzone-godot-android
-          path: build/warzone-godot.apk
+          path: build/*.apk
+      - name: Publish release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          files: build/*.apk

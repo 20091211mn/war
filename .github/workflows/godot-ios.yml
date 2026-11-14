@@ -34,14 +34,21 @@ jobs:
           # توقيع ad-hoc (تعيد أدوات التثبيت الجانبي مثل AltStore/Sideloadly توقيعه بحسابك)
           codesign --force --deep --sign - "$APP" 2>&1 | tail -2 || true
           rm -rf Payload; mkdir Payload; cp -R "$APP" Payload/Warzone.app
-          zip -qry ../Warzone-godot.ipa Payload
-          unzip -l ../Warzone-godot.ipa | tail -2
+          zip -qry ../Warzone-godot.ipa Payload   # نسخة 1: موقّعة ad-hoc
+          # نسخة 2: بدون أي توقيع (لأدوات إعادة التوقيع / TrollStore)
+          rm -rf Payload Unsigned; mkdir Unsigned Unsigned/Payload; cp -R "$APP" Unsigned/Payload/Warzone.app
+          rm -rf Unsigned/Payload/Warzone.app/_CodeSignature Unsigned/Payload/Warzone.app/embedded.mobileprovision
+          codesign --remove-signature Unsigned/Payload/Warzone.app 2>&1 | tail -1 || true
+          (cd Unsigned && zip -qry ../../Warzone-godot-unsigned.ipa Payload)
+          unzip -l ../Warzone-godot.ipa | tail -1; unzip -l ../Warzone-godot-unsigned.ipa | tail -1
       - name: Package Xcode project
         run: zip -qr warzone-godot-ios-xcodeproj.zip build-ios -x "build-ios/dd/*" "build-ios/Payload/*"
       - uses: actions/upload-artifact@v4
         with:
           name: warzone-godot-ios-ipa
-          path: Warzone-godot.ipa
+          path: |
+            Warzone-godot.ipa
+            Warzone-godot-unsigned.ipa
       - uses: actions/upload-artifact@v4
         with:
           name: warzone-godot-ios-xcodeproj
@@ -50,4 +57,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          files: Warzone-godot.ipa
+          files: |
+            Warzone-godot.ipa
+            Warzone-godot-unsigned.ipa
