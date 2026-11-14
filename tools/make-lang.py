@@ -124,6 +124,7 @@ E=[
 ("رجوع","Back","Atrás"),
 ("نسخة Kotlin (OpenGL ES)","Kotlin edition (OpenGL ES)","Edición Kotlin (OpenGL ES)"),
 ("ابدأ اللعب","START GAME","JUGAR"),
+("المس للتخطي","Tap to skip","Toca para saltar"),
 ("اختر الخريطة","Choose map","Elegir mapa"),
 ("المسيّرة تُشحن ","Drone recharging ","Dron recargando "),
 ("مسيّرة","Drone","Dron"),

@@ -119,6 +119,7 @@ static const TrE TR_TAB[]={
 {"رجوع","Back","Atrás"},
 {"نسخة Kotlin (OpenGL ES)","Kotlin edition (OpenGL ES)","Edición Kotlin (OpenGL ES)"},
 {"ابدأ اللعب","START GAME","JUGAR"},
+{"المس للتخطي","Tap to skip","Toca para saltar"},
 {"اختر الخريطة","Choose map","Elegir mapa"},
 {"المسيّرة تُشحن ","Drone recharging ","Dron recargando "},
 {"مسيّرة","Drone","Dron"},
@@ -203,4 +204,4 @@ static const TrE TR_TAB[]={
 {"Español","Español","Español"},
 {"تم حفظ الإعدادات","Settings saved","Ajustes guardados"},
 };
-static const int TR_N=200;
+static const int TR_N=201;
