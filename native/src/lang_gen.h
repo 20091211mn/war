@@ -117,6 +117,7 @@ static const TrE TR_TAB[]={
 {"الانضمام إلى لعبة LAN","Join a LAN game","Unirse a una partida LAN"},
 {"جارٍ البحث عن مضيف على نفس الشبكة…","Searching for a host on your network…","Buscando un anfitrión en tu red…"},
 {"رجوع","Back","Atrás"},
+{"جارٍ تجهيز المعركة…","Preparing the battle…","Preparando la batalla…"},
 {"نسخة Kotlin (OpenGL ES)","Kotlin edition (OpenGL ES)","Edición Kotlin (OpenGL ES)"},
 {"ابدأ اللعب","START GAME","JUGAR"},
 {"المس للتخطي","Tap to skip","Toca para saltar"},
@@ -204,4 +205,4 @@ static const TrE TR_TAB[]={
 {"Español","Español","Español"},
 {"تم حفظ الإعدادات","Settings saved","Ajustes guardados"},
 };
-static const int TR_N=201;
+static const int TR_N=202;

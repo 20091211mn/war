@@ -51,6 +51,15 @@ var fall_test := false
 var ft_f := 0
 var air_test := false
 var to_test := false
+var cine_mode := false
+var cine_dir := 0.0
+var cine_warm := 0
+var cine_bg := false
+var cine_f0 := 0
+var cine_cam: Camera3D = null
+var cine_seg := -1
+var cine_foc: Fighter = null
+var cine_ang := 0.0
 var at_j: Jet = null
 var near = null
 var at_f := 0
@@ -108,8 +117,11 @@ func _ready() -> void:
 		if a == "--airtest": air_test = true
 		if a == "--takeofftest": to_test = true
 		if a.begins_with("--vehcam="): dbg_vehcam = int(a.substr(9))
+		if a == "--cine": cine_mode = true
+		if a == "--cinebg": cine_mode = true; cine_bg = true
 		if a == "--lanhost": lan_test = "host"
 		if a.begins_with("--lanjoin="): lan_test = "join:" + a.substr(10)
+	if cine_mode: shot_path = "x"
 	if not (selftest or shot_path != ""):
 		_refresh(); _build_preview()
 		if menu_shot == "" and thumb_path == "" or dbg_intro_at >= 0.0: _play_intro()
@@ -275,7 +287,7 @@ func _build_menu() -> void:
 	var tstack := Control.new(); tstack.custom_minimum_size = Vector2(0, 124); lc.add_child(tstack)
 	var tcols := [Color(1.0, 0.25, 0.3, 0.8), Color(0.3, 0.55, 1.0, 0.8), Color.WHITE]
 	for i in 3:
-		var tl := Label.new(); tl.text = "WARZONE"; tl.text_direction = Control.TEXT_DIRECTION_LTR; tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; tl.clip_text = true; tl.add_theme_font_size_override("font_size", 92); tl.add_theme_color_override("font_color", tcols[i]); tl.set_anchors_preset(Control.PRESET_FULL_RECT); tl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		var tl := Label.new(); tl.text = "WARZONE"; tl.text_direction = Control.TEXT_DIRECTION_LTR; tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; tl.clip_text = true; tl.add_theme_font_size_override("font_size", 78); tl.add_theme_color_override("font_color", tcols[i]); tl.set_anchors_preset(Control.PRESET_FULL_RECT); tl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		if i == 2: tl.material = MenuFx.shine_material(); tl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.55)); tl.add_theme_constant_override("outline_size", 8); _title = tl
 		else: _title_fx.append(tl)
 		tstack.add_child(tl)
@@ -285,7 +297,7 @@ func _build_menu() -> void:
 	var sh := HBoxContainer.new(); sh.set_anchors_preset(Control.PRESET_FULL_RECT); sh.alignment = BoxContainer.ALIGNMENT_CENTER; sh.mouse_filter = Control.MOUSE_FILTER_IGNORE; sh.add_theme_constant_override("separation", 18); _start_btn.add_child(sh)
 	var pi := MenuFx.icon("play"); pi.custom_minimum_size = Vector2(38, 38); pi.size_flags_vertical = Control.SIZE_SHRINK_CENTER; sh.add_child(pi)
 	_start_lab = Label.new(); _start_lab.add_theme_font_size_override("font_size", 40); _start_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE; sh.add_child(_start_lab)
-	_start_btn.pressed.connect(start_match); lc.add_child(_start_btn)
+	_start_btn.pressed.connect(_start_loading); lc.add_child(_start_btn)
 	var pulse := _start_btn.create_tween().set_loops(); pulse.tween_property(_start_btn, "self_modulate", Color(1.18, 1.18, 1.25), 0.9).set_trans(Tween.TRANS_SINE); pulse.tween_property(_start_btn, "self_modulate", Color.WHITE, 0.9).set_trans(Tween.TRANS_SINE)
 	var nb := lc.get_child_count(); _settings_rows(lc, true); var diffbox: Control = lc.get_child(nb)
 	# ---- العمود الثاني: الإعدادات أعلى، ثم LAN، ثم بطاقة الخريطة ----
@@ -312,7 +324,12 @@ func _build_menu() -> void:
 	_chev = [prevb, nextb]
 	prevb.pressed.connect(func(): _pick_map((map_idx + maps.size() - 1) % maps.size()))
 	nextb.pressed.connect(func(): _pick_map((map_idx + 1) % maps.size()))
-	_menu_items = [tagrow, tstack, _sub, _start_btn, diffbox, topr, lanbox, _map_lab, mc]
+	# ---- تصميم معتمد: عمود واحد يمين (الصعوبة ← الخريطة ← LAN ← ابدأ) والشعار فوق، واليسار حرّ للمشهد ----
+	for n in [_map_lab, mc, lanbox]: rc.remove_child(n); lc.add_child(n)
+	lc.move_child(_start_btn, lc.get_child_count() - 1)
+	lc.size_flags_stretch_ratio = 0.95; rc.size_flags_stretch_ratio = 1.25
+	tstack.custom_minimum_size = Vector2(0, 104); _start_btn.custom_minimum_size = Vector2(0, 84); mc.custom_minimum_size = Vector2(0, 112); midp.custom_minimum_size = Vector2(0, 94)
+	_menu_items = [tagrow, tstack, _sub, diffbox, _map_lab, mc, lanbox, _start_btn, topr]
 	# ---- شاشة اختيار الخرائط (شبكة بطاقات) + الإعدادات ----
 	var pk := _overlay("اختر الخريطة", 1180)
 	var sc := ScrollContainer.new(); sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED; sc.custom_minimum_size = Vector2(0, 400); pk.add_child(sc)
@@ -503,7 +520,18 @@ func resume() -> void:
 	state = "play"; pause_root.visible = false; get_tree().paused = false
 
 # ---------------------------------------------------------------- بناء المباراة
+func _start_loading() -> void:
+	if ui_root.has_node("LoadOv"): return
+	var ov := ColorRect.new(); ov.name = "LoadOv"; ov.color = Color(0.02, 0.03, 0.06, 0.0); ov.set_anchors_preset(Control.PRESET_FULL_RECT); ov.mouse_filter = Control.MOUSE_FILTER_STOP; ui_root.add_child(ov)
+	var lb := Label.new(); lb.text = Settings.t("جارٍ تجهيز المعركة…"); lb.set_anchors_preset(Control.PRESET_CENTER); lb.grow_horizontal = Control.GROW_DIRECTION_BOTH; lb.grow_vertical = Control.GROW_DIRECTION_BOTH; lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; lb.add_theme_font_size_override("font_size", 30); lb.modulate.a = 0.0; ov.add_child(lb)
+	var bar := ColorRect.new(); bar.color = Color(0.31, 0.55, 1.0); bar.set_anchors_preset(Control.PRESET_CENTER); bar.size = Vector2(0, 4); bar.position = Vector2(-170, 40); bar.pivot_offset = Vector2.ZERO; ov.add_child(bar)
+	var tw := ov.create_tween(); tw.set_parallel(true)
+	tw.tween_property(ov, "color:a", 0.92, 0.35); tw.tween_property(lb, "modulate:a", 1.0, 0.35)
+	tw.tween_property(bar, "size:x", 340.0, 0.8).set_delay(0.2)
+	tw.chain().tween_callback(start_match)
+
 func start_match() -> void:
+	if ui_root != null and ui_root.has_node("LoadOv"): ui_root.get_node("LoadOv").queue_free()
 	if prev_world != null and is_instance_valid(prev_world): prev_world.queue_free()
 	prev_world = null; prev_cam = null
 	if world != null: world.queue_free()
@@ -920,6 +948,8 @@ func _physics_process(dt: float) -> void:
 				else: player.respawn(spawn_point(player.team))
 		if air and player != null and player.alive and player.jet == null:
 			foot_t += dt; _air_foot()
+	if cine_mode and player != null:
+		_cine_director(dt); return
 	if shot_path != "":
 		test_frames += 1
 		inp["mv"] = Vector2(0, -0.3)
@@ -1111,3 +1141,59 @@ func jet_die(J: Jet, by: Fighter) -> void:
 		if by == player: hud.say("%s %d / %d" % [Settings.t("أسقطت طائرة!"), score[by.team], score_lim])
 		if score[0] >= score_lim or score[1] >= score_lim: _end_match()
 	J.queue_free()
+
+
+# ---- مخرج سينمائي: لقطات تتبّع/مدار/رافعة/منخفضة فوق معركة حقيقية بين البوتات (للتصوير: --cine --write-movie) ----
+func _cine_pick() -> Fighter:
+	var best: Fighter = null; var bs := -1.0
+	for f in fighters:
+		var b := f as Bot
+		if b == null or b.off or not b.alive or f == player: continue
+		var sc := 0.0
+		for g in fighters:
+			var o := g as Bot
+			if o == null or o.off or not o.alive or o.team == b.team: continue
+			var d := b.global_position.distance_to(o.global_position)
+			if d < 45.0: sc += 45.0 - d
+		sc += randf() * 4.0
+		if sc > bs: bs = sc; best = b
+	return best
+
+func _cine_director(dt: float) -> void:
+	if cine_warm < 700:   # تسخين: نسرّع المحاكاة حتى تلتحم الفرق ثم نبدأ التصوير
+		cine_warm += 1; Engine.time_scale = 6.0
+		if cine_warm == 700: Engine.time_scale = 1.0; cine_f0 = Engine.get_frames_drawn(); print("CINE START ", cine_f0)
+		player.global_position = Vector3(0, 80, 0); player.velocity = Vector3.ZERO; player.spawn_prot = 99.0; hud.visible = false; return
+	var t := float(Engine.get_frames_drawn() - cine_f0) / 30.0
+	player.global_position = Vector3(0, 80, 0); player.velocity = Vector3.ZERO; player.spawn_prot = 99.0; player.hp = 100.0
+	hud.visible = false; player.gun_parts.visible = false; player.arm_r.visible = false; player.arm_l.visible = false
+	if cine_bg:   # خلفية القائمة: دوران بطيء فوق ساحة المعركة
+		if cine_cam == null: cine_cam = Camera3D.new(); cine_cam.far = 900.0; add_child(cine_cam); cine_cam.make_current()
+		var kk := t / 14.0; var aa := -0.9 + t * 0.10; var rr := lerpf(34.0, 26.0, kk); var hh := lerpf(12.0, 7.5, kk)
+		cine_cam.global_position = Vector3(cos(aa) * rr * 1.5, hh, sin(aa) * rr * 0.9); cine_cam.look_at(Vector3(0, 2.2, 0)); cine_cam.fov = lerpf(62.0, 50.0, kk)
+		if t >= 14.0: get_tree().quit(0)
+		return
+	var seg := int(t / 3.0)
+	if seg != cine_seg or cine_foc == null:
+		cine_seg = seg; cine_foc = _cine_pick(); cine_ang = randf() * TAU
+		Engine.time_scale = 0.4 if (seg % 5 == 1 or seg % 5 == 4) else 1.0
+	if cine_foc == null: return
+	var u := t - float(seg) * 3.0; var fp := cine_foc.global_position
+	var fwd := -cine_foc.global_transform.basis.z; fwd.y = 0.0; fwd = fwd.normalized()
+	var rt := Vector3(-fwd.z, 0, fwd.x); var up := Vector3.UP
+	var pos := Vector3.ZERO; var look := Vector3.ZERO; var fov := 58.0
+	match seg % 5:
+		0: pos = fp - fwd * (3.4 - 0.25 * u) + rt * 0.85 + up * 1.55; look = fp + up * 1.35 + fwd * 5.0; fov = 62.0
+		1:
+			var a := cine_ang + u * 0.55; pos = fp + Vector3(cos(a), 0, sin(a)) * 4.6 + up * (0.9 + u * 0.15); look = fp + up * 1.2; fov = 52.0
+		2: pos = fp - fwd * 15.0 + up * (11.0 + u * 1.8); look = fp + fwd * 9.0; fov = 66.0
+		3: pos = fp - fwd * 8.0 + rt * 1.4 + up * 0.35 + fwd * (u * 1.8); look = fp + fwd * 14.0 + up * 1.5; fov = 78.0
+		4: pos = fp + fwd * (4.0 + u * 2.4) + rt * 0.6 + up * 1.45; look = fp + up * 1.25; fov = 44.0
+	pos.y = maxf(pos.y, 0.25)
+	var rq := PhysicsRayQueryParameters3D.create(look, pos, 1); var rh := get_world_3d().direct_space_state.intersect_ray(rq)
+	if not rh.is_empty(): pos = (rh["position"] as Vector3) + (look - pos).normalized() * 0.3
+	pos += Vector3(sin(t * 3.1), sin(t * 4.3), sin(t * 2.7)) * 0.02   # اهتزاز كاميرا خفيف
+	if cine_cam == null:
+		cine_cam = Camera3D.new(); cine_cam.far = 900.0; add_child(cine_cam); cine_cam.make_current()
+	cine_cam.global_position = pos; cine_cam.look_at(look); cine_cam.fov = fov
+	if t >= 15.0: get_tree().quit(0)
