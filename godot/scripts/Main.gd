@@ -467,6 +467,15 @@ func _menu_actors_step() -> void:
 		var z := lane + sin(tt * 0.7 + ph) * 3.0
 		b.net_pos = Vector3(x, 0.3, z); b.net_yaw = -sx * PI / 2.0   # يتحرك باتجاه sx على المحور x
 		b.net_aim = 0.0
+		# إطلاق نار على دفعات: ارتداد + وميض الفوهة + خط تتبّع نحو الخصم
+		var cyc := fmod(tt * 1.3 + ph, 3.0)
+		if cyc < 1.0 and fmod(tt * 9.0 + ph * 3.0, 1.0) < 0.12 and b.kick < 0.2:
+			b.kick = 1.0
+			var mp := b.muzzle_pos(); var dir := Vector3(sx, 0, 0).rotated(Vector3.UP, randf_range(-0.05, 0.05))
+			var tr := MeshInstance3D.new(); var bm := BoxMesh.new(); bm.size = Vector3(0.05, 0.05, 14.0); tr.mesh = bm
+			var tm := StandardMaterial3D.new(); tm.albedo_color = Color(1.0, 0.8, 0.35, 0.9); tm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; tm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; tr.material_override = tm
+			tr.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; prev_world.add_child(tr); tr.look_at_from_position(mp + dir * 8.0, mp + dir * 16.0, Vector3.UP)
+			var tw := tr.create_tween(); tw.tween_property(tm, "albedo_color:a", 0.0, 0.09); tw.tween_callback(tr.queue_free)
 
 func _orbit(t: float) -> void:
 	if prev_cam == null or not is_instance_valid(prev_cam): return

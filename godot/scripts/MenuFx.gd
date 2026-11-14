@@ -9,7 +9,7 @@ static func _shader_mat(code: String) -> ShaderMaterial:
 	var sh := Shader.new(); sh.code = code; var m := ShaderMaterial.new(); m.shader = sh; return m
 
 # تدرّج لوني سينمائي فوق المشهد ثلاثي الأبعاد: تباين أعلى، دفء في الإضاءات، تبريد في الظلال، وإزالة غشاوة الضباب
-const GRADE := "shader_type canvas_item;\nuniform sampler2D scr : hint_screen_texture, filter_linear;\nvoid fragment(){ vec3 c = texture(scr, SCREEN_UV).rgb; float l = dot(c, vec3(0.299, 0.587, 0.114)); c = mix(vec3(l), c, 1.35); c = (c - 0.5) * 1.28 + 0.46; c *= mix(vec3(0.78, 0.9, 1.1), vec3(1.14, 1.02, 0.86), smoothstep(0.25, 0.75, l)); vec2 q = SCREEN_UV - 0.5; c *= 1.0 - dot(q, q) * 1.1; COLOR = vec4(clamp(c, 0.0, 1.0), 1.0); }"
+const GRADE := "shader_type canvas_item;\nuniform sampler2D scr : hint_screen_texture, filter_linear;\nvoid fragment(){ vec3 c = texture(scr, SCREEN_UV).rgb; float l = dot(c, vec3(0.299, 0.587, 0.114)); c = mix(vec3(l), c, 1.35); c = (c - 0.5) * 1.28 + 0.46; c *= mix(vec3(0.78, 0.9, 1.1), vec3(1.28, 1.04, 0.78), smoothstep(0.25, 0.75, l)); vec2 q = SCREEN_UV - 0.5; c *= 1.0 - dot(q, q) * 1.1; COLOR = vec4(clamp(c, 0.0, 1.0), 1.0); }"
 
 static func grade(parent: Control) -> ColorRect:
 	var r := ColorRect.new(); r.set_anchors_preset(Control.PRESET_FULL_RECT); r.mouse_filter = Control.MOUSE_FILTER_IGNORE; r.material = _shader_mat(GRADE); r.color = Color.WHITE
