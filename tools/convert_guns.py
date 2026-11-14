@@ -73,6 +73,9 @@ def build(name, cfg, tris):
     cen = P[F].mean(1); grp = np.zeros(len(F), int)
     if 'bolt' in cfg: grp[cfg['bolt'](cen)] = 2
     if 'mag' in cfg: grp[cfg['mag'](cen)] = 1
+    cq = np.c_[(cen[:, 0] - bx) * S, (cen[:, 1] - by) * S, (cen[:, 2] - zmin) * S + cfg['mz']]  # إحداثيات نهائية (فضاء السلاح)
+    if 'bolt_q' in cfg: grp[cfg['bolt_q'](cq)] = 2
+    if 'mag_q' in cfg: grp[cfg['mag_q'](cq)] = 1
     fm = M[F[:, 0]]
     if 'bolt_m' in cfg: grp[np.isin(fm, list(cfg['bolt_m']))] = 2
     if 'mag_m' in cfg: grp[np.isin(fm, list(cfg['mag_m']))] = 1

@@ -4,7 +4,7 @@ extends RefCounted
 # كل موديل 4 أسطح: 0 أمامي، 1 مخزن، 2 ترباس، 3 كعب — لتحريك المخزن والترباس عند التعبئة
 
 static var _cache := {}
-const IDS := [0, 3, 5, 8]
+const IDS := [0, 2, 3, 4, 5, 6, 8]
 
 static func has(wi: int) -> bool: return wi in IDS
 
