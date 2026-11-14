@@ -55,7 +55,7 @@ func step(dt: float, inp: Dictionary) -> bool:  # يرجع false عند الان
 	if spot <= 0.0:
 		spot = 0.6
 		for f2 in game.fighters:
-			if not is_instance_valid(f2) or not f2.alive or f2.team == owner_f.team: continue
+			if not is_instance_valid(f2) or not f2.alive or not game.foe(owner_f, f2): continue
 			var tp: Vector3 = f2.global_position + Vector3(0, 1.2, 0); var dd := global_position.distance_to(tp)
 			if dd > 45.0: continue
 			var q := PhysicsRayQueryParameters3D.create(global_position, tp, 1)

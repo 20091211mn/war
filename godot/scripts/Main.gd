@@ -8,6 +8,8 @@ var state := "menu"        # menu | play | pause | over
 var inp := {"mv": Vector2.ZERO, "look": Vector2.ZERO, "fire": false, "jump": false, "reload": false, "ads": false, "sprint": false, "next": false, "use": false, "seat": false, "gren": false, "crouch": false, "c4": false, "det": false, "drone": false, "tup": false, "tdn": false}
 var map_idx := 2
 var diff := 1
+var ffa := false        # كل واحد ضد الكل (الجميع أعداء؛ النقاط بعدد القتلات)
+var ffa_pref := false   # اختيار القائمة
 var bots_per_team := 5
 var player: Player = null
 var fighters: Array = []
@@ -117,6 +119,7 @@ func _ready() -> void:
 		if a == "--airtest": air_test = true
 		if a == "--takeofftest": to_test = true
 		if a.begins_with("--vehcam="): dbg_vehcam = int(a.substr(9))
+		if a == "--ffa": ffa_pref = true
 		if a == "--cine": cine_mode = true
 		if a == "--cinebg": cine_mode = true; cine_bg = true
 		if a == "--lanhost": lan_test = "host"
@@ -188,6 +191,7 @@ func _seg(parent: Control, label_ar: String, opts: Callable, get_i: Callable, se
 	var row := HBoxContainer.new(); row.add_theme_constant_override("separation", 8); box.add_child(row)
 	var chips: Array = []
 	var n: int = (opts.call() as Array).size()
+	if n >= 5: fs = mini(fs, 16)   # خمس رقائق في صف واحد: نصّ أصغر حتى لا يُقصّ
 	for i in n:
 		var b := Button.new(); b.custom_minimum_size = Vector2(0, 64); b.size_flags_stretch_ratio = 1.0; b.size_flags_horizontal = Control.SIZE_EXPAND_FILL; b.clip_text = false
 		b.add_theme_font_size_override("font_size", fs); UiTheme.juicy(b)
@@ -210,6 +214,7 @@ func _settings_rows(vb: Control, with_map: bool) -> void:
 	if with_map:
 		_seg(vb, "الصعوبة", func(): return ["سهل", "عادي", "صعب"].map(func(x): return Settings.t(x)), func(): return diff, func(i): diff = i)
 		return
+	_seg(vb, "النمط", func(): return ["فرق", "كل واحد ضد الكل"].map(func(x): return Settings.t(x)), func(): return 1 if ffa_pref else 0, func(i): ffa_pref = i == 1)
 	_seg(vb, "الجودة", func(): return Settings.QUALS.map(func(x): return Settings.t(x)), func(): return Settings.quality, func(i): Settings.quality = i; Settings.save(); Settings.changed.emit(), 16)
 	_seg(vb, "اللغة", func(): return Settings.LANGS, func(): return Settings.lang, func(i): Settings.lang = i; Settings.save(); Settings.changed.emit())
 
@@ -372,19 +377,19 @@ func _board_label(t: String, sz: int, col: Color, w := 0.0, al := HORIZONTAL_ALI
 
 func fill_board() -> void:
 	for c in board_cols.get_children(): c.queue_free()
-	for tm in 2:
+	for tm in (1 if ffa else 2):
 		var col := VBoxContainer.new(); col.size_flags_horizontal = Control.SIZE_EXPAND_FILL; col.add_theme_constant_override("separation", 6); board_cols.add_child(col)
 		var tc := Color(1.0, 0.42, 0.38) if tm == 0 else Color(0.42, 0.65, 1.0)
 		var hd := HBoxContainer.new(); col.add_child(hd)
-		hd.add_child(_board_label(Settings.t("الفريق الأحمر") if tm == 0 else Settings.t("الفريق الأزرق"), 26, tc))
-		hd.add_child(_board_label(str(score[tm]), 30, tc, 60, HORIZONTAL_ALIGNMENT_RIGHT))
+		hd.add_child(_board_label(Settings.t("كل واحد ضد الكل") if ffa else (Settings.t("الفريق الأحمر") if tm == 0 else Settings.t("الفريق الأزرق")), 26, tc))
+		if not ffa: hd.add_child(_board_label(str(score[tm]), 30, tc, 60, HORIZONTAL_ALIGNMENT_RIGHT))
 		var hh := HBoxContainer.new(); col.add_child(hh)
 		hh.add_child(_board_label(Settings.t("اللاعب"), 16, Color(0.6, 0.68, 0.8)))
 		hh.add_child(_board_label(Settings.t("القتل"), 16, Color(0.6, 0.68, 0.8), 54, HORIZONTAL_ALIGNMENT_CENTER))
 		hh.add_child(_board_label(Settings.t("القتلى"), 16, Color(0.6, 0.68, 0.8), 54, HORIZONTAL_ALIGNMENT_CENTER))
 		var arr: Array = []
 		for f in fighters:
-			if is_instance_valid(f) and f.team == tm: arr.append(f)
+			if is_instance_valid(f) and (ffa or f.team == tm): arr.append(f)
 		arr.sort_custom(func(a, b) -> bool: return a.kills > b.kills or (a.kills == b.kills and a.deaths < b.deaths))
 		for f in arr:
 			var me: bool = f == player
@@ -577,12 +582,13 @@ func start_match() -> void:
 	world = Node3D.new(); world.name = "World"; add_child(world)
 	var m: Dictionary = maps[map_idx]
 	map_info = MapBuilder.build(m, world); map_w = m["W"]; map_d = m["D"]
+	ffa = ffa_pref and map_idx != 8
 	score = [0, 0]; time_left = 600.0; time_cap = 600.0; match_t = 0.0; resp_t = 0.0; score_lim = 30
 	player = Player.new(); player.game = self; player.team = 0; player.fname = Settings.t("اللاعب"); world.add_child(player)
 	player.setup_weapon(0); fighters.append(player); player.respawn(spawn_point(0))
 	for t in 2:
 		for i in bots_per_team - (1 if t == 0 else 0):
-			var b := Bot.new(); b.game = self; b.team = t; b.fname = "BOT%d" % (fighters.size()); b.acc = [0.09, 0.055, 0.03][diff]
+			var b := Bot.new(); b.game = self; b.team = 1 if ffa else t; b.fname = "BOT%d" % (fighters.size()); b.acc = [0.09, 0.055, 0.03][diff]
 			world.add_child(b); fighters.append(b); b.respawn(spawn_point(t))
 	scenery = Node3D.new(); world.add_child(scenery); build_scenery(); apply_quality()
 	air = map_idx == 8; jets.clear()
@@ -602,6 +608,7 @@ func start_lan_match(role: int, slot: int, cfg: Dictionary) -> void:
 	for f in fighters: if is_instance_valid(f): f.queue_free()
 	fighters.clear()
 	map_idx = int(cfg["map"]); if map_idx == 8: map_idx = 0   # حرب الجو لاعب واحد فقط حالياً
+	ffa = bool(cfg.get("ffa", false))
 	air = false; jets.clear(); world = Node3D.new(); world.name = "World"; add_child(world)
 	var m: Dictionary = maps[map_idx]
 	map_info = MapBuilder.build(m, world); map_w = m["W"]; map_d = m["D"]
@@ -622,7 +629,17 @@ func start_lan_match(role: int, slot: int, cfg: Dictionary) -> void:
 	board_root.visible = false; hud.visible = true; state = "play"; overlay = false; get_tree().paused = false
 	hud.say(m["name"])
 
+func foe(a: Fighter, b: Fighter) -> bool:
+	return a != b and (ffa or a.team != b.team)
+
+func _ffa_score() -> void:
+	var best := 0
+	for f in fighters:
+		if is_instance_valid(f) and f != player: best = maxi(best, f.kills)
+	score = [player.kills if player != null else 0, best]
+
 func spawn_point(team: int) -> Vector3:
+	if ffa: team = randi() & 1
 	var arr: Array = maps[map_idx]["red"] if team == 0 else maps[map_idx]["blue"]
 	var p: Array = arr[randi() % arr.size()]
 	return Vector3(p[0], 0.3, p[1])
@@ -662,7 +679,7 @@ func hitscan(shooter: Fighter, from: Vector3, dir: Vector3, w: Dictionary, muz :
 		var c: Object = r["collider"]
 		if w["kind"] == "launcher":
 			_explode(shooter, endp)
-		elif c is Fighter and (c as Fighter).team != shooter.team:
+		elif c is Fighter and foe(shooter, c as Fighter):
 			var f := c as Fighter
 			var d := from.distance_to(endp)
 			var r0: float = w["range"][0]; var r1: float = w["range"][1]
@@ -706,7 +723,7 @@ func blast(src: Fighter, p: Vector3, R: float, pd: float, vd: float) -> void:
 	for f in fighters:
 		if not is_instance_valid(f) or not f.alive or f.jet != null: continue
 		var d: float = f.global_position.distance_to(p)
-		if d < R and (f.team != src.team or f == src):
+		if d < R and (foe(src, f) or f == src):
 			f.take_damage(pd * pow(1.0 - d / R, 0.9), src, false)
 	for v in vehicles:
 		if not is_instance_valid(v) or v.dead: continue
@@ -811,7 +828,9 @@ func _tracer(a: Vector3, b: Vector3) -> void:
 	var tw := create_tween(); tw.tween_property(m, "albedo_color:a", 0.0, 0.08); tw.tween_callback(mi.queue_free)
 
 func on_kill(src: Fighter, victim: Fighter, head: bool) -> void:
-	if src != null and src != victim: score[src.team] += 1
+	if src != null and src != victim:
+		if ffa: _ffa_score()
+		else: score[src.team] += 1
 	var kn := (src.fname if src != null else Settings.t("سقوط"))
 	hud.add_feed("%s  ✕  %s%s" % [kn, victim.fname, "  ★" if head else ""])
 	if src != null and src != victim:
@@ -842,7 +861,12 @@ func on_kill(src: Fighter, victim: Fighter, head: bool) -> void:
 func _end_match() -> void:
 	if state == "over": return
 	state = "over"; overlay = false; pause_root.visible = true; _set_paused(true); Input.mouse_mode = Input.MOUSE_MODE_VISIBLE; hud.mouse_look = false; _release_inputs(); _refresh()
-	over_label.text = Settings.t("فاز الفريق الأحمر") if score[0] >= score[1] else Settings.t("فاز الفريق الأزرق")
+	if ffa:
+		var top: Fighter = null
+		for f in fighters:
+			if is_instance_valid(f) and (top == null or f.kills > top.kills): top = f
+		over_label.text = Settings.t("الفائز") + ": " + (top.fname if top != null else "-")
+	else: over_label.text = Settings.t("فاز الفريق الأحمر") if score[0] >= score[1] else Settings.t("فاز الفريق الأزرق")
 	toggle_board(1); board_title.text = over_label.text
 
 # ---------------------------------------------------------------- الجودة والمشاهد

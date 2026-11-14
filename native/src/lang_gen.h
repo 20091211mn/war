@@ -117,6 +117,11 @@ static const TrE TR_TAB[]={
 {"الانضمام إلى لعبة LAN","Join a LAN game","Unirse a una partida LAN"},
 {"جارٍ البحث عن مضيف على نفس الشبكة…","Searching for a host on your network…","Buscando un anfitrión en tu red…"},
 {"رجوع","Back","Atrás"},
+{"قاعدة القطب","Polar Base","Base polar"},
+{"المدينة القديمة (طرابلس)","Old City (Tripoli)","Ciudad vieja (Trípoli)"},
+{"قاعدة جوية (حرب F-35)","Air Base (F-35 War)","Base aérea (guerra F-35)"},
+{"كل واحد ضد الكل","Free-for-all","Todos contra todos"},
+{"الفائز","Winner","Ganador"},
 {"جارٍ تجهيز المعركة…","Preparing the battle…","Preparando la batalla…"},
 {"نسخة Kotlin (OpenGL ES)","Kotlin edition (OpenGL ES)","Edición Kotlin (OpenGL ES)"},
 {"ابدأ اللعب","START GAME","JUGAR"},
@@ -205,4 +210,4 @@ static const TrE TR_TAB[]={
 {"Español","Español","Español"},
 {"تم حفظ الإعدادات","Settings saved","Ajustes guardados"},
 };
-static const int TR_N=202;
+static const int TR_N=207;

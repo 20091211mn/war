@@ -42,7 +42,7 @@ var last_cfg := {}
 func maxp_e() -> int: return 2 if int(room["style"]) == 1 else 2 + int(room["maxp"])
 func bots_e() -> int: return 0 if int(room["style"]) == 1 else mini(BOTS[int(room["bots"])], maxp_e() - 1)
 func cfg() -> Dictionary:
-	return {"map": game.map_idx, "n": maxp_e(), "lim": LIMS[int(room["lim"])], "mins": MINS[int(room["mins"])], "bots": bots_e(), "mid": match_id, "name": NAMES[int(room["name"])]}
+	return {"map": game.map_idx, "n": maxp_e(), "lim": LIMS[int(room["lim"])], "mins": MINS[int(room["mins"])], "bots": bots_e(), "ffa": int(room["style"]) == 2, "mid": match_id, "name": NAMES[int(room["name"])]}
 
 func screens() -> Array: return [host_root, join_root]
 
@@ -66,7 +66,7 @@ func _screen(title: String) -> VBoxContainer:
 func build_ui() -> void:
 	# ---- شاشة إنشاء غرفة ----
 	var hv := _screen("LAN · " + Settings.t("إنشاء غرفة")); host_root = hv.get_meta("root")
-	var defs := [["اسم الغرفة", "name", 8], ["أقصى لاعبين", "maxp", 7], ["حد النقاط", "lim", 4], ["الوقت", "mins", 4], ["البوتات", "bots", 4], ["النمط", "style", 2]]
+	var defs := [["اسم الغرفة", "name", 8], ["أقصى لاعبين", "maxp", 7], ["حد النقاط", "lim", 4], ["الوقت", "mins", 4], ["البوتات", "bots", 4], ["النمط", "style", 3]]
 	for d in defs:
 		var key: String = d[1]; var cnt: int = d[2]
 		var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 4); hv.add_child(box)
@@ -97,7 +97,7 @@ func _refresh_host() -> void:
 			"lim": txt = str(LIMS[v])
 			"mins": txt = ("%d min" % MINS[v]) if MINS[v] > 0 else Settings.t("بلا حد")
 			"bots": txt = str(bots_e()) if bots_e() > 0 else Settings.t("بدون بوتات")
-			"style": txt = Settings.t("مبارزة 1 ضد 1") if st == 1 else Settings.t("فرق")
+			"style": txt = Settings.t("مبارزة 1 ضد 1") if st == 1 else (Settings.t("كل واحد ضد الكل") if st == 2 else Settings.t("فرق"))
 		(r["lab"] as Label).text = Settings.t(r["ar"]); (r["val"] as Label).text = txt
 
 func show_host() -> void:
@@ -279,7 +279,7 @@ func _rebuild_list() -> void:
 	for h in hosts:
 		var d: Dictionary = h["info"]; var ip: String = h["ip"]
 		var b := Button.new(); b.custom_minimum_size = Vector2(0, 76); b.add_theme_font_size_override("font_size", 22); UiTheme.style_accent(b); UiTheme.juicy(b)
-		var tag := (" · " + Settings.t("مبارزة 1 ضد 1")) if int(d.get("s", 0)) == 1 else ((" · " + Settings.t("البوتات")) if int(d.get("b", 0)) > 0 else "")
+		var tag := (" · " + Settings.t("مبارزة 1 ضد 1")) if int(d.get("s", 0)) == 1 else ((" · " + Settings.t("كل واحد ضد الكل")) if int(d.get("s", 0)) == 2 else ((" · " + Settings.t("البوتات")) if int(d.get("b", 0)) > 0 else ""))
 		b.text = "%s   %d/%d   %dK%s%s" % [d.get("n", "?"), int(d.get("p", 1)), int(d.get("x", 2)), int(d.get("l", 30)), (" · %dm" % int(d.get("t", 0))) if int(d.get("t", 0)) > 0 else "", tag]
 		b.pressed.connect(func(): join(ip)); _join_list.add_child(b)
 	_show_status()
@@ -413,4 +413,5 @@ func n_snap(ents: Array, meta: Array) -> void:
 			var al := (fl & 1) != 0
 			if al and not b.alive: b.global_position = e[0]
 			b.alive = al; b.visible = al and not b.off
+	if g.ffa: g._ffa_score()
 	if int(meta[3]) == 1 and g.state == "play": g._end_match()

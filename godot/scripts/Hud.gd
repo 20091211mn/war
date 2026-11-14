@@ -350,7 +350,7 @@ func _draw() -> void:
 	var ac := get_viewport().get_camera_3d()
 	if ac != null:
 		for f in game.fighters:
-			if is_instance_valid(f) and f.alive and f.reveal > 0.0 and f.team != p.team:
+			if is_instance_valid(f) and f.alive and f.reveal > 0.0 and game.foe(p, f):
 				var wp: Vector3 = f.global_position + Vector3(0, 2.0, 0)
 				if not ac.is_position_behind(wp):
 					var sp := ac.unproject_position(wp); var dpx := 14.0
@@ -369,7 +369,7 @@ func _draw() -> void:
 	if p.alive and p.veh == null and game.near_vehicle(p) != null: _txt(Vector2(cx - 200, s.y * 0.66), Settings.t("اضغط للركوب") + "  [E]", 24, Color(1, 0.9, 0.5), HORIZONTAL_ALIGNMENT_CENTER, 400.0)
 	# ---- علامات الحلفاء ----
 	for f in game.fighters:
-		if f == p or not f.alive or f.team != p.team: continue
+		if f == p or not f.alive or game.ffa or f.team != p.team: continue
 		var wp: Vector3 = f.global_position + Vector3(0, 2.1, 0)
 		if game.player.cam.is_position_behind(wp): continue
 		var sp: Vector2 = game.player.cam.unproject_position(wp)

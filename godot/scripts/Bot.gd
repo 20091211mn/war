@@ -348,7 +348,7 @@ func _seated(dt: float) -> void:
 func _pick_target() -> void:
 	var best: Fighter = null; var bd := 1e9
 	for f in game.fighters:
-		if f.team == team or not f.alive: continue
+		if not game.foe(self, f) or not f.alive: continue
 		var d := global_position.distance_to(f.global_position)
 		if d < bd and d < 70.0 and _los(f): best = f; bd = d
 	target = best
