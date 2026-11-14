@@ -46,6 +46,7 @@ var scenery: Node3D
 var selftest := false
 var gren_test := false
 var dbg_board := false
+var dbg_look := 0.0
 var fall_test := false
 var ft_f := 0
 var air_test := false
@@ -101,6 +102,7 @@ func _ready() -> void:
 		if a.begins_with("--vehtest="): veh_test = int(a.substr(10))
 		if a == "--grentest": gren_test = true
 		if a == "--board": dbg_board = true
+		if a.begins_with("--look="): dbg_look = float(a.substr(7))
 		if a == "--falltest": fall_test = true
 		if a == "--airtest": air_test = true
 		if a == "--takeofftest": to_test = true
@@ -853,6 +855,7 @@ func _physics_process(dt: float) -> void:
 			player.cam.global_position = vv.global_position + sd; player.cam.look_at(vv.global_position + Vector3(0, 1.0, 0)); player.gun_parts.visible = false; player.arm_r.visible = false; player.arm_l.visible = false
 		if dbg_botcam and test_frames == 120 and fighters.size() > 3:
 			(fighters[3] as Bot).alive = false; (fighters[3] as Bot).play_death(fighters[3].global_position + Vector3(0, 0, -3))
+		if dbg_look != 0.0 and test_frames >= 5 and test_frames < 140: (player as Player).pitch = deg_to_rad(dbg_look)
 		if dbg_board and test_frames == 100:
 			for i in fighters.size(): fighters[i].kills = (i * 7) % 11; fighters[i].deaths = (i * 5) % 7
 			toggle_board(1)
