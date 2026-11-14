@@ -23,6 +23,8 @@ var rh: Node3D
 var lh: Node3D
 var arm_r: MeshInstance3D
 var arm_l: MeshInstance3D
+var fore_r: MeshInstance3D
+var fore_l: MeshInstance3D
 var far_hide: Array = []
 var kick := 0.0
 var run_k := 0.0            # 0..1 شدّة الجري (تنعيم)
@@ -58,36 +60,81 @@ func _ready() -> void:
 	_build_model()
 	strafe = 1.0 if randf() > 0.5 else -1.0
 
-func _mat(c: Color) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new(); m.albedo_color = c; m.roughness = 0.9; return m
+static var _um := {}   # شبكات وحدة مشتركة (كرة/كبسولة/صندوق/أسطوانة) لتقليل الذاكرة
+static var _mt := {}   # خامات مشتركة حسب اللون
+
+func _mat(c: Color, rough := 0.9, metal := 0.0) -> StandardMaterial3D:
+	var k := str(c.to_html()) + str(rough) + str(metal)
+	if _mt.has(k): return _mt[k]
+	var m := StandardMaterial3D.new(); m.albedo_color = c; m.roughness = rough; m.metallic = metal; _mt[k] = m; return m
 
 func _box(parent: Node3D, size: Vector3, pos: Vector3, c: Color) -> MeshInstance3D:
-	var mi := MeshInstance3D.new(); var bm := BoxMesh.new(); bm.size = size; mi.mesh = bm; mi.position = pos; mi.material_override = _mat(c); parent.add_child(mi); return mi
+	return _prim(parent, "box", size, pos, c)
+
+static func _unit(kind: String) -> Mesh:
+	if _um.has(kind): return _um[kind]
+	var m: Mesh
+	match kind:
+		"sphere": var sm := SphereMesh.new(); sm.radius = 0.5; sm.height = 1.0; sm.radial_segments = 14; sm.rings = 7; m = sm
+		"capsule": var cm := CapsuleMesh.new(); cm.radius = 0.5; cm.height = 2.0; cm.radial_segments = 10; cm.rings = 3; m = cm
+		"cyl": var cy := CylinderMesh.new(); cy.top_radius = 0.5; cy.bottom_radius = 0.5; cy.height = 1.0; cy.radial_segments = 10; m = cy
+		_: var bm := BoxMesh.new(); bm.size = Vector3.ONE; m = bm
+	_um[kind] = m; return m
+
+# شكل أولي مشترك بمقياس وموضع ودوران ولون (القياس = الأبعاد بالمتر؛ الكبسولة: y = الطول الكلي)
+func _prim(parent: Node3D, kind: String, size: Vector3, pos: Vector3, c: Color, rot := Vector3.ZERO, rough := 0.9, metal := 0.0) -> MeshInstance3D:
+	var mi := MeshInstance3D.new(); mi.mesh = _unit(kind)
+	mi.scale = Vector3(size.x, size.y * 0.5, size.z) if kind == "capsule" else size
+	mi.position = pos; mi.rotation = rot; mi.material_override = _mat(c, rough, metal); parent.add_child(mi); return mi
 
 func _pivot(parent: Node3D, pos: Vector3) -> Node3D:
 	var n := Node3D.new(); n.position = pos; parent.add_child(n); return n
 
-# جسم بشري متمفصل: وركان وركبتان وصدر ورأس وذراعان تمسكان السلاح
+# جندي واقعي: جسم بنسب بشرية، خوذة ونظارة وقناع، سترة حاملة وجيوب وحقيبة، ذراعان بمرفقين (IK)، ركبتان وأحذية
 func _build_model() -> void:
 	model = Node3D.new(); add_child(model)
 	var tc := Color(0.85, 0.2, 0.2) if team == 0 else Color(0.2, 0.45, 0.9)
-	var dk := tc * 0.55; var skin := Color(0.88, 0.7, 0.55); var boot := Color(0.1, 0.1, 0.11)
+	var uni := tc.lerp(Color(0.33, 0.35, 0.29), 0.62); var pants := uni * 0.72; pants.a = 1.0
+	var vest := Color(0.13, 0.14, 0.14).lerp(tc, 0.12); var gear := Color(0.09, 0.09, 0.1)
+	var skin := Color(0.82, 0.62, 0.48); var boot := Color(0.09, 0.08, 0.07); var glove := Color(0.1, 0.1, 0.11)
 	torso = _pivot(model, Vector3(0, 0.88, 0))
-	_box(torso, Vector3(0.46, 0.6, 0.26), Vector3(0, 0.32, 0), tc)                    # الجذع
-	_box(torso, Vector3(0.4, 0.3, 0.08), Vector3(0, 0.36, 0.16), dk)                  # حقيبة/سترة
-	_box(torso, Vector3(0.24, 0.26, 0.24), Vector3(0, 0.8, 0), skin)                  # الرأس
-	_box(torso, Vector3(0.27, 0.12, 0.27), Vector3(0, 0.95, 0), dk)                   # الخوذة
+	# --- الجذع ---
+	_prim(torso, "box", Vector3(0.33, 0.13, 0.22), Vector3(0, 0.03, 0), pants)                          # الحوض
+	_prim(torso, "cyl", Vector3(0.36, 0.05, 0.24), Vector3(0, 0.1, 0), gear)                             # الحزام
+	_prim(torso, "capsule", Vector3(0.3, 0.52, 0.19), Vector3(0, 0.34, 0), uni, Vector3(0, 0, PI * 0.5) * 0.0) # الصدر والبطن (قميص)
+	_prim(torso, "box", Vector3(0.34, 0.36, 0.1), Vector3(0, 0.38, -0.1), vest)                          # لوح السترة الأمامي
+	_prim(torso, "box", Vector3(0.34, 0.34, 0.09), Vector3(0, 0.38, 0.1), vest)                          # لوح السترة الخلفي
+	for i in 3: _prim(torso, "box", Vector3(0.08, 0.1, 0.05), Vector3(-0.09 + i * 0.09, 0.2, -0.16), gear) # جيوب مخازن
+	_prim(torso, "box", Vector3(0.1, 0.07, 0.05), Vector3(0.12, 0.5, -0.15), gear)                       # جيب راديو
+	_prim(torso, "box", Vector3(0.3, 0.34, 0.14), Vector3(0, 0.36, 0.2), gear * 1.6)                     # حقيبة ظهر
+	_prim(torso, "capsule", Vector3(0.08, 0.2, 0.08), Vector3(0, 0.62, 0), skin * 0.95)                  # الرقبة
+	_prim(torso, "box", Vector3(0.36, 0.07, 0.2), Vector3(0, 0.57, 0), vest)                              # ياقة السترة
+	# --- الرأس ---
+	_prim(torso, "sphere", Vector3(0.19, 0.24, 0.22), Vector3(0, 0.8, 0), skin)                          # الوجه
+	_prim(torso, "box", Vector3(0.17, 0.045, 0.05), Vector3(0, 0.82, -0.105), gear, Vector3.ZERO, 0.2, 0.6) # نظارة واقية
+	_prim(torso, "box", Vector3(0.16, 0.07, 0.06), Vector3(0, 0.74, -0.09), gear)                         # قناع أسفل الوجه
+	_prim(torso, "sphere", Vector3(0.26, 0.2, 0.29), Vector3(0, 0.89, 0.01), uni * 0.8, Vector3.ZERO, 0.7, 0.1) # الخوذة
+	_prim(torso, "box", Vector3(0.22, 0.02, 0.07), Vector3(0, 0.9, -0.15), gear)                          # حافة الخوذة
+	_prim(torso, "box", Vector3(0.05, 0.03, 0.04), Vector3(0, 0.99, -0.07), tc)                          # شارة الفريق على الخوذة
 	for sd in [-1, 1]:
-		var hip := _pivot(model, Vector3(0.11 * sd, 0.88, 0)); legs.append(hip)
-		_box(hip, Vector3(0.17, 0.44, 0.19), Vector3(0, -0.22, 0), dk)
+		_prim(torso, "sphere", Vector3(0.14, 0.14, 0.14), Vector3(0.24 * sd, 0.55, 0), uni)               # الكتف
+		_prim(torso, "box", Vector3(0.05, 0.08, 0.1), Vector3(0.3 * sd, 0.5, 0), tc)                       # شارة الفريق على الكتف
+		var hip := _pivot(model, Vector3(0.1 * sd, 0.88, 0)); legs.append(hip)
+		_prim(hip, "capsule", Vector3(0.17, 0.46, 0.18), Vector3(0, -0.22, 0), pants)                     # الفخذ
+		_prim(hip, "box", Vector3(0.09, 0.14, 0.04), Vector3(0.09 * sd, -0.2, 0.0), gear)                 # جيب جانبي
 		var kn := _pivot(hip, Vector3(0, -0.44, 0)); knees.append(kn)
-		_box(kn, Vector3(0.15, 0.42, 0.17), Vector3(0, -0.21, 0), dk * 0.9)
-		_box(kn, Vector3(0.16, 0.09, 0.27), Vector3(0, -0.43, -0.04), boot)
+		_prim(kn, "capsule", Vector3(0.14, 0.46, 0.15), Vector3(0, -0.21, 0), pants * 0.92)               # الساق
+		_prim(kn, "box", Vector3(0.12, 0.12, 0.05), Vector3(0, -0.03, -0.09), gear)                       # واقي الركبة
+		_prim(kn, "box", Vector3(0.14, 0.12, 0.3), Vector3(0, -0.4, -0.04), boot)                         # الحذاء
+		_prim(kn, "box", Vector3(0.15, 0.03, 0.32), Vector3(0, -0.46, -0.04), gear)                      # النعل
 	gunn = _pivot(torso, Vector3(0.13, 0.42, -0.4))
 	rh = _pivot(gunn, Vector3(0, -0.09, 0.14)); lh = _pivot(gunn, Vector3(0, -0.05, -0.3))
-	for h in [rh, lh]: _box(h, Vector3(0.09, 0.09, 0.1), Vector3.ZERO, skin)
-	arm_r = _box(model, Vector3(1, 1, 1), Vector3.ZERO, tc * 0.8); arm_l = _box(model, Vector3(1, 1, 1), Vector3.ZERO, tc * 0.8)
-	far_hide = [arm_r, arm_l, gunn] + legs
+	for h in [rh, lh]:
+		_prim(h, "box", Vector3(0.085, 0.07, 0.1), Vector3.ZERO, glove)                                    # القفاز
+		_prim(h, "box", Vector3(0.08, 0.035, 0.06), Vector3(0, 0.02, -0.06), glove)                       # الأصابع
+	arm_r = _prim(model, "capsule", Vector3(0.085, 0.3, 0.085), Vector3.ZERO, uni); fore_r = _prim(model, "capsule", Vector3(0.07, 0.28, 0.07), Vector3.ZERO, uni * 0.95)
+	arm_l = _prim(model, "capsule", Vector3(0.085, 0.3, 0.085), Vector3.ZERO, uni); fore_l = _prim(model, "capsule", Vector3(0.07, 0.28, 0.07), Vector3.ZERO, uni * 0.95)
+	far_hide = [arm_r, arm_l, fore_r, fore_l, gunn] + legs
 	_build_gun()
 
 func _build_gun() -> void:
@@ -135,11 +182,26 @@ func _puppet(dt: float) -> void:
 func muzzle_pos() -> Vector3:
 	return muzzle.global_position if muzzle != null and is_instance_valid(muzzle) else eye_pos()
 
+# ذراع بمفصلين (كتف-مرفق-يد): المرفق يتجه للأسفل والخارج
+func _seg(mi: MeshInstance3D, p0: Vector3, p1: Vector3, thick: float) -> void:
+	var d := p1 - p0; var ln := d.length()
+	if ln < 0.005: return
+	var y := d / ln; var x := y.cross(Vector3.BACK)
+	if x.length() < 0.05: x = y.cross(Vector3.RIGHT)
+	x = x.normalized(); var z := x.cross(y)
+	mi.transform = Transform3D(Basis(x * thick, y * ln * 0.5, z * thick), p0 + d * 0.5)
+
 func _arm_to(arm: MeshInstance3D, shoulder_local: Vector3, hand: Node3D) -> void:
-	var sh := torso.to_global(shoulder_local); var s := model.to_local(sh); var h := model.to_local(hand.global_position)
-	var d := h - s; var ln := d.length()
-	if ln < 0.01: return
-	arm.transform = Transform3D(Basis.looking_at(d / ln, Vector3.UP) * Basis.from_scale(Vector3(0.12, 0.12, ln)), s + d * 0.5)
+	var right := arm == arm_r; var fore: MeshInstance3D = fore_r if right else fore_l
+	var S := model.to_local(torso.to_global(shoulder_local)); var H := model.to_local(hand.global_position)
+	var d := H - S; var dl := d.length()
+	if dl < 0.01: return
+	var A := 0.29; var B := 0.28; dl = minf(dl, A + B - 0.01); var dir := d.normalized()
+	var xx := (A * A - B * B + dl * dl) / (2.0 * dl); var hh := sqrt(maxf(A * A - xx * xx, 0.0))
+	var pole := Vector3(0.6 if right else -0.6, -1.0, 0.35)
+	var perp := (pole - dir * pole.dot(dir)).normalized()
+	var E := S + dir * xx + perp * hh
+	_seg(arm, S, E, 0.085); _seg(fore, E, S + dir * dl if dl < d.length() else H, 0.07)
 
 # حركة الجسم: جري بركبتين، ميلان للأمام، اهتزاز، ارتداد السلاح، تصويب نحو الهدف
 func _animate(dt: float, spd: float, firing: bool) -> void:
