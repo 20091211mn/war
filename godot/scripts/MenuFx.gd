@@ -15,6 +15,15 @@ static func grade(parent: Control) -> ColorRect:
 	var r := ColorRect.new(); r.set_anchors_preset(Control.PRESET_FULL_RECT); r.mouse_filter = Control.MOUSE_FILTER_IGNORE; r.material = _shader_mat(GRADE); r.color = Color.WHITE
 	parent.add_child(r); return r
 
+# شريطا السينما (علوي/سفلي) داخل هوامش القائمة فلا يغطيان أي عنصر
+static func letterbox(parent: Control) -> void:
+	for top in [true, false]:
+		var r := ColorRect.new(); r.color = Color(0, 0, 0, 0.92); r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		r.anchor_left = 0.0; r.anchor_right = 1.0
+		if top: r.anchor_top = 0.0; r.anchor_bottom = 0.036
+		else: r.anchor_top = 0.964; r.anchor_bottom = 1.0
+		parent.add_child(r)
+
 static func shine_material() -> ShaderMaterial: return _shader_mat(SHINE)
 
 static func vignette(parent: Control) -> ColorRect:

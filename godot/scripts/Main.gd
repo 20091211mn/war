@@ -273,7 +273,7 @@ func _icon_btn(kind: String, sz: Vector2) -> Button:
 
 func _build_menu() -> void:
 	menu_root = Control.new(); menu_root.name = "Menu"; menu_root.set_anchors_preset(Control.PRESET_FULL_RECT); menu_root.mouse_filter = Control.MOUSE_FILTER_IGNORE; ui_root.add_child(menu_root)
-	MenuFx.grade(menu_root); _vig = MenuFx.vignette(menu_root); MenuFx.embers(menu_root)
+	MenuFx.grade(menu_root); _vig = MenuFx.vignette(menu_root); MenuFx.embers(menu_root); MenuFx.letterbox(menu_root)
 	var mg := MarginContainer.new(); mg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	for k in ["left", "right"]: mg.add_theme_constant_override("margin_" + k, 56)
 	for k in ["top", "bottom"]: mg.add_theme_constant_override("margin_" + k, 34)
@@ -471,6 +471,7 @@ func _menu_actors_step() -> void:
 		var cyc := fmod(tt * 1.3 + ph, 3.0)
 		if cyc < 1.0 and fmod(tt * 9.0 + ph * 3.0, 1.0) < 0.12 and b.kick < 0.2:
 			b.kick = 1.0
+			if randf() < 0.5 and menu_shot == "": sfx_play("shot", b.muzzle_pos())
 			var mp := b.muzzle_pos(); var dir := Vector3(sx, 0, 0).rotated(Vector3.UP, randf_range(-0.05, 0.05))
 			var tr := MeshInstance3D.new(); var bm := BoxMesh.new(); bm.size = Vector3(0.05, 0.05, 14.0); tr.mesh = bm
 			var tm := StandardMaterial3D.new(); tm.albedo_color = Color(1.0, 0.8, 0.35, 0.9); tm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; tm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; tr.material_override = tm
