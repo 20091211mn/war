@@ -36,11 +36,18 @@ var match_t := 0.0
 var overlay := false   # في LAN: قائمة الإيقاف تُعرض فوق اللعب دون إيقاف المحاكاة
 var menu_root: Control
 var pause_root: Control
+var board_root: Control
+var board_cols: HBoxContainer
+var board_title: Label
+var board_t := 0.0
 var over_label: Label
 var sfx := {}
 var scenery: Node3D
 var selftest := false
 var gren_test := false
+var dbg_board := false
+var fall_test := false
+var ft_f := 0
 var air_test := false
 var to_test := false
 var at_j: Jet = null
@@ -72,7 +79,7 @@ func _ready() -> void:
 	hud = Hud.new(); hud.game = self; ui.add_child(hud)
 	Settings.changed.connect(_on_settings)
 	lan = Lan.new(); lan.game = self; lan.process_mode = Node.PROCESS_MODE_ALWAYS; lan.name = "Lan"; add_child(lan)
-	_build_menu(); _build_pause()
+	_build_menu(); _build_pause(); _build_board()
 	lan.build_ui()
 	_show_menu()
 	var args := OS.get_cmdline_user_args()
@@ -93,6 +100,8 @@ func _ready() -> void:
 		if a.begins_with("--vshot="): veh_shot = a.substr(8)
 		if a.begins_with("--vehtest="): veh_test = int(a.substr(10))
 		if a == "--grentest": gren_test = true
+		if a == "--board": dbg_board = true
+		if a == "--falltest": fall_test = true
 		if a == "--airtest": air_test = true
 		if a == "--takeofftest": to_test = true
 		if a.begins_with("--vehcam="): dbg_vehcam = int(a.substr(9))
@@ -287,6 +296,54 @@ func _build_pause() -> void:
 	_res_btn = Button.new(); _res_btn.custom_minimum_size = Vector2(0, 80); _res_btn.add_theme_font_size_override("font_size", 30); UiTheme.style_accent(_res_btn); UiTheme.juicy(_res_btn); _res_btn.pressed.connect(resume); vb.add_child(_res_btn)
 	_menu_btn = Button.new(); _menu_btn.custom_minimum_size = Vector2(0, 72); _menu_btn.add_theme_font_size_override("font_size", 26); UiTheme.style_ghost(_menu_btn); UiTheme.juicy(_menu_btn); _menu_btn.pressed.connect(_show_menu); vb.add_child(_menu_btn)
 
+func _build_board() -> void:
+	board_root = Control.new(); board_root.name = "Board"; board_root.set_anchors_preset(Control.PRESET_FULL_RECT); board_root.visible = false; board_root.mouse_filter = Control.MOUSE_FILTER_STOP; ui_root.add_child(board_root)
+	var dim := ColorRect.new(); dim.color = Color(0.03, 0.05, 0.09, 0.82); dim.set_anchors_preset(Control.PRESET_FULL_RECT); board_root.add_child(dim)
+	var cc := CenterContainer.new(); cc.set_anchors_preset(Control.PRESET_FULL_RECT); board_root.add_child(cc)
+	var vb := _card(cc, 820)
+	var hb := HBoxContainer.new(); vb.add_child(hb)
+	board_title = Label.new(); board_title.add_theme_font_size_override("font_size", 36); board_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL; board_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; hb.add_child(board_title)
+	var x := Button.new(); x.text = "✕"; x.custom_minimum_size = Vector2(60, 60); x.add_theme_font_size_override("font_size", 24); UiTheme.style_ghost(x); UiTheme.juicy(x); x.pressed.connect(func(): toggle_board(0)); hb.add_child(x)
+	board_cols = HBoxContainer.new(); board_cols.add_theme_constant_override("separation", 22); vb.add_child(board_cols)
+
+func _board_label(t: String, sz: int, col: Color, w := 0.0, al := HORIZONTAL_ALIGNMENT_LEFT) -> Label:
+	var l := Label.new(); l.text = t; l.add_theme_font_size_override("font_size", sz); l.add_theme_color_override("font_color", col); l.horizontal_alignment = al
+	if w > 0.0: l.custom_minimum_size = Vector2(w, 0)
+	else: l.size_flags_horizontal = Control.SIZE_EXPAND_FILL; l.clip_text = true
+	return l
+
+func fill_board() -> void:
+	for c in board_cols.get_children(): c.queue_free()
+	for tm in 2:
+		var col := VBoxContainer.new(); col.size_flags_horizontal = Control.SIZE_EXPAND_FILL; col.add_theme_constant_override("separation", 6); board_cols.add_child(col)
+		var tc := Color(1.0, 0.42, 0.38) if tm == 0 else Color(0.42, 0.65, 1.0)
+		var hd := HBoxContainer.new(); col.add_child(hd)
+		hd.add_child(_board_label(Settings.t("الفريق الأحمر") if tm == 0 else Settings.t("الفريق الأزرق"), 26, tc))
+		hd.add_child(_board_label(str(score[tm]), 30, tc, 60, HORIZONTAL_ALIGNMENT_RIGHT))
+		var hh := HBoxContainer.new(); col.add_child(hh)
+		hh.add_child(_board_label(Settings.t("اللاعب"), 16, Color(0.6, 0.68, 0.8)))
+		hh.add_child(_board_label(Settings.t("القتل"), 16, Color(0.6, 0.68, 0.8), 54, HORIZONTAL_ALIGNMENT_CENTER))
+		hh.add_child(_board_label(Settings.t("القتلى"), 16, Color(0.6, 0.68, 0.8), 54, HORIZONTAL_ALIGNMENT_CENTER))
+		var arr: Array = []
+		for f in fighters:
+			if is_instance_valid(f) and f.team == tm: arr.append(f)
+		arr.sort_custom(func(a, b) -> bool: return a.kills > b.kills or (a.kills == b.kills and a.deaths < b.deaths))
+		for f in arr:
+			var me: bool = f == player
+			var rc := Color(1, 0.95, 0.55) if me else (Color(0.92, 0.95, 1.0) if f.alive else Color(0.55, 0.6, 0.68))
+			var row := HBoxContainer.new(); col.add_child(row)
+			row.add_child(_board_label(("★ " if me else "") + f.fname, 22, rc))
+			row.add_child(_board_label(str(f.kills), 22, rc, 54, HORIZONTAL_ALIGNMENT_CENTER))
+			row.add_child(_board_label(str(f.deaths), 22, rc, 54, HORIZONTAL_ALIGNMENT_CENTER))
+
+func toggle_board(force := -1) -> void:
+	if board_root == null: return
+	var on := (not board_root.visible) if force < 0 else force == 1
+	if on:
+		board_title.text = Settings.t("لوحة النتائج"); fill_board(); board_t = 0.0
+	board_root.visible = on
+	if state == "play" or state == "over": hud.visible = not on
+
 func _refresh() -> void:
 	if _title == null: return
 	_sub.text = Settings.t("حرب فرق ثلاثية الأبعاد — الأحمر ضد الأزرق")
@@ -341,7 +398,7 @@ func _fade_in(c: Control) -> void:
 func _show_menu() -> void:
 	if lan != null: lan.leave()
 	overlay = false
-	state = "menu"; menu_root.visible = true; _fade_in(menu_root); pause_root.visible = false; hud.visible = false; map_info.clear()
+	state = "menu"; menu_root.visible = true; _fade_in(menu_root); pause_root.visible = false; board_root.visible = false; hud.visible = false; map_info.clear()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE; get_tree().paused = false
 	if world != null: world.queue_free(); world = null
 	for f in fighters: if is_instance_valid(f): f.queue_free()
@@ -394,7 +451,7 @@ func start_match() -> void:
 	else:
 		spawn_vehicles(m)
 		nav_ready = false; nav_map = RID(); Nav.bake(self, m, world)
-	menu_root.visible = false; pause_root.visible = false; hud.visible = true; state = "play"
+	menu_root.visible = false; pause_root.visible = false; board_root.visible = false; hud.visible = true; state = "play"
 	hud.say(Settings.t("اختر سلاحك") if false else m["name"])
 
 # مباراة LAN: role 1 مضيف (slot 0 = لاعب المضيف) أو 2 عميل (slot = خانتي). كل الخانات n؛ الفريق = رقم الخانة & 1
@@ -422,7 +479,7 @@ func start_lan_match(role: int, slot: int, cfg: Dictionary) -> void:
 			else: b.respawn(spawn_point(b.team))
 	scenery = Node3D.new(); world.add_child(scenery); build_scenery(); apply_quality()
 	menu_root.visible = false; pause_root.visible = false; for r in lan.screens(): r.visible = false
-	hud.visible = true; state = "play"; overlay = false; get_tree().paused = false
+	board_root.visible = false; hud.visible = true; state = "play"; overlay = false; get_tree().paused = false
 	hud.say(m["name"])
 
 func spawn_point(team: int) -> Vector3:
@@ -615,7 +672,7 @@ func _tracer(a: Vector3, b: Vector3) -> void:
 
 func on_kill(src: Fighter, victim: Fighter, head: bool) -> void:
 	if src != null and src != victim: score[src.team] += 1
-	var kn := (src.fname if src != null else "-")
+	var kn := (src.fname if src != null else Settings.t("سقوط"))
 	hud.add_feed("%s  ✕  %s%s" % [kn, victim.fname, "  ★" if head else ""])
 	if src != null and src != victim:
 		var ms: int = int(src.get_meta("streak", 0)) + 1; src.set_meta("streak", ms)
@@ -630,12 +687,12 @@ func on_kill(src: Fighter, victim: Fighter, head: bool) -> void:
 	victim.set_meta("streak", 0); victim.set_meta("multi", 0)
 	if false: pass
 	if lan.role == 1: lan.send_feed("%s  ✕  %s%s" % [kn, victim.fname, "  ★" if head else ""])
-	if victim == player: resp_t = 4.0
+	if victim == player: resp_t = 3.0
 	else:
 		if victim is Bot and not air: (victim as Bot).play_death(src.global_position if src != null else victim.global_position)
 		get_tree().create_timer(2.2).timeout.connect(func(): if is_instance_valid(victim) and not victim.alive: victim.visible = false)
 		var hum := victim is Bot and (victim as Bot).net_ctrl
-		get_tree().create_timer(4.0 if hum else 3.0).timeout.connect(func():
+		get_tree().create_timer(3.4 if hum else 2.6).timeout.connect(func():
 			if is_instance_valid(victim) and state != "menu" and not (victim as Bot).off:
 				if air: air_spawn(victim)
 				elif hum: lan.respawn_human(victim as Bot)
@@ -646,6 +703,7 @@ func _end_match() -> void:
 	if state == "over": return
 	state = "over"; overlay = false; pause_root.visible = true; _set_paused(true); Input.mouse_mode = Input.MOUSE_MODE_VISIBLE; hud.mouse_look = false; _release_inputs(); _refresh()
 	over_label.text = Settings.t("فاز الفريق الأحمر") if score[0] >= score[1] else Settings.t("فاز الفريق الأزرق")
+	toggle_board(1); board_title.text = over_label.text
 
 # ---------------------------------------------------------------- الجودة والمشاهد
 func apply_quality() -> void:
@@ -740,6 +798,9 @@ func _tree_points(m: Dictionary, nt: int) -> Array:
 
 # ---------------------------------------------------------------- الحلقة
 func _process(dt: float) -> void:
+	if board_root != null and board_root.visible and state == "play":
+		board_t += dt
+		if board_t > 0.6: board_t = 0.0; fill_board()
 	if state == "menu" and prev_cam != null and thumb_path == "": _orbit(Time.get_ticks_msec() / 1000.0)
 	if thumb_path != "":
 		_mf += 1
@@ -792,6 +853,9 @@ func _physics_process(dt: float) -> void:
 			player.cam.global_position = vv.global_position + sd; player.cam.look_at(vv.global_position + Vector3(0, 1.0, 0)); player.gun_parts.visible = false; player.arm_r.visible = false; player.arm_l.visible = false
 		if dbg_botcam and test_frames == 120 and fighters.size() > 3:
 			(fighters[3] as Bot).alive = false; (fighters[3] as Bot).play_death(fighters[3].global_position + Vector3(0, 0, -3))
+		if dbg_board and test_frames == 100:
+			for i in fighters.size(): fighters[i].kills = (i * 7) % 11; fighters[i].deaths = (i * 5) % 7
+			toggle_board(1)
 		if test_frames == 150:
 			get_viewport().get_texture().get_image().save_png(shot_path); print("SHOT saved"); get_tree().quit(0)
 		return
@@ -834,6 +898,12 @@ func _physics_process(dt: float) -> void:
 		if at_f == 910 and near_jet(player) != null: inp["use"] = true
 		if at_f == 960: print("AT board: jet=", player.jet != null, " th=", (player.jet.th if player.jet != null else -1.0))
 		if at_f == 1200: get_tree().quit(0)
+	if fall_test and not air:
+		ft_f += 1; var pf := player as Player
+		if ft_f == 100: pf.spawn_prot = 0.0; pf.global_position += Vector3(0, 25.0, 0); pf.velocity = Vector3.ZERO; print("FT start hp=", pf.hp)
+		if ft_f > 100: pf.spawn_prot = 0.0
+		if ft_f == 102 or ft_f == 110 or ft_f == 130: print("FT y=", snappedf(pf.global_position.y, 0.1), " vy=", snappedf(pf.velocity.y, 0.1), " alive=", pf.alive, " st=", state)
+		if ft_f == 700: print("FT after 9m drop: hp=", int(pf.hp), " alive=", pf.alive, " deaths=", pf.deaths); get_tree().quit(0)
 	if gren_test:
 		gt_f += 1
 		var pl := player as Player

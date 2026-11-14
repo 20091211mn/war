@@ -44,6 +44,7 @@ func _btn(name: String) -> Dictionary:
 		"sprint": return {"c": Vector2(130, s.y - 300), "r": 38.0}
 		"next": return {"c": Vector2(s.x - 360, s.y - 150), "r": 36.0}
 		"pause": return {"c": Vector2(s.x - 50, 50), "r": 30.0}
+		"board": return {"c": Vector2(s.x - 124, 50), "r": 26.0}
 		"use": return {"c": Vector2(s.x - 480, s.y - 90), "r": 44.0}
 		"seat": return {"c": Vector2(s.x - 480, s.y - 200), "r": 38.0}
 		"c4": return {"c": Vector2(s.x - 480, s.y - 310), "r": 34.0}
@@ -54,11 +55,11 @@ func _btn(name: String) -> Dictionary:
 		"gren": return {"c": Vector2(s.x - 360, s.y - 260), "r": 36.0}
 		"crouch": return {"c": Vector2(130, s.y - 420), "r": 36.0}
 	return {"c": Vector2.ZERO, "r": 0.0}
-const BTNS := ["fire", "jump", "ads", "reload", "sprint", "next", "pause", "use", "seat", "gren", "crouch", "c4", "det", "drone", "tup", "tdn"]
+const BTNS := ["fire", "jump", "ads", "reload", "sprint", "next", "pause", "use", "seat", "gren", "crouch", "c4", "det", "drone", "tup", "tdn", "board"]
 
 func _btn_on(n: String) -> bool:
 	if game == null or game.player == null: return n != "use" and n != "seat" and n != "tup" and n != "tdn"
-	if game.player.jet != null: return n in ["fire", "ads", "pause", "use", "tup", "tdn"]
+	if game.player.jet != null: return n in ["fire", "ads", "pause", "use", "tup", "tdn", "board"]
 	if n == "tup" or n == "tdn": return false
 	if n == "use" and game.air: return game.near_jet(game.player) != null
 	if n == "drone": return game.player.veh == null
@@ -95,6 +96,7 @@ func _input(ev: InputEvent) -> void:
 					"sprint": inp["sprint"] = not bool(inp["sprint"])
 					"next": inp["next"] = true
 					"pause": game.open_pause()
+					"board": game.toggle_board()
 					"use": inp["use"] = true
 					"seat": inp["seat"] = true
 					"tup": inp["tup"] = true
@@ -144,6 +146,7 @@ func _input(ev: InputEvent) -> void:
 			KEY_Q: if k.pressed: inp["next"] = true
 			KEY_E: if k.pressed: inp["use"] = true
 			KEY_F: if k.pressed: inp["seat"] = true
+			KEY_TAB: if k.pressed: game.toggle_board()
 			KEY_G: if k.pressed: inp["gren"] = true
 			KEY_V: if k.pressed: inp["drone"] = true
 			KEY_X: if k.pressed: inp["c4"] = true
@@ -219,6 +222,8 @@ func _btn_draw(n: String, c: Vector2, r: float, on: bool) -> void:
 		"next":
 			_pl([c + Vector2(-k, -k * 0.45), c + Vector2(k, -k * 0.45)], col, w); _pl([c + Vector2(k * 0.4, -k * 0.95), c + Vector2(k, -k * 0.45), c + Vector2(k * 0.4, k * 0.05)], col, w)
 			_pl([c + Vector2(k, k * 0.45), c + Vector2(-k, k * 0.45)], col, w); _pl([c + Vector2(-k * 0.4, -k * 0.05), c + Vector2(-k, k * 0.45), c + Vector2(-k * 0.4, k * 0.95)], col, w)
+		"board":
+			for i in 3: draw_line(c + Vector2(-k * 0.9, (i - 1) * k * 0.62), c + Vector2(k * 0.9, (i - 1) * k * 0.62), col, w); draw_circle(c + Vector2(-k * 0.9, (i - 1) * k * 0.62), 2.2, col)
 		"pause":
 			draw_rect(Rect2(c + Vector2(-k * 0.65, -k * 0.8), Vector2(k * 0.45, k * 1.6)), col); draw_rect(Rect2(c + Vector2(k * 0.2, -k * 0.8), Vector2(k * 0.45, k * 1.6)), col)
 		"use":

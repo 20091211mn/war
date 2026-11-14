@@ -202,7 +202,7 @@ func _physics_process(dt: float) -> void:
 	if crouching: sprinting = false
 	crouch_t = move_toward(crouch_t, 1.0 if crouching else 0.0, dt * 6.0)
 	var hgt := lerpf(1.75, 1.15, crouch_t); cshape.height = hgt; cshape_node.position.y = hgt * 0.5
-	var sp := 7.0 if sprinting else 4.6
+	var sp := 8.2 if sprinting else 5.3
 	if crouching: sp *= 0.55
 	if ads: sp *= 0.6
 	var dirv := (global_transform.basis * Vector3(mv.x, 0, mv.y))
@@ -216,6 +216,7 @@ func _physics_process(dt: float) -> void:
 	inp["jump"] = false
 	_step_up2(Vector3(velocity.x, 0, velocity.z) * dt)
 	move_and_slide()
+	track_fall()
 	var lim_x: float = game.map_w * 0.5 - 0.4; var lim_z: float = game.map_d * 0.5 - 0.4
 	position.x = clampf(position.x, -lim_x, lim_x); position.z = clampf(position.z, -lim_z, lim_z)
 	var spd := Vector2(velocity.x, velocity.z).length()

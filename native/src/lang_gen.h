@@ -129,6 +129,13 @@ static const TrE TR_TAB[]={
 {"نزلت من الطائرة — لديك RPG","You left the jet — you have an RPG","Bajaste del avión — tienes un RPG"},
 {"أسقطت طائرة!","Jet down!","¡Avión derribado!"},
 {"على المدرج — ارفع الدفع THR+ ثم اسحب للأعلى","On runway — raise THR+ then pull up","En pista — sube THR+ y tira hacia arriba"},
+{"سقوط من ارتفاع!","Fall damage!","¡Daño por caída!"},
+{"سقوط","Fall","Caída"},
+{"لوحة النتائج","Scoreboard","Marcador"},
+{"القتلى","Deaths","Muertes"},
+{"القتل","Kills","Bajas"},
+{"الفريق الأحمر","Red team","Equipo rojo"},
+{"الفريق الأزرق","Blue team","Equipo azul"},
 {"تم زرع C4","C4 planted","C4 colocada"},
 {"اقترب من سطح","Get close to a surface","Acércate a una superficie"},
 {"ثلاث قتلات متتالية!","Triple streak!","¡Racha de tres!"},
@@ -196,4 +203,4 @@ static const TrE TR_TAB[]={
 {"Español","Español","Español"},
 {"تم حفظ الإعدادات","Settings saved","Ajustes guardados"},
 };
-static const int TR_N=193;
+static const int TR_N=200;

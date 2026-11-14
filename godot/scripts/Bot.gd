@@ -219,11 +219,12 @@ func _physics_process(dt: float) -> void:
 	mv = _avoid(mv)
 	mv.y = 0.0
 	if mv.length() > 1.0: mv = mv.normalized()
-	var sp := 4.2
+	var sp := 4.9
 	velocity.x = mv.x * sp; velocity.z = mv.z * sp
 	velocity.y = velocity.y - 18.0 * dt if not is_on_floor() else -1.0
 	_step_up(Vector3(velocity.x, 0, velocity.z) * dt)
 	move_and_slide()
+	track_fall()
 	var lim_x: float = game.map_w * 0.5 - 0.5; var lim_z: float = game.map_d * 0.5 - 0.5
 	position.x = clampf(position.x, -lim_x, lim_x); position.z = clampf(position.z, -lim_z, lim_z)
 	rotation.y = yaw

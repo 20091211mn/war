@@ -11,6 +11,8 @@ var ammo := 30
 var reserve := 120
 var cd := 0.0
 var reload_t := 0.0
+var air_vy := 0.0
+var was_air := false
 var reveal := 0.0
 var jet: Node = null
 var kills := 0
@@ -68,6 +70,18 @@ func try_fire(origin: Vector3, dir: Vector3, ads: bool, extra_spread: float) -> 
 	game.sfx_play("shot", origin)
 	if ammo <= 0 and reserve > 0: start_reload()
 	return true
+
+func track_fall() -> void:
+	# ضرر السقوط: نحو 10.5 م/ث بلا ضرر، ويقتل عند ~17.5 م/ث (حوالي 8.5 م ارتفاع)
+	if is_on_floor():
+		if was_air and air_vy < -10.5 and alive and jet == null and veh == null:
+			var dmg := (-air_vy - 10.5) * 14.0
+			if self == game.player: game.hud.say(Settings.t("سقوط من ارتفاع!"))
+			game.sfx_play("hit", global_position)
+			take_damage(dmg, null, false)
+		was_air = false; air_vy = 0.0
+	else:
+		was_air = true; air_vy = minf(air_vy, velocity.y)
 
 func take_damage(d: float, src: Fighter, head: bool) -> void:
 	if not alive or spawn_prot > 0.0: return
