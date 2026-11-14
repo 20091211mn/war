@@ -52,22 +52,24 @@ jobs:
           EOF
           sed -i 's/^          //' "$F"
           tail -8 "$F"
-      - name: Export Android APKs (debug-signed + release-signed)
+      - name: Export Android APK (ملف واحد، مفتاح ثابت، رقم إصدار يزيد مع كل بناء)
         env:
           KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
         run: |
           mkdir -p build
-          # 1) نسخة موقّعة بمفتاح debug
-          godot --headless --path godot --export-debug "Android" ../build/Warzone-godot-debug.apk 2>&1 | grep -v "mesh_get_surface_count\|Parameter \"m\" is null" | tail -15
-          # 2) نسخة release موقّعة بمفتاح الإصدار (سرّ المستودع إن وُجد، وإلا المفتاح الثابت tools/signing)
+          # رقم الإصدار = رقم التشغيل: كل بناء أعلى من السابق فيُثبَّت فوقه كتحديث بلا تعارض (المفتاح والاسم ثابتان)
+          N=${{ github.run_number }}
+          sed -i "s/^version\/code=.*/version\/code=$N/; s/^version\/name=.*/version\/name=\"0.$N\"/" godot/export_presets.cfg
+          grep -E "^version/" godot/export_presets.cfg
           if [ -n "$KS_B64" ]; then echo "$KS_B64" | base64 -d > $HOME/release.jks; PASS="$KS_PASS"; else cp tools/signing/warzone-release.jks $HOME/release.jks; PASS=warzone2026; fi
           export GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$HOME/release.jks GODOT_ANDROID_KEYSTORE_RELEASE_USER=warzone GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD="$PASS"
-          godot --headless --path godot --export-release "Android" ../build/Warzone-godot-release.apk 2>&1 | grep -v "mesh_get_surface_count\|Parameter \"m\" is null" | tail -15
+          godot --headless --path godot --export-release "Android" ../build/Warzone-godot.apk 2>&1 | grep -v "mesh_get_surface_count\|Parameter \"m\" is null" | tail -15
           ls -la build/
-          test -s build/Warzone-godot-debug.apk; test -s build/Warzone-godot-release.apk
-          APKSIGNER=$(ls ${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools/*/apksigner | tail -1)
-          for f in debug release; do echo "== $f"; $APKSIGNER verify --print-certs build/Warzone-godot-$f.apk | grep -i "DN:\|SHA-256" | head -2; done
+          test -s build/Warzone-godot.apk
+          BT=$(ls -d ${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools/* | tail -1)
+          $BT/apksigner verify --print-certs build/Warzone-godot.apk | grep -i "DN:\|SHA-256" | head -2
+          $BT/aapt dump badging build/Warzone-godot.apk | grep -E "^package:" || true
       - uses: actions/upload-artifact@v4
         with:
           name: warzone-godot-android
