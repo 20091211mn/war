@@ -38,6 +38,14 @@ var drone_cd := 0.0
 var c4n := 3
 var c4s: Array = []
 var gren_t := 0.0
+var rec := Vector3.ZERO       # ارتداد زنبركي: x ميلان للأعلى، y التفاف، z رجوع للخلف
+var rec_v := Vector3.ZERO
+var rec_acc := 0.0            # مجموع ارتداد الكاميرا المتراكم (للتعافي الجزئي)
+var burst := 0                # عدد الطلقات المتتالية
+var gp_pos := Vector3(0.2, -0.22, -0.45)
+var gp_rot := Vector3.ZERO
+var idle_t := 0.0
+var mag_dropped := false
 var gren_thrown := true
 var crouch_t := 0.0
 var cshape: CapsuleShape3D
@@ -97,6 +105,7 @@ func rebuild_viewmodel() -> void:
 		mag_home = Vector3.ZERO; mag_c = mdl["mag_c"] if ms[1] != null else Vector3(0, -0.08, (mz + rear) * 0.4)
 		rh_home = Vector3(0, mag_c.y + 0.09, mag_c.z + 0.13) if ms[1] != null else Vector3(0, -0.07, rear * 0.2)
 		lh_home = Vector3(0, -0.02, mz * 0.55)
+		if kind in ["pistol", "magnum"]: lh_home = rh_home + Vector3(-0.05, -0.03, -0.02)  # قبضة بيدين
 		bolt_pt = Vector3(0.03, gh * 0.8, lerpf(mz, rear, 0.62)) if ms[2] == null else Vector3(0.04, (mdl["bolt_c"] as Vector3).y, (mdl["bolt_c"] as Vector3).z)
 		ej_pt = Vector3(0.04, gh * 0.6, lerpf(mz, rear, 0.62))
 		sight_y = gh * 0.95; ads_adj = 0.045
@@ -139,6 +148,19 @@ func _arm_to(arm: MeshInstance3D, shoulder: Vector3, hand: Node3D) -> void:
 	var hp := vm.to_local(hand.global_position); var d := hp - shoulder; var ln := d.length()
 	if ln < 0.01: return
 	arm.transform = Transform3D(Basis.looking_at(d / ln, Vector3.UP) * Basis.from_scale(Vector3(0.055, 0.055, ln)), shoulder + d * 0.5)
+
+func w_kind() -> String: return String(weapon()["kind"])
+
+func _drop_mag() -> void:
+	if mag == null or mag.mesh == null or game == null: return
+	var d := MeshInstance3D.new(); d.mesh = mag.mesh; d.material_override = mag.material_override
+	game.add_child(d); d.global_transform = mag.global_transform
+	var tgt := d.global_position + global_transform.basis * Vector3(randf_range(0.05, 0.25), 0.0, randf_range(0.0, 0.2)); tgt.y = global_position.y + 0.04
+	var tw := d.create_tween().set_parallel(true)
+	tw.tween_property(d, "global_position:x", tgt.x, 0.55); tw.tween_property(d, "global_position:z", tgt.z, 0.55)
+	tw.tween_property(d, "global_position:y", tgt.y, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(d, "rotation:x", randf_range(-2.0, 2.0), 0.55)
+	tw.chain().tween_interval(2.5); tw.chain().tween_callback(d.queue_free)
 
 func _ease(x: float) -> float:
 	x = clampf(x, 0.0, 1.0); return x * x * (3.0 - 2.0 * x)
@@ -244,10 +266,26 @@ func _physics_process(dt: float) -> void:
 	tgt_pos += Vector3(-sway.x, sway.y, 0) * (0.3 if ads else 1.0) + Vector3(-0.03 * rl, -0.35 * draw_t + 0.04 * rl - 0.45 * thr, 0.05 * float(rpose["bolt"]) + 0.04 * rl)
 	var bobv := Vector3(sin(bob) * 0.006, absf(cos(bob)) * 0.008, 0) * (1.0 if is_on_floor() else 0.0) * clampf(Vector2(velocity.x, velocity.z).length() / 4.6, 0, 1.4)
 	if spr_pose: bobv *= 2.2
-	gun_parts.position = gun_parts.position.lerp(tgt_pos + bobv + Vector3(0, 0, kick * 0.04), minf(1.0, dt * 14.0))
-	gun_parts.rotation.z = lerpf(gun_parts.rotation.z, rl * 0.35 + (0.15 if spr_pose else 0.0), minf(1.0, dt * 10.0))
-	gun_parts.rotation.x = lerpf(gun_parts.rotation.x, (-0.5 if spr_pose else 0.0) + kick * 0.06 + rl * 0.12 + draw_t * 0.6, minf(1.0, dt * 10.0))
-	gun_parts.rotation.y = lerpf(gun_parts.rotation.y, (0.45 if spr_pose else 0.0), minf(1.0, dt * 10.0))
+	# ---- ارتداد زنبركي + قصور ذاتي + تنفّس ----
+	rec_v += (-rec * 190.0 - rec_v * 15.0) * dt; rec += rec_v * dt
+	if fire_hold <= 0.1: burst = 0
+	if fire_hold <= 0.12 and rec_acc > 0.0:  # تعافي جزئي لمستوى الكاميرا بعد التوقف
+		var dr := minf(rec_acc, dt * 0.35); pitch -= dr * 0.6; rec_acc -= dr
+	idle_t += dt
+	var br := 0.35 if ads else 1.0
+	var lat := velocity.dot(global_transform.basis.x) / 5.0
+	var breath := Vector3(0.0, sin(idle_t * 1.5) * 0.0016, 0.0) * br
+	gp_pos = gp_pos.lerp(tgt_pos + bobv + breath, minf(1.0, dt * 14.0))
+	var tr_z := rl * 0.35 + (0.15 if spr_pose else 0.0) - lat * 0.05
+	var tr_x := (-0.5 if spr_pose else 0.0) + rl * 0.12 + draw_t * 0.6 - sway.y * 2.2 + sin(idle_t * 1.1) * 0.004 * br
+	var tr_y := (0.45 if spr_pose else 0.0) + sway.x * 2.2
+	gp_rot = Vector3(lerpf(gp_rot.x, tr_x, minf(1.0, dt * 10.0)), lerpf(gp_rot.y, tr_y, minf(1.0, dt * 10.0)), lerpf(gp_rot.z, tr_z, minf(1.0, dt * 10.0)))
+	gun_parts.position = gp_pos + Vector3(0, rec.x * 0.012, rec.z * 0.07)
+	gun_parts.rotation = gp_rot + Vector3(rec.x * 0.07, rec.y * 0.05, rec.y * 0.03)
+	cam.rotation.z = lerpf(cam.rotation.z, -lat * 0.012 + rec.y * 0.01, minf(1.0, dt * 8.0))
+	if bolt != null and rp <= 0.0 and ammo <= 0 and w_kind() in ["pistol", "magnum"]: bolt.position = Vector3(0, 0, 0.05)  # سلايد مسحوب عند الفراغ
+	if rp >= 0.3 and rp < 0.9 and not mag_dropped and mag != null: _drop_mag(); mag_dropped = true  # المخزن القديم يسقط أرضاً
+	elif rp <= 0.05: mag_dropped = false
 	_arm_to(arm_r, SHOULDER_R, rh); _arm_to(arm_l, SHOULDER_L, lh)
 	var z := float(weapon()["zoom"])
 	var tfov := 75.0 / (z if ads and z > 1.0 else 1.0)
@@ -261,7 +299,13 @@ func _physics_process(dt: float) -> void:
 	if inp["fire"]:  # الإطلاق مسموح أثناء الجري
 		var w := weapon()
 		if try_fire(cam.global_position, -cam.global_transform.basis.z, ads, spd * 0.0004):
-			kick = 1.0; fire_hold = 0.35; pitch += float(w["recoilV"]) * (1.0 if ads else 1.3) * 1.5; yaw += randf_range(-1, 1) * float(w["recoilH"]) * 1.5
+			kick = 1.0; fire_hold = 0.35; burst = mini(burst + 1, 14)
+			var kr: float = {"pistol": 0.9, "magnum": 1.7, "smg": 0.6, "rifle": 0.85, "shotgun": 2.1, "lmg": 1.0, "sniper": 2.4, "dmr": 1.5, "launcher": 2.8}.get(String(w["kind"]), 1.0)
+			var steady := 0.75 if crouch_t > 0.5 else 1.0
+			var dp := float(w["recoilV"]) * (1.0 if ads else 1.3) * 1.5 * (1.0 + burst * 0.035) * steady
+			pitch += dp; rec_acc += dp
+			yaw += (sin(burst * 0.9) * 0.55 + randf_range(-0.45, 0.45)) * float(w["recoilH"]) * 1.5 * steady
+			rec_v += Vector3(1.7 * kr, randf_range(-0.45, 0.45) * kr, 0.55 * kr) * (0.55 if ads else 1.0)
 			game.hud.fire_flash(); game.eject_shell(gun_parts.to_global(ej_pt), gun_parts.global_transform.basis)
 		if not bool(w["auto"]): inp["fire"] = false
 
