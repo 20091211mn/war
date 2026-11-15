@@ -76,6 +76,7 @@ var _mf := 0
 var dbg_wpn := -1
 var dbg_rl := -1.0
 var dbg_ads := false
+var dbg_fire := false
 var dbg_botcam := false
 var dbg_vehcam := -1
 var veh_test := -1
@@ -108,6 +109,7 @@ func _ready() -> void:
 		if a.begins_with("--wpn="): dbg_wpn = int(a.substr(6))
 		if a.begins_with("--rl="): dbg_rl = float(a.substr(5))
 		if a == "--ads": dbg_ads = true
+		if a == "--fire": dbg_fire = true
 		if a == "--botcam": dbg_botcam = true
 		if a == "--touch": show_touch = true
 		if a.begins_with("--vshot="): veh_shot = a.substr(8)
@@ -136,6 +138,7 @@ func _ready() -> void:
 		if dbg_wpn >= 0 and player != null: player.setup_weapon(dbg_wpn); player.rebuild_viewmodel()
 		if dbg_rl >= 0.0 and player != null: player.dbg_rp = dbg_rl
 		if dbg_ads: inp["ads"] = true
+		if dbg_fire: inp["fire"] = true
 
 func cam_pos() -> Vector3:
 	if state == "menu" and prev_cam != null and is_instance_valid(prev_cam): return prev_cam.global_position

@@ -48,6 +48,8 @@ var idle_t := 0.0
 var mag_dropped := false
 var cyc_t := 0.0
 var stock_n: MeshInstance3D
+var cyc_ej := true
+static var _casing_m: CylinderMesh
 var cyc_dur := 1.0
 var gren_thrown := true
 var crouch_t := 0.0
@@ -152,6 +154,35 @@ func _arm_to(arm: MeshInstance3D, shoulder: Vector3, hand: Node3D) -> void:
 	var hp := vm.to_local(hand.global_position); var d := hp - shoulder; var ln := d.length()
 	if ln < 0.01: return
 	arm.transform = Transform3D(Basis.looking_at(d / ln, Vector3.UP) * Basis(Vector3.RIGHT, PI * 0.5) * Basis.from_scale(Vector3(0.07, ln, 0.07)), shoulder + d * 0.5)
+
+# ---- خراطيش فارغة متطايرة ----
+func _eject(kind: String, down := false) -> void:
+	if game == null or gun_parts == null or not gun_parts.visible: return
+	if _casing_m == null:
+		_casing_m = CylinderMesh.new(); _casing_m.top_radius = 0.5; _casing_m.bottom_radius = 0.5; _casing_m.height = 1.0; _casing_m.radial_segments = 6; _casing_m.rings = 1
+	var mi := MeshInstance3D.new(); mi.mesh = _casing_m
+	var big := kind in ["sniper", "dmr", "lmg"]
+	var shell := kind == "shotgun"
+	var ln := 0.07 if shell else (0.05 if big else 0.028); var rd := 0.02 if shell else (0.012 if big else 0.0085)
+	mi.scale = Vector3(rd * 2.0, ln, rd * 2.0)
+	mi.material_override = _mat(Color(0.78, 0.12, 0.1) if shell else Color(0.85, 0.65, 0.22), 0.35, 0.9)
+	game.add_child(mi)
+	var port := gun_parts.to_global(Vector3(0.035, bolt_pt.y, bolt_pt.z + 0.02))
+	mi.global_position = port; mi.global_rotation = cam.global_rotation + Vector3(randf() * 3.0, randf() * 3.0, 0)
+	var b := cam.global_transform.basis
+	var v := b.x * randf_range(1.6, 2.6) + b.y * randf_range(1.0, 2.0) + b.z * randf_range(0.2, 0.8)
+	if down: v = b.x * randf_range(-0.4, 0.4) + Vector3(0, -0.5, 0)
+	var y0 := global_position.y + 0.02
+	var tw := mi.create_tween()
+	tw.tween_method(func(t: float):
+		var pp := port + v * t + Vector3(0, -9.8 * 0.5 * t * t, 0)
+		if pp.y < y0: pp.y = y0
+		mi.global_position = pp; mi.rotate_x(0.35), 0.0, 0.9, 0.9)
+	tw.tween_interval(1.4); tw.tween_callback(mi.queue_free)
+
+func _dump_cylinder() -> void:  # الماغنوم: إفراغ الأظرف الستة عند فتح الأسطوانة
+	if w_kind() != "magnum": return
+	for i in 6: get_tree().create_timer(0.03 * i).timeout.connect(func(): _eject("magnum", true))
 
 func w_kind() -> String: return String(weapon()["kind"])
 
@@ -309,6 +340,9 @@ func _physics_process(dt: float) -> void:
 	if mag != null: mag.position = mag_home + (rpose["magoff"] as Vector3); mag.visible = bool(rpose["magvis"])
 	cyc_t = maxf(0.0, cyc_t - dt); var cv := _cyc_v()
 	if bolt != null: bolt.position = Vector3(0, 0, 0.07 * float(rpose["bolt"]) + 0.1 * cv)
+	if not cyc_ej and cv > 0.95: cyc_ej = true; _eject(w_kind())  # الخرطوشة تُطرد عند أقصى سحب للترباس/البامب
+	if w_kind() == "sniper": rh.position = rh_home.lerp(bolt_pt + Vector3(0.055, -0.035, 0.03), cv)  # اليمنى على مقبض الترباس
+	elif rh.position != rh_home: rh.position = rh_home
 	if cv > 0.0 and rp <= 0.0 and w_kind() == "shotgun": rpose["lh"] = lh_home.lerp(lh_home + Vector3(0, 0.01, 0.17), cv)
 	lh.position = lh.position.lerp(rpose["lh"], minf(1.0, dt * (30.0 if rp > 0.0 else 12.0)))
 	rh.position = rh_home
@@ -338,7 +372,7 @@ func _physics_process(dt: float) -> void:
 	gun_parts.rotation = gp_rot + Vector3(rec.x * 0.07, rec.y * 0.05, rec.y * 0.03)
 	cam.rotation.z = lerpf(cam.rotation.z, -lat * 0.012 + rec.y * 0.01, minf(1.0, dt * 8.0))
 	if bolt != null and rp <= 0.0 and ammo <= 0 and w_kind() in ["pistol", "magnum"]: bolt.position = Vector3(0, 0, 0.05)  # سلايد مسحوب عند الفراغ
-	if not bool(rpose["magvis"]) and not mag_dropped and mag != null and w_kind() != "launcher": _drop_mag(); mag_dropped = true  # المخزن القديم يسقط أرضاً
+	if not bool(rpose["magvis"]) and not mag_dropped and mag != null and w_kind() != "launcher": _drop_mag(); mag_dropped = true; _dump_cylinder()  # المخزن القديم يسقط أرضاً
 	elif rp <= 0.05: mag_dropped = false
 	_arm_to(arm_r, SHOULDER_R, rh); _arm_to(arm_l, SHOULDER_L, lh)
 	var z := float(weapon()["zoom"])
@@ -358,6 +392,8 @@ func _physics_process(dt: float) -> void:
 			kick = 1.0; fire_hold = 0.35; burst = mini(burst + 1, 14)
 			if String(w["kind"]) == "sniper": cyc_dur = 1.3; cyc_t = 1.3
 			elif String(w["kind"]) == "shotgun": cyc_dur = 0.55; cyc_t = 0.55
+			if String(w["kind"]) in ["sniper", "shotgun"]: cyc_ej = false
+			elif String(w["kind"]) in ["rifle", "smg", "pistol", "dmr", "lmg"]: _eject(String(w["kind"]))
 			var kr: float = {"pistol": 0.9, "magnum": 1.7, "smg": 0.6, "rifle": 0.85, "shotgun": 2.1, "lmg": 1.0, "sniper": 2.4, "dmr": 1.5, "launcher": 2.8}.get(String(w["kind"]), 1.0)
 			var steady := 0.75 if crouch_t > 0.5 else 1.0
 			var dp := float(w["recoilV"]) * (1.0 if ads else 1.3) * 1.5 * (1.0 + burst * 0.035) * steady
