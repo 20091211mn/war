@@ -305,12 +305,12 @@ func _draw() -> void:
 	var s := size
 	var cx := s.x * 0.5; var cy := s.y * 0.5
 	var z := float(p.weapon()["zoom"])
-	var scoped: bool = p.alive and game.player.ads and z >= 3.4
+	var scoped: bool = p.alive and game.player.ads and z >= 2.0
 	# ---- عدسة المنظار (بلا مربع يغطي العدو): حلقة سوداء + شعرة رفيعة ----
 	if scoped:
-		var rr := minf(s.x, s.y) * 0.34
-		draw_arc(Vector2(cx, cy), rr + 600.0, 0, TAU, 8, Color.BLACK, 1200.0)
-		draw_arc(Vector2(cx, cy), rr, 0, TAU, 96, Color(0, 0, 0, 1), 3.0)
+		var rr := minf(s.x, s.y) * 0.4
+		draw_arc(Vector2(cx, cy), rr + 600.0, 0, TAU, 160, Color.BLACK, 1200.0)
+		draw_arc(Vector2(cx, cy), rr, 0, TAU, 160, Color(0, 0, 0, 1), 4.0)
 		draw_line(Vector2(cx - rr, cy), Vector2(cx - 8, cy), Color(0, 0, 0, 0.9), 1.5); draw_line(Vector2(cx + 8, cy), Vector2(cx + rr, cy), Color(0, 0, 0, 0.9), 1.5)
 		draw_line(Vector2(cx, cy - rr), Vector2(cx, cy - 8), Color(0, 0, 0, 0.9), 1.5); draw_line(Vector2(cx, cy + 8), Vector2(cx, cy + rr), Color(0, 0, 0, 0.9), 1.5)
 		draw_circle(Vector2(cx, cy), 2.0, Color(1, 0.15, 0.15))

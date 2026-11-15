@@ -46,6 +46,9 @@ var gp_pos := Vector3(0.2, -0.22, -0.45)
 var gp_rot := Vector3.ZERO
 var idle_t := 0.0
 var mag_dropped := false
+var cyc_t := 0.0
+var stock_n: MeshInstance3D
+var cyc_dur := 1.0
 var gren_thrown := true
 var crouch_t := 0.0
 var cshape: CapsuleShape3D
@@ -85,6 +88,7 @@ func _arm() -> MeshInstance3D:
 	var mi := _inst(vm, bm); mi.material_override = _mat(Color(0.2, 0.26, 0.17), 0.95, 0.0); return mi
 
 func rebuild_viewmodel() -> void:
+	stock_n = null
 	if gun_parts != null: gun_parts.queue_free()
 	if arm_r != null: arm_r.queue_free()
 	if arm_l != null: arm_l.queue_free()
@@ -99,7 +103,7 @@ func rebuild_viewmodel() -> void:
 		var ms: Array = mdl["meshes"]; var lo: Vector3 = mdl["lo"]; var hi: Vector3 = mdl["hi"]
 		mz = lo.z; rear = hi.z; gh = hi.y
 		if ms[0] != null: _inst(gun_parts, ms[0])
-		if ms[3] != null: _inst(gun_parts, ms[3])
+		if ms[3] != null: stock_n = _inst(gun_parts, ms[3])
 		if ms[1] != null: mag = _inst(gun_parts, ms[1])
 		if ms[2] != null: bolt = _inst(gun_parts, ms[2])
 		mag_home = Vector3.ZERO; mag_c = mdl["mag_c"] if ms[1] != null else Vector3(0, -0.08, (mz + rear) * 0.4)
@@ -165,26 +169,73 @@ func _drop_mag() -> void:
 func _ease(x: float) -> float:
 	x = clampf(x, 0.0, 1.0); return x * x * (3.0 - 2.0 * x)
 
-# حركة التعبئة (rp 0..1): اليد اليسرى تذهب للمخزن، تسحبه، تجلب جديداً، تُدخله، تشدّ الترباس، وتعود
-# يعيد {lh: موضع اليد، magoff: إزاحة المخزن، magvis: ظاهر؟، bolt: 0..1}
+# حركة التعبئة (rp 0..1) حسب نوع السلاح. يعيد {lh: موضع اليد، magoff: إزاحة المخزن، magvis: ظاهر؟، bolt: 0..1}
+#  - بنادق/رشاشات/مسدسات: سحب المخزن وإسقاطه، مخزن جديد، إدخال، ثم شدّ الترباس إن كان السلاح فارغاً (التعبئة التكتيكية بلا شدّ)
+#  - M249: رفع غطاء التغذية، تبديل صندوق الذخيرة، إغلاق الغطاء، شدّ الترباس
+#  - شوتغن: قذيفة قذيفة من الجيب إلى فتحة التعبئة، وبامب في النهاية إن كان فارغاً
+#  - قاذف RPG: سحب الرأس الحربي للأمام وإدخال جديد
+func _mag_seq(q: float, S: Vector3, Mg: Vector3, Dn: Vector3, out: Dictionary) -> void:
+	if q < 0.16: out["lh"] = S.lerp(Mg, _ease(q / 0.16))
+	elif q < 0.40: var k := _ease((q - 0.16) / 0.24); out["lh"] = Mg.lerp(Dn, k); out["magoff"] = (Dn - Mg) * k
+	elif q < 0.60: out["lh"] = Dn; out["magvis"] = false; out["magoff"] = Dn - Mg
+	elif q < 0.85: var k := _ease((q - 0.60) / 0.25); out["lh"] = Dn.lerp(Mg, k); out["magoff"] = (Dn - Mg) * (1.0 - k)
+	else: out["lh"] = Mg; out["magoff"] = Vector3(0, 0.012 * sin((q - 0.85) / 0.15 * PI), 0)
+
 func reload_pose(rp: float) -> Dictionary:
 	var H := lh_home; var out := {"lh": H, "magoff": Vector3.ZERO, "magvis": true, "bolt": 0.0}
+	var kind := w_kind(); var tot := maxf(0.1, reload_tot); var empty := rl_empty
+	if kind == "shotgun":
+		var Port := Vector3(0.0, -0.05, 0.02); var Pch := Port + Vector3(-0.14, -0.2, 0.22)
+		var t := rp * tot
+		if t < 0.45: out["lh"] = H.lerp(Port, _ease(t / 0.45))
+		else:
+			var ph := fposmod(t - 0.45, 0.6) / 0.6
+			if ph < 0.3: out["lh"] = Port.lerp(Pch, _ease(ph / 0.3))
+			elif ph < 0.45: out["lh"] = Pch
+			elif ph < 0.8: out["lh"] = Pch.lerp(Port, _ease((ph - 0.45) / 0.35))
+			else: out["lh"] = Port + Vector3(0, 0.02 * sin((ph - 0.8) / 0.2 * PI), 0)
+		var left := tot - t
+		if left < 0.2:
+			out["lh"] = Port.lerp(H + Vector3(0, 0.01, 0.17) if empty else H, _ease(1.0 - left / 0.2))
+			if empty: out["bolt"] = sin((1.0 - left / 0.2) * PI)
+		return out
 	if mag != null:
-		var Mg := mag_c + Vector3(0.0, -0.03, 0.0); var Dn := Mg + Vector3(-0.05, -0.24, 0.12); var Bh := bolt_pt; var Bb := Bh + Vector3(0, 0, 0.09)
-		if rp < 0.12: out["lh"] = H.lerp(Mg, _ease(rp / 0.12))
-		elif rp < 0.30: var k := _ease((rp - 0.12) / 0.18); out["lh"] = Mg.lerp(Dn, k); out["magoff"] = (Dn - Mg) * k
-		elif rp < 0.45: out["lh"] = Dn; out["magvis"] = false
-		elif rp < 0.65: var k := _ease((rp - 0.45) / 0.20); out["lh"] = Dn.lerp(Mg, k); out["magoff"] = (Dn - Mg) * (1.0 - k)
-		elif rp < 0.75: out["lh"] = Mg; out["magoff"] = Vector3(0, 0.012 * sin((rp - 0.65) / 0.1 * PI), 0)
-		elif rp < 0.82: out["lh"] = Mg.lerp(Bh, _ease((rp - 0.75) / 0.07))
-		elif rp < 0.89: var k := _ease((rp - 0.82) / 0.07); out["lh"] = Bh.lerp(Bb, k); out["bolt"] = k
-		elif rp < 0.94: var k := _ease((rp - 0.89) / 0.05); out["lh"] = Bb.lerp(Bh, k); out["bolt"] = 1.0 - k
-		else: out["lh"] = Bh.lerp(H, _ease((rp - 0.94) / 0.06))
-	else:  # شوتغن/قاذف: ضخّ بيد أمامية
-		var Pb := H + Vector3(0, 0.01, 0.17)
-		var ph := fmod(rp * 3.0, 1.0)
-		out["lh"] = H.lerp(Pb, sin(ph * PI)); out["bolt"] = sin(ph * PI)
+		var Mg := mag_c + Vector3(0.0, -0.03, 0.0); var Bh := bolt_pt; var Bb := Bh + Vector3(0, 0, 0.09)
+		var Dn := Mg + Vector3(-0.05, -0.24, 0.12)
+		if kind == "launcher": Dn = Mg + Vector3(0.0, -0.04, -0.5)
+		elif kind == "lmg": Dn = Mg + Vector3(-0.06, -0.32, 0.1)
+		var do_bolt := empty and kind in ["rifle", "smg", "lmg", "dmr", "pistol", "magnum"]
+		if kind == "lmg":
+			var Cv := Vector3(0.0, bolt_pt.y + 0.03, bolt_pt.z - 0.12)
+			if rp < 0.12: out["lh"] = H.lerp(Cv, _ease(rp / 0.12))
+			elif rp < 0.2: out["lh"] = Cv + Vector3(0, 0.07 * sin((rp - 0.12) / 0.08 * PI * 0.5), 0)
+			elif rp < 0.7: _mag_seq((rp - 0.2) / 0.5, Cv + Vector3(0, 0.07, 0), Mg, Dn, out)
+			elif rp < 0.78: out["lh"] = Mg.lerp(Cv, _ease((rp - 0.7) / 0.08))
+			elif rp < 0.84: out["lh"] = Cv
+			elif rp < 0.92: var k := _ease((rp - 0.84) / 0.08); out["lh"] = Cv.lerp(Bb, k); out["bolt"] = k if do_bolt else 0.0
+			else: var k2 := _ease((rp - 0.92) / 0.08); out["lh"] = Bb.lerp(H, k2); out["bolt"] = (1.0 - k2) if do_bolt else 0.0
+		elif do_bolt:
+			if rp < 0.78: _mag_seq(rp / 0.78, H, Mg, Dn, out)
+			elif rp < 0.84: out["lh"] = Mg.lerp(Bh, _ease((rp - 0.78) / 0.06))
+			elif rp < 0.91: var k := _ease((rp - 0.84) / 0.07); out["lh"] = Bh.lerp(Bb, k); out["bolt"] = k
+			elif rp < 0.95: var k3 := _ease((rp - 0.91) / 0.04); out["lh"] = Bb.lerp(Bh, k3); out["bolt"] = 1.0 - k3
+			else: out["lh"] = Bh.lerp(H, _ease((rp - 0.95) / 0.05))
+		else:
+			if rp < 0.85: _mag_seq(rp / 0.85, H, Mg, Dn, out)
+			else: out["lh"] = Mg.lerp(H, _ease((rp - 0.85) / 0.15))
+	else:  # سلاح بلا مخزن مستقل: ضخّ بيد أمامية
+		var Pb := H + Vector3(0, 0.01, 0.17); var ph2 := fmod(rp * 3.0, 1.0)
+		out["lh"] = H.lerp(Pb, sin(ph2 * PI)); out["bolt"] = sin(ph2 * PI)
 	return out
+
+func _cyc_v() -> float:  # دورة الترباس/البامب بعد كل طلقة (قناصة، شوتغن)
+	if cyc_t <= 0.0: return 0.0
+	var p := 1.0 - cyc_t / maxf(cyc_dur, 0.01)
+	if p < 0.12: return 0.0
+	if p < 0.42: return _ease((p - 0.12) / 0.30)
+	if p < 0.52: return 1.0
+	if p < 0.85: return 1.0 - _ease((p - 0.52) / 0.33)
+	return 0.0
 
 func _physics_process(dt: float) -> void:
 	super._physics_process(dt)
@@ -250,12 +301,14 @@ func _physics_process(dt: float) -> void:
 	draw_t = maxf(0.0, draw_t - dt * 3.5)
 	var rp := 0.0
 	if reload_t > 0.0:
-		var tot := maxf(0.1, float(weapon()["reload"])); rp = clampf(1.0 - reload_t / tot, 0.0, 1.0)
+		var tot := maxf(0.1, reload_tot); rp = clampf(1.0 - reload_t / tot, 0.0, 1.0)
 	if dbg_rp >= 0.0: rp = dbg_rp
 	var rl := clampf(rp / 0.12, 0.0, 1.0) * clampf((1.0 - rp) / 0.1, 0.0, 1.0) if rp > 0.0 else 0.0
 	var rpose := reload_pose(rp) if rp > 0.0 else {"lh": lh_home, "magoff": Vector3.ZERO, "magvis": true, "bolt": 0.0}
 	if mag != null: mag.position = mag_home + (rpose["magoff"] as Vector3); mag.visible = bool(rpose["magvis"])
-	if bolt != null: bolt.position = Vector3(0, 0, 0.07 * float(rpose["bolt"]))
+	cyc_t = maxf(0.0, cyc_t - dt); var cv := _cyc_v()
+	if bolt != null: bolt.position = Vector3(0, 0, 0.07 * float(rpose["bolt"]) + 0.1 * cv)
+	if cv > 0.0 and rp <= 0.0 and w_kind() == "shotgun": rpose["lh"] = lh_home.lerp(lh_home + Vector3(0, 0.01, 0.17), cv)
 	lh.position = lh.position.lerp(rpose["lh"], minf(1.0, dt * (30.0 if rp > 0.0 else 12.0)))
 	rh.position = rh_home
 	if flash: flash.visible = kick > 0.8
@@ -276,7 +329,7 @@ func _physics_process(dt: float) -> void:
 	var lat := velocity.dot(global_transform.basis.x) / 5.0
 	var breath := Vector3(0.0, sin(idle_t * 1.5) * 0.0016, 0.0) * br
 	gp_pos = gp_pos.lerp(tgt_pos + bobv + breath, minf(1.0, dt * 14.0))
-	var tr_z := rl * 0.35 + (0.15 if spr_pose else 0.0) - lat * 0.05
+	var tr_z := rl * 0.35 + (0.15 if spr_pose else 0.0) - lat * 0.05 + (0.1 * sin(cv * PI * 0.5) if w_kind() == "sniper" else 0.0)
 	var tr_x := (-0.5 if spr_pose else 0.0) + rl * 0.12 + draw_t * 0.6 - sway.y * 2.2 + sin(idle_t * 1.1) * 0.004 * br
 	var tr_y := (0.45 if spr_pose else 0.0) + sway.x * 2.2
 	gp_rot = Vector3(lerpf(gp_rot.x, tr_x, minf(1.0, dt * 10.0)), lerpf(gp_rot.y, tr_y, minf(1.0, dt * 10.0)), lerpf(gp_rot.z, tr_z, minf(1.0, dt * 10.0)))
@@ -284,13 +337,15 @@ func _physics_process(dt: float) -> void:
 	gun_parts.rotation = gp_rot + Vector3(rec.x * 0.07, rec.y * 0.05, rec.y * 0.03)
 	cam.rotation.z = lerpf(cam.rotation.z, -lat * 0.012 + rec.y * 0.01, minf(1.0, dt * 8.0))
 	if bolt != null and rp <= 0.0 and ammo <= 0 and w_kind() in ["pistol", "magnum"]: bolt.position = Vector3(0, 0, 0.05)  # سلايد مسحوب عند الفراغ
-	if rp >= 0.3 and rp < 0.9 and not mag_dropped and mag != null: _drop_mag(); mag_dropped = true  # المخزن القديم يسقط أرضاً
+	if not bool(rpose["magvis"]) and not mag_dropped and mag != null and w_kind() != "launcher": _drop_mag(); mag_dropped = true  # المخزن القديم يسقط أرضاً
 	elif rp <= 0.05: mag_dropped = false
 	_arm_to(arm_r, SHOULDER_R, rh); _arm_to(arm_l, SHOULDER_L, lh)
 	var z := float(weapon()["zoom"])
 	var tfov := 75.0 / (z if ads and z > 1.0 else 1.0)
 	cam.fov = lerpf(cam.fov, tfov, minf(1.0, dt * 14.0))
-	var scoped := ads and z >= 3.4
+	var scoped := ads and z >= 2.0
+	rh.visible = not ads; lh.visible = not ads or rp > 0.0
+	if stock_n != null: stock_n.visible = not ads  # كعب السلاح يسدّ الرؤية من الخلف أثناء التصويب
 	gun_parts.visible = not scoped; arm_r.visible = not ads; arm_l.visible = not ads
 	if inp["reload"]: start_reload(); inp["reload"] = false
 	_grenade(dt)
@@ -300,6 +355,8 @@ func _physics_process(dt: float) -> void:
 		var w := weapon()
 		if try_fire(cam.global_position, -cam.global_transform.basis.z, ads, spd * 0.0004):
 			kick = 1.0; fire_hold = 0.35; burst = mini(burst + 1, 14)
+			if String(w["kind"]) == "sniper": cyc_dur = 1.3; cyc_t = 1.3
+			elif String(w["kind"]) == "shotgun": cyc_dur = 0.55; cyc_t = 0.55
 			var kr: float = {"pistol": 0.9, "magnum": 1.7, "smg": 0.6, "rifle": 0.85, "shotgun": 2.1, "lmg": 1.0, "sniper": 2.4, "dmr": 1.5, "launcher": 2.8}.get(String(w["kind"]), 1.0)
 			var steady := 0.75 if crouch_t > 0.5 else 1.0
 			var dp := float(w["recoilV"]) * (1.0 if ads else 1.3) * 1.5 * (1.0 + burst * 0.035) * steady

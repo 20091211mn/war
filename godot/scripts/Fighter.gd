@@ -8,6 +8,9 @@ var hp := 100.0
 var alive := true
 var wi := 0
 var ammo := 30
+var reload_tot := 1.0
+var rl_empty := false
+var rl_shell_n := 0
 var reserve := 120
 var cd := 0.0
 var reload_t := 0.0
@@ -43,18 +46,28 @@ func _physics_process(dt: float) -> void:
 	recoil = maxf(0.0, recoil - dt * 3.0)
 	if reload_t > 0.0:
 		reload_t -= dt
-		if reload_t <= 0.0:
-			var w := weapon(); var need := int(w["mag"]) - ammo; var take := mini(need, reserve)
+		var w := weapon()
+		if String(w["kind"]) == "shotgun":  # قذيفة قذيفة (0.6 ث لكل واحدة) ويمكن مقاطعتها بالإطلاق
+			var due := int(maxf(0.0, reload_tot - reload_t - 0.45) / 0.6) + (99 if reload_t <= 0.0 else 0)
+			while rl_shell_n < due and ammo < int(w["mag"]) and reserve > 0: ammo += 1; reserve -= 1; rl_shell_n += 1
+		elif reload_t <= 0.0:
+			var need := int(w["mag"]) - ammo; var take := mini(need, reserve)
 			ammo += take; reserve -= take
 
 func start_reload() -> void:
 	var w := weapon()
 	if reload_t > 0.0 or ammo >= int(w["mag"]) or reserve <= 0: return
-	reload_t = float(w["reload"])
+	rl_empty = ammo <= 0; rl_shell_n = 0
+	if String(w["kind"]) == "shotgun": reload_tot = 0.45 + 0.6 * mini(int(w["mag"]) - ammo, reserve)
+	else: reload_tot = float(w["reload"]) * (1.0 if rl_empty else 0.8)  # تعبئة تكتيكية أسرع من الفارغة
+	reload_t = reload_tot
 	if self == game.player: game.sfx_play("reload", global_position)
 
 func try_fire(origin: Vector3, dir: Vector3, ads: bool, extra_spread: float) -> bool:
-	if not alive or cd > 0.0 or reload_t > 0.0: return false
+	if not alive or cd > 0.0: return false
+	if reload_t > 0.0:
+		if String(weapon()["kind"]) == "shotgun" and ammo > 0: reload_t = 0.0  # مقاطعة تعبئة الشوتغن
+		else: return false
 	if ammo <= 0:
 		start_reload(); return false
 	var w := weapon()
