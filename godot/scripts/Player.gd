@@ -84,8 +84,8 @@ func _hand(parent: Node3D, pos: Vector3, left: bool) -> Node3D:
 	return h
 
 func _arm() -> MeshInstance3D:
-	var bm := BoxMesh.new(); bm.size = Vector3(1, 1, 1)
-	var mi := _inst(vm, bm); mi.material_override = _mat(Color(0.2, 0.26, 0.17), 0.95, 0.0); return mi
+	var cm := CylinderMesh.new(); cm.top_radius = 0.5; cm.bottom_radius = 0.36; cm.height = 1.0; cm.radial_segments = 12; cm.rings = 1
+	var mi := _inst(vm, cm); mi.material_override = _mat(Color(0.26, 0.31, 0.22), 0.95, 0.0); return mi  # كمّ قماشي مدبّب: عريض عند الكتف، ضيق عند الرسغ
 
 func rebuild_viewmodel() -> void:
 	stock_n = null
@@ -151,7 +151,7 @@ func rebuild_viewmodel() -> void:
 func _arm_to(arm: MeshInstance3D, shoulder: Vector3, hand: Node3D) -> void:
 	var hp := vm.to_local(hand.global_position); var d := hp - shoulder; var ln := d.length()
 	if ln < 0.01: return
-	arm.transform = Transform3D(Basis.looking_at(d / ln, Vector3.UP) * Basis.from_scale(Vector3(0.055, 0.055, ln)), shoulder + d * 0.5)
+	arm.transform = Transform3D(Basis.looking_at(d / ln, Vector3.UP) * Basis(Vector3.RIGHT, PI * 0.5) * Basis.from_scale(Vector3(0.07, ln, 0.07)), shoulder + d * 0.5)
 
 func w_kind() -> String: return String(weapon()["kind"])
 
@@ -298,7 +298,8 @@ func _physics_process(dt: float) -> void:
 	kick = maxf(0.0, kick - dt * 8.0); fire_hold = maxf(0.0, fire_hold - dt)
 	sway = sway.lerp(Vector2.ZERO, minf(1.0, dt * 8.0)) + look * 0.0005
 	sway = sway.clamp(Vector2(-0.04, -0.04), Vector2(0.04, 0.04))
-	draw_t = maxf(0.0, draw_t - dt * 3.5)
+	draw_t = maxf(0.0, draw_t - dt * float({"pistol": 4.5, "magnum": 3.4, "smg": 4.0, "rifle": 3.2, "shotgun": 2.6, "dmr": 2.6, "sniper": 2.1, "lmg": 1.9, "launcher": 1.9}.get(w_kind(), 3.2)))
+	var dsm := draw_t * draw_t * (3.0 - 2.0 * draw_t)  # سحب السلاح: نعومة بداية ونهاية
 	var rp := 0.0
 	if reload_t > 0.0:
 		var tot := maxf(0.1, reload_tot); rp = clampf(1.0 - reload_t / tot, 0.0, 1.0)
@@ -316,7 +317,7 @@ func _physics_process(dt: float) -> void:
 	var spr_pose := sprinting and fire_hold <= 0.0 and rp <= 0.0
 	var tgt_pos := Vector3(0.0, -sight_y * 0.62 - 0.035 + ads_adj, -0.42) if ads else Vector3(0.2, -0.22, -0.45)
 	if spr_pose: tgt_pos = Vector3(0.14, -0.3, -0.38)
-	tgt_pos += Vector3(-sway.x, sway.y, 0) * (0.3 if ads else 1.0) + Vector3(-0.03 * rl, -0.35 * draw_t + 0.04 * rl - 0.45 * thr, 0.05 * float(rpose["bolt"]) + 0.04 * rl)
+	tgt_pos += Vector3(-sway.x, sway.y, 0) * (0.3 if ads else 1.0) + Vector3(-0.03 * rl, -0.35 * dsm + 0.04 * rl - 0.45 * thr, 0.05 * float(rpose["bolt"]) + 0.04 * rl)
 	var bobv := Vector3(sin(bob) * 0.006, absf(cos(bob)) * 0.008, 0) * (1.0 if is_on_floor() else 0.0) * clampf(Vector2(velocity.x, velocity.z).length() / 4.6, 0, 1.4)
 	if spr_pose: bobv *= 2.2
 	# ---- ارتداد زنبركي + قصور ذاتي + تنفّس ----
@@ -330,7 +331,7 @@ func _physics_process(dt: float) -> void:
 	var breath := Vector3(0.0, sin(idle_t * 1.5) * 0.0016, 0.0) * br
 	gp_pos = gp_pos.lerp(tgt_pos + bobv + breath, minf(1.0, dt * 14.0))
 	var tr_z := rl * 0.35 + (0.15 if spr_pose else 0.0) - lat * 0.05 + (0.1 * sin(cv * PI * 0.5) if w_kind() == "sniper" else 0.0)
-	var tr_x := (-0.5 if spr_pose else 0.0) + rl * 0.12 + draw_t * 0.6 - sway.y * 2.2 + sin(idle_t * 1.1) * 0.004 * br
+	var tr_x := (-0.5 if spr_pose else 0.0) + rl * 0.12 + dsm * 0.6 - sway.y * 2.2 + sin(idle_t * 1.1) * 0.004 * br
 	var tr_y := (0.45 if spr_pose else 0.0) + sway.x * 2.2
 	gp_rot = Vector3(lerpf(gp_rot.x, tr_x, minf(1.0, dt * 10.0)), lerpf(gp_rot.y, tr_y, minf(1.0, dt * 10.0)), lerpf(gp_rot.z, tr_z, minf(1.0, dt * 10.0)))
 	gun_parts.position = gp_pos + Vector3(0, rec.x * 0.012, rec.z * 0.07)
