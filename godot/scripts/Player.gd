@@ -349,7 +349,7 @@ func _physics_process(dt: float) -> void:
 	if flash: flash.visible = kick > 0.8
 	var thr := sin(clampf(1.0 - gren_t / 0.6, 0.0, 1.0) * PI) if gren_t > 0.0 else 0.0
 	var spr_pose := sprinting and fire_hold <= 0.0 and rp <= 0.0
-	var tgt_pos := Vector3(0.0, -sight_y * 0.62 - 0.035 + ads_adj, -0.42) if ads else Vector3(0.2, -0.22, -0.45)
+	var tgt_pos := Vector3(0.0, -sight_y * 0.62 - 0.058 + ads_adj, -0.44) if ads else Vector3(0.2, -0.22, -0.45)
 	if spr_pose: tgt_pos = Vector3(0.14, -0.3, -0.38)
 	tgt_pos += Vector3(-sway.x, sway.y, 0) * (0.3 if ads else 1.0) + Vector3(-0.03 * rl, -0.35 * dsm + 0.04 * rl - 0.45 * thr, 0.05 * float(rpose["bolt"]) + 0.04 * rl)
 	var bobv := Vector3(sin(bob) * 0.006, absf(cos(bob)) * 0.008, 0) * (1.0 if is_on_floor() else 0.0) * clampf(Vector2(velocity.x, velocity.z).length() / 4.6, 0, 1.4)
@@ -379,8 +379,9 @@ func _physics_process(dt: float) -> void:
 	var tfov := 75.0 / (z if ads and z > 1.0 else 1.0)
 	cam.fov = lerpf(cam.fov, tfov, minf(1.0, dt * 14.0))
 	var scoped := ads and z >= 2.0
-	rh.visible = not ads; lh.visible = not ads or rp > 0.0
-	if stock_n != null: stock_n.visible = not ads  # كعب السلاح يسدّ الرؤية من الخلف أثناء التصويب
+	rh.visible = true; lh.visible = true
+	if stock_n != null: stock_n.visible = true
+	if drone == null and jet == null: cam.near = 0.012 if ads else 0.03  # قرب أقل أثناء التصويب كي لا تُقصّ مؤخرة السلاح
 	gun_parts.visible = not scoped; arm_r.visible = not ads; arm_l.visible = not ads
 	if inp["reload"]: start_reload(); inp["reload"] = false
 	_grenade(dt)

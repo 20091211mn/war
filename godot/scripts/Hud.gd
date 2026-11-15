@@ -306,19 +306,32 @@ func _draw() -> void:
 	var cx := s.x * 0.5; var cy := s.y * 0.5
 	var z := float(p.weapon()["zoom"])
 	var scoped: bool = p.alive and game.player.ads and z >= 2.0
-	# ---- عدسة المنظار (بلا مربع يغطي العدو): حلقة سوداء + شعرة رفيعة ----
+	var u := minf(s.x, s.y) / 720.0  # كل أحجام التصويب نسبية لحجم الشاشة
+	# ---- عدسة المنظار: حلقة سوداء، شعرة بأعمدة سميكة، نقاط مسافة، ونقطة حمراء واضحة ----
 	if scoped:
-		var rr := minf(s.x, s.y) * 0.4
+		var rr := minf(s.x, s.y) * 0.46
 		draw_arc(Vector2(cx, cy), rr + 600.0, 0, TAU, 160, Color.BLACK, 1200.0)
-		draw_arc(Vector2(cx, cy), rr, 0, TAU, 160, Color(0, 0, 0, 1), 4.0)
-		draw_line(Vector2(cx - rr, cy), Vector2(cx - 8, cy), Color(0, 0, 0, 0.9), 1.5); draw_line(Vector2(cx + 8, cy), Vector2(cx + rr, cy), Color(0, 0, 0, 0.9), 1.5)
-		draw_line(Vector2(cx, cy - rr), Vector2(cx, cy - 8), Color(0, 0, 0, 0.9), 1.5); draw_line(Vector2(cx, cy + 8), Vector2(cx, cy + rr), Color(0, 0, 0, 0.9), 1.5)
-		draw_circle(Vector2(cx, cy), 2.0, Color(1, 0.15, 0.15))
+		draw_arc(Vector2(cx, cy), rr, 0, TAU, 160, Color(0, 0, 0, 1), 5.0 * u)
+		var kc := Color(0, 0, 0, 0.95); var gap := 14.0 * u
+		draw_line(Vector2(cx - rr, cy), Vector2(cx - gap, cy), kc, 2.0 * u); draw_line(Vector2(cx + gap, cy), Vector2(cx + rr, cy), kc, 2.0 * u)
+		draw_line(Vector2(cx, cy - rr), Vector2(cx, cy - gap), kc, 2.0 * u); draw_line(Vector2(cx, cy + gap), Vector2(cx, cy + rr), kc, 2.0 * u)
+		for sd in [-1.0, 1.0]:  # أعمدة سميكة عند الأطراف (duplex)
+			draw_line(Vector2(cx + sd * rr * 0.55, cy), Vector2(cx + sd * rr, cy), kc, 7.0 * u); draw_line(Vector2(cx, cy + sd * rr * 0.55), Vector2(cx, cy + sd * rr), kc, 7.0 * u)
+		for i in range(1, 6):
+			var d := (30.0 * u) * i
+			draw_circle(Vector2(cx + d, cy), 2.5 * u, kc); draw_circle(Vector2(cx - d, cy), 2.5 * u, kc); draw_circle(Vector2(cx, cy + d), 2.5 * u, kc)
+		draw_circle(Vector2(cx, cy), 9.0 * u, Color(1, 0.1, 0.1, 0.25)); draw_circle(Vector2(cx, cy), 4.5 * u, Color(1, 0.12, 0.12))
+	elif p.alive and p.jet == null and game.player.ads:
+		# ---- تصويب بمنظار مجسم/ميكانيكي: نقطة حمراء كبيرة بحلقة (Red dot) ----
+		draw_circle(Vector2(cx, cy), 14.0 * u, Color(1, 0.1, 0.1, 0.18))
+		draw_arc(Vector2(cx, cy), 26.0 * u, 0, TAU, 64, Color(1, 0.2, 0.2, 0.85), 2.5 * u, true)
+		draw_circle(Vector2(cx, cy), 5.0 * u, Color(1, 0.15, 0.15))
 	elif p.alive and p.jet == null:
-		var g := 6.0 + p.recoil * 10.0
-		var cc := Color(1, 1, 1, 0.9)
-		draw_line(Vector2(cx - g - 9, cy), Vector2(cx - g, cy), cc, 2.0); draw_line(Vector2(cx + g, cy), Vector2(cx + g + 9, cy), cc, 2.0)
-		draw_line(Vector2(cx, cy - g - 9), Vector2(cx, cy - g), cc, 2.0); draw_line(Vector2(cx, cy + g), Vector2(cx, cy + g + 9), cc, 2.0)
+		var g := (7.0 + p.recoil * 10.0) * u
+		var cc := Color(1, 1, 1, 0.95)
+		draw_line(Vector2(cx - g - 11 * u, cy), Vector2(cx - g, cy), cc, 3.0 * u); draw_line(Vector2(cx + g, cy), Vector2(cx + g + 11 * u, cy), cc, 3.0 * u)
+		draw_line(Vector2(cx, cy - g - 11 * u), Vector2(cx, cy - g), cc, 3.0 * u); draw_line(Vector2(cx, cy + g), Vector2(cx, cy + g + 11 * u), cc, 3.0 * u)
+		draw_circle(Vector2(cx, cy), 2.2 * u, Color(1, 0.3, 0.3, 0.95))
 	if hit_mark > 0.0:
 		var hc := Color(1, 1, 1, hit_mark * 4.0)
 		for sg in [Vector2(1, 1), Vector2(-1, 1), Vector2(1, -1), Vector2(-1, -1)]:
