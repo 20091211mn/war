@@ -62,6 +62,10 @@ jobs:
           N=${{ github.run_number }}
           sed -i "s/^version\/code=.*/version\/code=$N/; s/^version\/name=.*/version\/name=\"0.$N\"/" godot/export_presets.cfg
           grep -E "^version/" godot/export_presets.cfg
+          # رقم الإصدار داخل اللعبة (يظهر في الإعدادات ويُقارَن مع version-android.txt المنشور)
+          sed -i "s/^config\/name=.*/&\nconfig\/version=\"$N\"/" godot/project.godot
+          grep -E "^config/(name|version)" godot/project.godot
+          echo -n "$N" > build/version-android.txt
           if [ -n "$KS_B64" ]; then echo "$KS_B64" | base64 -d > $HOME/release.jks; PASS="$KS_PASS"; else cp tools/signing/warzone-release.jks $HOME/release.jks; PASS=warzone2026; fi
           export GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$HOME/release.jks GODOT_ANDROID_KEYSTORE_RELEASE_USER=warzone GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD="$PASS"
           godot --headless --path godot --export-release "Android" ../build/Warzone-godot.apk 2>&1 | grep -v "mesh_get_surface_count\|Parameter \"m\" is null" | tail -15
@@ -79,4 +83,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          files: build/*.apk
+          files: |
+            build/*.apk
+            build/version-android.txt

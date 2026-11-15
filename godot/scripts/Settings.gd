@@ -3,6 +3,7 @@ extends Node
 signal changed
 var quality := (2 if OS.has_feature("mobile") else 3)
 var lang := 0
+var auto_update := true
 var LANGS := ["العربية", "English", "Español"]
 var QUALS := ["ضعيفة جداً", "ضعيفة", "متوسطة", "عالية", "فائقة"]
 var _tab := {}
@@ -15,11 +16,12 @@ func _ready() -> void:
 	if c.load(CFG) == OK:
 		quality = clampi(int(c.get_value("g", "quality", quality)), 0, 4)
 		lang = clampi(int(c.get_value("g", "lang", 0)), 0, 2)
+		auto_update = bool(c.get_value("g", "auto_update", true))
 	_apply_locale()
 
 func save() -> void:
 	var c := ConfigFile.new()
-	c.set_value("g", "quality", quality); c.set_value("g", "lang", lang); c.save(CFG)
+	c.set_value("g", "quality", quality); c.set_value("g", "lang", lang); c.set_value("g", "auto_update", auto_update); c.save(CFG)
 	_apply_locale(); changed.emit()
 
 func _apply_locale() -> void:

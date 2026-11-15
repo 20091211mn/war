@@ -71,6 +71,8 @@ var test_frames := 0
 var shot_path := ""
 var menu_shot := ""
 var dbg_picker := false
+var dbg_settings := false
+var _set_ov: Control
 var thumb_path := ""
 var _mf := 0
 var dbg_wpn := -1
@@ -87,6 +89,7 @@ func _ready() -> void:
 	data = JSON.parse_string(f.get_as_text())
 	maps = data["maps"]; weapons = data["weapons"]
 	_make_sfx()
+	if Settings.auto_update and Updater.state == -1 and OS.get_name() != "Web": var au := Updater.new(); add_child(au); au.check()
 	ui = CanvasLayer.new(); ui.layer = 10; ui.process_mode = Node.PROCESS_MODE_ALWAYS; add_child(ui)
 	ui_root = Control.new(); ui_root.theme = UiTheme.make(); ui_root.mouse_filter = Control.MOUSE_FILTER_IGNORE; ui.add_child(ui_root)
 	hud = Hud.new(); hud.game = self; ui.add_child(hud)
@@ -102,6 +105,7 @@ func _ready() -> void:
 		if a.begins_with("--menushot="): menu_shot = a.substr(11)
 		if a.begins_with("--introat="): dbg_intro_at = float(a.substr(10)); menu_shot = "/tmp/intro.png"
 		if a == "--picker": dbg_picker = true
+		if a == "--settings": dbg_settings = true
 		if a.begins_with("--thumb="): thumb_path = a.substr(8)
 		if a.begins_with("--quality="): Settings.quality = int(a.substr(10))
 		if a.begins_with("--lang="): Settings.lang = int(a.substr(7))
@@ -220,6 +224,35 @@ func _settings_rows(vb: Control, with_map: bool) -> void:
 	_seg(vb, "النمط", func(): return ["فرق", "كل واحد ضد الكل"].map(func(x): return Settings.t(x)), func(): return 1 if ffa_pref else 0, func(i): ffa_pref = i == 1)
 	_seg(vb, "الجودة", func(): return Settings.QUALS.map(func(x): return Settings.t(x)), func(): return Settings.quality, func(i): Settings.quality = i; Settings.save(); Settings.changed.emit(), 16)
 	_seg(vb, "اللغة", func(): return Settings.LANGS, func(): return Settings.lang, func(i): Settings.lang = i; Settings.save(); Settings.changed.emit())
+	_seg(vb, "التحديث التلقائي", func(): return ["مفعّل", "متوقف"].map(func(x): return Settings.t(x)), func(): return 0 if Settings.auto_update else 1, func(i): Settings.auto_update = i == 0; Settings.save(); Settings.changed.emit(), 20)
+	_update_row(vb)
+
+func _update_row(vb: Control) -> void:
+	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 8); vb.add_child(box)
+	var ver := Label.new(); ver.add_theme_font_size_override("font_size", 19); ver.add_theme_color_override("font_color", UiTheme.MUTED); box.add_child(ver)
+	var st := Label.new(); st.add_theme_font_size_override("font_size", 19); st.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; box.add_child(st)
+	var btn := Button.new(); btn.custom_minimum_size = Vector2(0, 64); btn.add_theme_font_size_override("font_size", 22); UiTheme.juicy(btn); box.add_child(btn)
+	var upd := Updater.new(); box.add_child(upd)
+	var paint := func():
+		ver.text = "%s  %s" % [Settings.t("رقم الإصدار"), Updater.version()]
+		match Updater.state:
+			-2: st.text = Settings.t("جارٍ الفحص..."); st.add_theme_color_override("font_color", UiTheme.MUTED)
+			0: st.text = Settings.t("أنت على آخر إصدار"); st.add_theme_color_override("font_color", Color(0.45, 0.9, 0.55))
+			1: st.text = "%s (%s)" % [Settings.t("يوجد إصدار أحدث"), Updater.remote]; st.add_theme_color_override("font_color", Color(1.0, 0.8, 0.3))
+			2: st.text = Settings.t("تعذّر الاتصال"); st.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
+			_: st.text = ""
+		if Updater.state == 1:
+			btn.text = Settings.t("حدّث الآن"); UiTheme.style_accent(btn)
+		else:
+			btn.text = Settings.t("تحقق من التحديث"); UiTheme.style_ghost(btn)
+		btn.disabled = Updater.state == -2
+	btn.pressed.connect(func():
+		if Updater.state == 1: Updater.install()
+		else: upd.check(); paint.call())
+	upd.checked.connect(func(_s, _r): paint.call())
+	Settings.changed.connect(paint)
+	box.tree_exiting.connect(func(): Settings.changed.disconnect(paint))
+	paint.call()
 
 var _map_cards: Array = []
 var _gear: Button
@@ -349,7 +382,7 @@ func _build_menu() -> void:
 	mbtn.pressed.connect(func(): _open(pk))
 	var st := _overlay("الإعدادات", 640)
 	_settings_rows(st, false)
-	_gear.pressed.connect(func(): _open(st))
+	_set_ov = st; _gear.pressed.connect(func(): _open(st))
 	_refresh()
 
 func _build_pause() -> void:
@@ -993,6 +1026,7 @@ func _process(dt: float) -> void:
 			var im := get_viewport().get_texture().get_image(); im.resize(512, 288, Image.INTERPOLATE_LANCZOS); im.save_png(thumb_path); get_tree().quit(0)
 	if menu_shot != "":
 		if dbg_picker and _map_picker != null: _open(_map_picker)
+		if dbg_settings and _set_ov != null: _open(_set_ov)
 		_mf += 1
 		if _mf == 30 and dbg_intro_at < 0.0:
 			get_viewport().get_texture().get_image().save_png(menu_shot); get_tree().quit(0)

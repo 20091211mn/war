@@ -199,6 +199,15 @@ static const TrE TR_TAB[]={
 {"الإعدادات","Settings","Ajustes"},
 {"الجودة","Quality","Calidad"},
 {"اللغة","Language","Idioma"},
+{"التحديث التلقائي","Auto update","Actualización automática"},
+{"مفعّل","On","Activado"},
+{"متوقف","Off","Desactivado"},
+{"رقم الإصدار","Version","Versión"},
+{"جارٍ الفحص...","Checking...","Comprobando..."},
+{"أنت على آخر إصدار","You have the latest version","Tienes la última versión"},
+{"يوجد إصدار أحدث","A newer version is available","Hay una versión más reciente"},
+{"حدّث الآن","Update now","Actualizar ahora"},
+{"تحقق من التحديث","Check for updates","Buscar actualizaciones"},
 {"ضعيفة جداً","Very Low","Muy baja"},
 {"ضعيفة","Low","Baja"},
 {"متوسطة","Medium","Media"},
@@ -210,4 +219,4 @@ static const TrE TR_TAB[]={
 {"Español","Español","Español"},
 {"تم حفظ الإعدادات","Settings saved","Ajustes guardados"},
 };
-static const int TR_N=207;
+static const int TR_N=216;
