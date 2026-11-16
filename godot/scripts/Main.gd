@@ -722,6 +722,7 @@ func hitscan(shooter: Fighter, from: Vector3, dir: Vector3, w: Dictionary, muz :
 			var k := lerpf(1.0, float(w["minMul"]), clampf((d - r0) / maxf(r1 - r0, 1.0), 0.0, 1.0))
 			var head: bool = endp.y > f.global_position.y + 1.5
 			f.take_damage(float(w["dmg"]) * k * (float(w["head"]) if head else 1.0), shooter, head)
+			_puff(endp, r["normal"], Color(0.8, 0.75, 0.7, 0.5), 4)
 			if shooter == player: hud.hitmark()
 			elif lan.role == 1 and shooter is Bot and (shooter as Bot).human: lan.send_hit(fighters.find(shooter), head)
 		elif c is StaticBody3D and (c as StaticBody3D).has_meta("veh"):
@@ -729,7 +730,7 @@ func hitscan(shooter: Fighter, from: Vector3, dir: Vector3, w: Dictionary, muz :
 			if v.team < 0 or v.team != shooter.team: v.take_hit(float(w["dmg"]), int(r["shape"]), shooter)
 			_spark(endp)
 		else:
-			_spark(endp)
+			_impact(endp, r["normal"], c)
 	if shooter == player or from.distance_to(cam_pos()) < 60.0:
 		var st: Vector3 = muz
 		if st == Vector3.INF: st = (shooter as Fighter).muzzle_pos() if shooter.has_method("muzzle_pos") else from + dir * 0.8
@@ -832,6 +833,44 @@ func _spark(p: Vector3, n := 3) -> void:
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; world.add_child(mi); mi.global_position = p
 		var tw := create_tween(); tw.tween_property(mi, "global_position", p + Vector3(randf_range(-1, 1), randf_range(0.2, 1.2), randf_range(-1, 1)) * 0.6, 0.25); tw.tween_callback(mi.queue_free)
 
+# أثر طلقة على سطح: ثقب داكن يتلاشى + غبار/شظايا صغيرة (حسب الجودة)
+var _holes: Array = []
+static var _hole_tex: GradientTexture2D
+static var _hole_m: StandardMaterial3D
+func _impact(p: Vector3, n: Vector3, c: Object) -> void:
+	if world == null or Settings.quality < 1: return
+	if n == Vector3.ZERO: n = Vector3.UP
+	var metal := c is StaticBody3D and (c as StaticBody3D).has_meta("veh")
+	if metal: _spark(p, 4)
+	if _hole_m == null:
+		_hole_tex = GradientTexture2D.new(); _hole_tex.fill = GradientTexture2D.FILL_RADIAL; _hole_tex.fill_from = Vector2(0.5, 0.5); _hole_tex.fill_to = Vector2(1.0, 0.5); _hole_tex.width = 32; _hole_tex.height = 32
+		var g := Gradient.new(); g.colors = PackedColorArray([Color(0, 0, 0, 0.9), Color(0.03, 0.03, 0.03, 0.85), Color(0, 0, 0, 0)]); g.offsets = PackedFloat32Array([0.0, 0.42, 1.0]); _hole_tex.gradient = g
+		_hole_m = StandardMaterial3D.new(); _hole_m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; _hole_m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; _hole_m.albedo_texture = _hole_tex; _hole_m.cull_mode = BaseMaterial3D.CULL_DISABLED; _hole_m.no_depth_test = false
+	if Settings.quality >= 2:
+		var mi := MeshInstance3D.new(); var qm := QuadMesh.new(); qm.size = Vector2.ONE * randf_range(0.11, 0.17); mi.mesh = qm; mi.material_override = _hole_m
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; world.add_child(mi)
+		var up := Vector3.UP if absf(n.y) < 0.95 else Vector3.RIGHT
+		mi.look_at_from_position(p + n * 0.012, p + n, up); mi.rotate_object_local(Vector3.FORWARD, randf() * TAU)
+		_holes.append(mi)
+		if _holes.size() > 70:
+			var o = _holes.pop_front()
+			if is_instance_valid(o): (o as Node).queue_free()
+		var tw := mi.create_tween(); tw.tween_interval(14.0); tw.tween_callback(func(): _holes.erase(mi)); tw.tween_callback(mi.queue_free)
+	_puff(p, n, Color(0.62, 0.58, 0.5, 0.55), 6)
+	_spark(p, 2)
+
+# نفثة غبار صغيرة تنفجر عن السطح
+func _puff(p: Vector3, n: Vector3, col: Color, cnt: int) -> void:
+	if world == null or Settings.quality < 1: return
+	var sp := CPUParticles3D.new(); sp.one_shot = true; sp.emitting = true; sp.amount = maxi(2, int(cnt * [0.4, 0.7, 1.0, 1.3, 1.6][Settings.quality])); sp.lifetime = 0.55; sp.explosiveness = 1.0
+	sp.direction = n; sp.spread = 38.0; sp.initial_velocity_min = 0.6; sp.initial_velocity_max = 1.8; sp.gravity = Vector3(0, -1.2, 0); sp.damping_min = 2.0; sp.damping_max = 3.0; sp.scale_amount_min = 0.6; sp.scale_amount_max = 1.2
+	var qm := QuadMesh.new(); qm.size = Vector2(0.16, 0.16); var pm := StandardMaterial3D.new(); pm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; pm.vertex_color_use_as_albedo = true; pm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES; pm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; pm.albedo_texture = _hole_tex
+	qm.material = pm; sp.mesh = qm
+	var g := Gradient.new(); g.set_color(0, col); g.set_color(1, Color(col.r, col.g, col.b, 0.0)); sp.color_ramp = g
+	var sc := Curve.new(); sc.add_point(Vector2(0, 0.5)); sc.add_point(Vector2(1, 1.8)); sp.scale_amount_curve = sc
+	sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; world.add_child(sp); sp.global_position = p + n * 0.03
+	get_tree().create_timer(1.0).timeout.connect(sp.queue_free)
+
 # رصاصة مرئية (كبسولة نحاسية متوهجة تنطلق من الفوهة إلى نقطة الإصابة)
 func _bullet(a: Vector3, b: Vector3) -> void:
 	if Settings.quality < 1: return
@@ -916,6 +955,7 @@ func apply_quality() -> void:
 		var k := Settings.fog_k()
 		env.fog_depth_begin = float(th["fogN"]) * k; env.fog_depth_end = float(th["fogF"]) * k
 		env.fog_mode = Environment.FOG_MODE_DEPTH; env.fog_depth_curve = 1.0; env.fog_density = 1.0
+		env.glow_enabled = Settings.quality >= 3
 	if world != null and scenery != null and is_instance_valid(scenery): build_scenery()
 
 var _tree_shader: Shader

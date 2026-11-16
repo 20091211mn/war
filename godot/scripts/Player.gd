@@ -8,6 +8,11 @@ var pitch := 0.0
 var yaw := 0.0
 var ads := false
 var bob := 0.0
+var land_y := 0.0
+var land_v := 0.0
+var was_floor := true
+var pvy := 0.0
+var mzl: OmniLight3D
 var kick := 0.0
 var vy := 0.0
 var sprinting := false
@@ -144,6 +149,7 @@ func rebuild_viewmodel() -> void:
 	for r in [0.0, PI * 0.5]:
 		var q := QuadMesh.new(); q.size = Vector2(0.2, 0.2); var qi := _inst(flash, q); qi.material_override = fm; qi.rotation.z = r
 	var sp := SphereMesh.new(); sp.radius = 0.05; sp.height = 0.1; var si := _inst(flash, sp); si.material_override = fm
+	mzl = OmniLight3D.new(); mzl.light_color = Color(1, 0.75, 0.4); mzl.light_energy = 2.2; mzl.omni_range = 7.0; mzl.shadow_enabled = false; flash.add_child(mzl)
 	flash.visible = false
 	rh = _hand(gun_parts, rh_home, false); lh = _hand(gun_parts, lh_home, true)
 	arm_r = _arm(); arm_l = _arm()
@@ -319,7 +325,10 @@ func _physics_process(dt: float) -> void:
 	else: velocity.y -= 18.0 * dt
 	inp["jump"] = false
 	_step_up2(Vector3(velocity.x, 0, velocity.z) * dt)
+	pvy = velocity.y
 	move_and_slide()
+	if is_on_floor() and not was_floor and pvy < -3.0: land_v = clampf(pvy, -16.0, 0.0) * 0.55   # ارتطام الهبوط: الكاميرا تنخفض ثم ترتد
+	was_floor = is_on_floor()
 	track_fall()
 	var lim_x: float = game.map_w * 0.5 - 0.4; var lim_z: float = game.map_d * 0.5 - 0.4
 	position.x = clampf(position.x, -lim_x, lim_x); position.z = clampf(position.z, -lim_z, lim_z)
@@ -346,7 +355,7 @@ func _physics_process(dt: float) -> void:
 	if cv > 0.0 and rp <= 0.0 and w_kind() == "shotgun": rpose["lh"] = lh_home.lerp(lh_home + Vector3(0, 0.01, 0.17), cv)
 	lh.position = lh.position.lerp(rpose["lh"], minf(1.0, dt * (30.0 if rp > 0.0 else 12.0)))
 	rh.position = rh_home
-	if flash: flash.visible = kick > 0.8
+	if flash: flash.visible = kick > 0.8; mzl.visible = flash.visible and Settings.quality >= 2
 	var thr := sin(clampf(1.0 - gren_t / 0.6, 0.0, 1.0) * PI) if gren_t > 0.0 else 0.0
 	var spr_pose := sprinting and fire_hold <= 0.0 and rp <= 0.0
 	var tgt_pos := Vector3(0.0, -sight_y * 0.62 - 0.058 + ads_adj, -0.44) if ads else Vector3(0.2, -0.22, -0.45)
@@ -376,7 +385,7 @@ func _physics_process(dt: float) -> void:
 	elif rp <= 0.05: mag_dropped = false
 	_arm_to(arm_r, SHOULDER_R, rh); _arm_to(arm_l, SHOULDER_L, lh)
 	var z := float(weapon()["zoom"])
-	var tfov := 75.0 / (z if ads and z > 1.0 else 1.0)
+	var tfov := 75.0 / (z if ads and z > 1.0 else 1.0) + (5.0 if sprinting and spd > 6.0 else 0.0)
 	cam.fov = lerpf(cam.fov, tfov, minf(1.0, dt * 14.0))
 	var scoped := ads and z >= 2.0
 	rh.visible = true; lh.visible = true
@@ -385,7 +394,9 @@ func _physics_process(dt: float) -> void:
 	gun_parts.visible = not scoped; arm_r.visible = not ads; arm_l.visible = not ads
 	if inp["reload"]: start_reload(); inp["reload"] = false
 	_grenade(dt)
-	cam.position.y = EYE - 0.5 * crouch_t
+	land_v += (-land_y * 160.0 - land_v * 14.0) * dt; land_y += land_v * dt
+	var hb := clampf(spd / 5.3, 0.0, 1.6) * (1.0 if is_on_floor() else 0.0) * (0.3 if ads else 1.0)
+	cam.position = Vector3(sin(bob * 0.5) * 0.012 * hb, EYE - 0.5 * crouch_t + absf(sin(bob * 0.5)) * 0.016 * hb - 0.012 * hb + land_y * 0.05, 0.0)
 	if inp["next"]: game.switch_weapon(self, 1); inp["next"] = false
 	if inp["fire"]:  # الإطلاق مسموح أثناء الجري
 		var w := weapon()

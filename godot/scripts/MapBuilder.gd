@@ -48,6 +48,8 @@ static func build(m: Dictionary, root: Node3D) -> Dictionary:
 	env.sky = sky; env.background_mode = Environment.BG_SKY
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR; env.ambient_light_color = Color(1, 1, 1); env.ambient_light_energy = float(th["amb"]) * 0.3
 	env.fog_enabled = true; env.fog_sky_affect = 0.0; env.fog_light_color = _col(th["fog"]); env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.adjustment_enabled = true; env.adjustment_contrast = 1.07; env.adjustment_saturation = 1.1
+	env.glow_enabled = Settings.quality >= 3; env.glow_intensity = 0.55; env.glow_strength = 0.9; env.glow_bloom = 0.04; env.glow_hdr_threshold = 1.1; env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 	var we := WorldEnvironment.new(); we.environment = env; we.name = "Env"; root.add_child(we)
 	var sun := DirectionalLight3D.new(); sun.name = "Sun"
 	var sd: Array = th["sun"]; var dir := Vector3(sd[0], sd[1], sd[2]).normalized()
