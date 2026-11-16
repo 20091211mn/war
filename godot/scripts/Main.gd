@@ -948,7 +948,8 @@ func _end_match() -> void:
 func apply_quality() -> void:
 	var vp := get_viewport()
 	vp.scaling_3d_scale = Settings.res_scale()
-	vp.msaa_3d = Viewport.MSAA_2X if Settings.msaa() > 0 else Viewport.MSAA_DISABLED
+	vp.msaa_3d = [Viewport.MSAA_DISABLED, Viewport.MSAA_2X, Viewport.MSAA_4X][Settings.msaa()]
+	vp.use_taa = false
 	if map_info.has("sun") and is_instance_valid(map_info["sun"]) and world != null:
 		(map_info["sun"] as DirectionalLight3D).shadow_enabled = Settings.shadows()
 		var th: Dictionary = map_info["theme"]; var env: Environment = map_info["env"]

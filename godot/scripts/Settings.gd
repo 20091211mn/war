@@ -33,9 +33,9 @@ func t(ar: String) -> String:
 	return _tab[ar][lang - 1]
 
 # إعدادات الرسم حسب الجودة
-func res_scale() -> float: return [0.5, 0.65, 0.8, 1.0, 1.0][quality]
+func res_scale() -> float: return [0.6, 0.75, 0.9, 1.0, 1.0][quality]
 func shadows() -> bool: return quality >= 2
-func msaa() -> int: return 2 if quality >= 4 else 0
+func msaa() -> int: return 0 if quality < 2 else (2 if quality >= 4 else 1)
 func fog_k() -> float: return [0.45, 0.7, 1.0, 1.5, 2.2][quality]
 func trees() -> int: return [0, 0, 10, 28, 60][quality]
 func windows() -> int: return [0, 0, 0, 150, 300][quality]
