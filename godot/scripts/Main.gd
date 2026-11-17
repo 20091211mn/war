@@ -72,6 +72,7 @@ var shot_path := ""
 var menu_shot := ""
 var dbg_picker := false
 var dbg_settings := false
+var dbg_sp := false
 var _set_ov: Control
 var thumb_path := ""
 var _mf := 0
@@ -106,6 +107,8 @@ func _ready() -> void:
 		if a.begins_with("--introat="): dbg_intro_at = float(a.substr(10)); menu_shot = "/tmp/intro.png"
 		if a == "--picker": dbg_picker = true
 		if a == "--settings": dbg_settings = true
+		if a == "--sp": dbg_sp = true
+		if a.begins_with("--tab="): _set_tab = int(a.substr(6))
 		if a.begins_with("--thumb="): thumb_path = a.substr(8)
 		if a.begins_with("--quality="): Settings.quality = int(a.substr(10))
 		if a.begins_with("--lang="): Settings.lang = int(a.substr(7))
@@ -175,7 +178,6 @@ func sfx_play(name: String, pos: Vector3) -> void:
 # ---------------------------------------------------------------- القوائم (واجهة حديثة)
 var _rows: Array = []
 var _title: Label
-var _sub: Label
 var _start_btn: Button
 var _res_btn: Button
 var _menu_btn: Button
@@ -217,15 +219,78 @@ func _style_chip(b: Button, on: bool) -> void:
 func _bg_layer(root: Control, dim: bool) -> void:
 	var bg := ColorRect.new(); bg.set_anchors_preset(Control.PRESET_FULL_RECT); bg.color = Color(0.02, 0.03, 0.07, 0.8 if dim else 0.0); bg.mouse_filter = Control.MOUSE_FILTER_STOP; root.add_child(bg)
 
-func _settings_rows(vb: Control, with_map: bool) -> void:
-	if with_map:
-		_seg(vb, "الصعوبة", func(): return ["سهل", "عادي", "صعب"].map(func(x): return Settings.t(x)), func(): return diff, func(i): diff = i)
-		return
-	_seg(vb, "النمط", func(): return ["فرق", "كل واحد ضد الكل"].map(func(x): return Settings.t(x)), func(): return 1 if ffa_pref else 0, func(i): ffa_pref = i == 1)
-	_seg(vb, "الجودة", func(): return Settings.QUALS.map(func(x): return Settings.t(x)), func(): return Settings.quality, func(i): Settings.quality = i; Settings.save(); Settings.changed.emit(), 16)
-	_seg(vb, "اللغة", func(): return Settings.LANGS, func(): return Settings.lang, func(i): Settings.lang = i; Settings.save(); Settings.changed.emit())
-	_seg(vb, "التحديث التلقائي", func(): return ["مفعّل", "متوقف"].map(func(x): return Settings.t(x)), func(): return 0 if Settings.auto_update else 1, func(i): Settings.auto_update = i == 0; Settings.save(); Settings.changed.emit(), 20)
-	_update_row(vb)
+# ---- إعدادات مختصرة داخل بطاقة الإيقاف المؤقت ----
+func _settings_rows(vb: Control) -> void:
+	_seg(vb, "الجودة", func(): return Settings.QUALS.map(func(x): return Settings.t(x)), func(): return Settings.quality, func(i): Settings.quality = i; Settings.save(), 16)
+	_slider(vb, "حساسية النظر", 0.3, 2.5, 0.05, func(): return Settings.sens, func(v): Settings.sens = v; Settings.save())
+	_seg(vb, "اللغة", func(): return Settings.LANGS, func(): return Settings.lang, func(i): Settings.lang = i; Settings.save())
+
+func _toggle(parent: Control, ar: String, get_b: Callable, set_b: Callable) -> void:
+	_seg(parent, ar, func(): return ["مفعّل", "متوقف"].map(func(x): return Settings.t(x)), func(): return 0 if get_b.call() else 1, func(i): set_b.call(i == 0); Settings.save())
+
+var _sliders: Array = []
+static var _grab_tex: ImageTexture
+func _grabber() -> ImageTexture:
+	if _grab_tex != null: return _grab_tex
+	var n := 44; var im := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	for y in n:
+		for x in n:
+			var d := Vector2(x + 0.5, y + 0.5).distance_to(Vector2(n * 0.5, n * 0.5))
+			var a := clampf((n * 0.5 - 1.0 - d) * 1.0, 0.0, 1.0); var ring := clampf(d - (n * 0.5 - 8.0), 0.0, 1.0)
+			im.set_pixel(x, y, Color(0.31, 0.55, 1.0, a).lerp(Color(1, 1, 1, a), ring))
+	_grab_tex = ImageTexture.create_from_image(im); return _grab_tex
+
+func _slider(parent: Control, ar: String, mn: float, mx: float, step: float, get_v: Callable, set_v: Callable, fmt := "%.2f") -> void:
+	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 4); parent.add_child(box)
+	var hb := HBoxContainer.new(); box.add_child(hb)
+	var lab := Label.new(); lab.add_theme_font_size_override("font_size", 19); lab.add_theme_color_override("font_color", UiTheme.MUTED); lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL; hb.add_child(lab)
+	var vl := Label.new(); vl.add_theme_font_size_override("font_size", 20); vl.add_theme_color_override("font_color", Color.WHITE); vl.text_direction = Control.TEXT_DIRECTION_LTR; hb.add_child(vl)
+	var sl := HSlider.new(); sl.min_value = mn; sl.max_value = mx; sl.step = step; sl.custom_minimum_size = Vector2(0, 40); sl.focus_mode = Control.FOCUS_NONE; sl.layout_direction = Control.LAYOUT_DIRECTION_LTR
+	var tr := StyleBoxFlat.new(); tr.bg_color = Color(1, 1, 1, 0.14); tr.set_corner_radius_all(4); tr.content_margin_top = 4; tr.content_margin_bottom = 4
+	var fl := tr.duplicate() as StyleBoxFlat; fl.bg_color = UiTheme.ACCENT
+	sl.add_theme_stylebox_override("slider", tr); sl.add_theme_stylebox_override("grabber_area", fl); sl.add_theme_stylebox_override("grabber_area_highlight", fl)
+	for k in ["grabber", "grabber_highlight", "grabber_disabled"]: sl.add_theme_icon_override(k, _grabber())
+	box.add_child(sl)
+	sl.value_changed.connect(func(v: float): set_v.call(v); vl.text = fmt % v)
+	_sliders.append({"lab": lab, "vl": vl, "sl": sl, "ar": ar, "get": get_v, "fmt": fmt})
+
+var _set_tabs: Array = []
+var _set_pages: Array = []
+var _set_tab := 0
+func _build_settings_screen() -> VBoxContainer:
+	var st := _overlay("الإعدادات", 860)
+	var tabs := HBoxContainer.new(); tabs.add_theme_constant_override("separation", 8); st.add_child(tabs)
+	for i in 3:
+		var b := Button.new(); b.custom_minimum_size = Vector2(0, 58); b.size_flags_horizontal = Control.SIZE_EXPAND_FILL; b.add_theme_font_size_override("font_size", 22); UiTheme.juicy(b)
+		var idx := i; b.pressed.connect(func(): _set_tab = idx; _refresh())
+		tabs.add_child(b); _set_tabs.append(b)
+	var sc := ScrollContainer.new(); sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED; sc.custom_minimum_size = Vector2(0, 380); sc.size_flags_vertical = Control.SIZE_EXPAND_FILL; st.add_child(sc)
+	var hm := MarginContainer.new(); hm.size_flags_horizontal = Control.SIZE_EXPAND_FILL; for k in ["left", "right"]: hm.add_theme_constant_override("margin_" + k, 22)
+	sc.add_child(hm)
+	var holder := VBoxContainer.new(); holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL; hm.add_child(holder)
+	for i in 3:
+		var pg := VBoxContainer.new(); pg.add_theme_constant_override("separation", 16); pg.size_flags_horizontal = Control.SIZE_EXPAND_FILL; holder.add_child(pg); _set_pages.append(pg)
+	# ---- عام ----
+	var g: VBoxContainer = _set_pages[0]
+	_seg(g, "اللغة", func(): return Settings.LANGS, func(): return Settings.lang, func(i): Settings.lang = i; Settings.save())
+	_slider(g, "مستوى الصوت", 0.0, 1.0, 0.05, func(): return Settings.volume, func(v): Settings.volume = v; Settings.save(), "%.0f%%")
+	_toggle(g, "التحديث التلقائي", func(): return Settings.auto_update, func(b): Settings.auto_update = b)
+	_update_row(g)
+	# ---- الرسوميات ----
+	var r: VBoxContainer = _set_pages[1]
+	_seg(r, "الجودة", func(): return Settings.QUALS.map(func(x): return Settings.t(x)), func(): return Settings.quality, func(i): Settings.quality = i; Settings.save(), 16)
+	_seg(r, "دقة العرض", func(): return [Settings.t("تلقائي"), "50%", "75%", "100%"], func(): return Settings.res_pct, func(i): Settings.res_pct = i; Settings.save())
+	_seg(r, "سقف الإطارات", func(): return ["30", "60", "90", "120"], func(): return Settings.fps_cap, func(i): Settings.fps_cap = i; Settings.save())
+	_slider(r, "مجال الرؤية FOV", 60.0, 100.0, 1.0, func(): return Settings.fov, func(v): Settings.fov = v; Settings.save(), "%.0f")
+	# ---- التحكم ----
+	var c: VBoxContainer = _set_pages[2]
+	_slider(c, "حساسية النظر", 0.3, 2.5, 0.05, func(): return Settings.sens, func(v): Settings.sens = v; Settings.save(), "%.2f")
+	_slider(c, "حساسية التصويب (ADS)", 0.3, 1.5, 0.05, func(): return Settings.ads_sens, func(v): Settings.ads_sens = v; Settings.save(), "%.2f")
+	_toggle(c, "عكس المحور الرأسي", func(): return Settings.invert_y, func(b): Settings.invert_y = b)
+	_toggle(c, "التصويب بالجيروسكوب", func(): return Settings.gyro, func(b): Settings.gyro = b)
+	_slider(c, "حساسية الجيروسكوب", 0.3, 3.0, 0.05, func(): return Settings.gyro_sens, func(v): Settings.gyro_sens = v; Settings.save(), "%.2f")
+	_toggle(c, "عكس اتجاه الجيروسكوب", func(): return Settings.gyro_flip, func(b): Settings.gyro_flip = b)
+	return st
 
 func _update_row(vb: Control) -> void:
 	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 8); vb.add_child(box)
@@ -255,7 +320,6 @@ func _update_row(vb: Control) -> void:
 	paint.call()
 
 var _map_cards: Array = []
-var _gear: Button
 var _map_lab: Label
 var _map_main: PanelContainer
 var _map_strip: HBoxContainer
@@ -309,68 +373,60 @@ var intro_done := false
 var cine_t := -1.0
 var dbg_intro_at := -1.0
 
-var _hero_box: Control
-var _hero: MenuHero
-func _build_hero() -> void:
-	_hero_box = Control.new(); _hero_box.mouse_filter = Control.MOUSE_FILTER_IGNORE; _hero_box.layout_direction = Control.LAYOUT_DIRECTION_LTR; menu_root.add_child(_hero_box); menu_root.move_child(_hero_box, 1)  # الطبقة الداكنة تُدرج بعده فتصير بينه وبين الخلفية
-	var dk := ColorRect.new(); dk.color = Color(0.015, 0.03, 0.07, 0.52); dk.set_anchors_preset(Control.PRESET_FULL_RECT); dk.mouse_filter = Control.MOUSE_FILTER_IGNORE; menu_root.add_child(dk); menu_root.move_child(dk, 1)
-	_hero = MenuHero.new(); _hero.names = func(wi: int, mode: int) -> String:
-		var w: Dictionary = weapons[wi]
-		return Settings.t(w["name"]) if mode == 0 else "DMG %d    %s" % [int(w["dmg"]), str(w["kind"]).to_upper()]
-	_hero_box.add_child(_hero)
-	var l := Label.new(); l.add_theme_font_size_override("font_size", 40); l.add_theme_color_override("font_color", Color(1, 1, 1, 0.95)); l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; l.set_anchors_preset(Control.PRESET_BOTTOM_WIDE); l.offset_top = -118; l.offset_bottom = -70; _hero_box.add_child(l); _hero.label = l
-	var sb := Label.new(); sb.add_theme_font_size_override("font_size", 20); sb.add_theme_color_override("font_color", Color(1.0, 0.6, 0.3, 0.9)); sb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; sb.set_anchors_preset(Control.PRESET_BOTTOM_WIDE); sb.offset_top = -70; sb.offset_bottom = -42; _hero_box.add_child(sb); _hero.sub = sb
-	_hero_place()
-
-func _hero_place() -> void:
-	if _hero_box == null: return
-	var rtl := Settings.lang == 0
-	# القائمة على اليمين في العربية فالسلاح يسار الشاشة، والعكس
-	_hero_box.anchor_top = 0.0; _hero_box.anchor_bottom = 1.0; _hero_box.offset_left = 0; _hero_box.offset_right = 0; _hero_box.offset_top = 0; _hero_box.offset_bottom = 0
-	_hero_box.anchor_left = 0.0 if rtl else 0.44; _hero_box.anchor_right = 0.56 if rtl else 1.0
-
 func _icon_btn(kind: String, sz: Vector2) -> Button:
 	var b := Button.new(); b.custom_minimum_size = sz; UiTheme.style_ghost(b); UiTheme.juicy(b); MenuFx.attach_icon(b, kind, Color.WHITE, 16.0); return b
+
+var _menu_rows: Array = []
+var _ver_lab: Label
+var _sp_ov: VBoxContainer
+func _menu_row(icon: String, ar: String, cb: Callable, primary := false) -> Button:
+	var b := Button.new(); b.custom_minimum_size = Vector2(0, 68); UiTheme.juicy(b)
+	if primary: UiTheme.style_accent(b)
+	else:
+		b.add_theme_stylebox_override("normal", UiTheme.flat(Color(0.05, 0.08, 0.15, 0.55), 16, Color(1, 1, 1, 0.14), 1))
+		b.add_theme_stylebox_override("hover", UiTheme.flat(Color(0.12, 0.2, 0.38, 0.75), 16, UiTheme.ACCENT, 1))
+		b.add_theme_stylebox_override("pressed", UiTheme.flat(Color(0.2, 0.3, 0.55, 0.85), 16))
+	var h := HBoxContainer.new(); h.set_anchors_preset(Control.PRESET_FULL_RECT); h.mouse_filter = Control.MOUSE_FILTER_IGNORE; h.add_theme_constant_override("separation", 18); h.offset_left = 22; h.offset_right = -22; b.add_child(h)
+	var ic := MenuFx.icon(icon, Color.WHITE if primary else Color(0.8, 0.88, 1.0)); ic.custom_minimum_size = Vector2(34, 34); ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER; h.add_child(ic)
+	var l := Label.new(); l.add_theme_font_size_override("font_size", 30 if primary else 27); l.size_flags_horizontal = Control.SIZE_EXPAND_FILL; l.mouse_filter = Control.MOUSE_FILTER_IGNORE; l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER; h.add_child(l)
+	b.pressed.connect(cb); _menu_rows.append({"lab": l, "ar": ar}); return b
 
 func _build_menu() -> void:
 	menu_root = Control.new(); menu_root.name = "Menu"; menu_root.set_anchors_preset(Control.PRESET_FULL_RECT); menu_root.mouse_filter = Control.MOUSE_FILTER_IGNORE; ui_root.add_child(menu_root)
 	MenuFx.grade(menu_root); _vig = MenuFx.vignette(menu_root); MenuFx.embers(menu_root); MenuFx.letterbox(menu_root)
-	_build_hero()
 	var mg := MarginContainer.new(); mg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	for k in ["left", "right"]: mg.add_theme_constant_override("margin_" + k, 56)
-	for k in ["top", "bottom"]: mg.add_theme_constant_override("margin_" + k, 34)
+	for k in ["left", "right"]: mg.add_theme_constant_override("margin_" + k, 64)
+	for k in ["top", "bottom"]: mg.add_theme_constant_override("margin_" + k, 40)
 	menu_root.add_child(mg)
 	var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 40); mg.add_child(hb)
-	# ---- العمود الأول: الشعار + ابدأ + الصعوبة ----
-	var lc := VBoxContainer.new(); lc.size_flags_horizontal = Control.SIZE_EXPAND_FILL; lc.size_flags_stretch_ratio = 1.1; lc.alignment = BoxContainer.ALIGNMENT_CENTER; lc.add_theme_constant_override("separation", 14); hb.add_child(lc)
+	# ---- عمود القائمة (يمين في العربية / يسار في غيرها) والمشهد الحي حرّ في الجهة الأخرى ----
+	var lc := VBoxContainer.new(); lc.size_flags_horizontal = Control.SIZE_EXPAND_FILL; lc.size_flags_stretch_ratio = 0.8; lc.alignment = BoxContainer.ALIGNMENT_CENTER; lc.add_theme_constant_override("separation", 12); hb.add_child(lc)
+	var free := Control.new(); free.size_flags_horizontal = Control.SIZE_EXPAND_FILL; free.size_flags_stretch_ratio = 1.2; free.mouse_filter = Control.MOUSE_FILTER_IGNORE; hb.add_child(free)
 	var tagrow := HBoxContainer.new(); tagrow.add_theme_constant_override("separation", 12); lc.add_child(tagrow)
 	for cc in [UiTheme.ACCENT2, Color(0.35, 0.6, 1.0)]:
 		var bar := ColorRect.new(); bar.color = cc; bar.custom_minimum_size = Vector2(46, 6); bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER; tagrow.add_child(bar)
 	var tag := Label.new(); tag.text = "RED  VS  BLUE"; tag.add_theme_font_size_override("font_size", 20); tag.add_theme_color_override("font_color", UiTheme.MUTED); tagrow.add_child(tag)
-	var tstack := Control.new(); tstack.custom_minimum_size = Vector2(0, 124); lc.add_child(tstack)
+	var tstack := Control.new(); tstack.custom_minimum_size = Vector2(0, 104); lc.add_child(tstack)
 	var tcols := [Color(1.0, 0.25, 0.3, 0.8), Color(0.3, 0.55, 1.0, 0.8), Color.WHITE]
 	for i in 3:
-		var tl := Label.new(); tl.text = "WARZONE"; tl.text_direction = Control.TEXT_DIRECTION_LTR; tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; tl.clip_text = true; tl.add_theme_font_size_override("font_size", 78); tl.add_theme_color_override("font_color", tcols[i]); tl.set_anchors_preset(Control.PRESET_FULL_RECT); tl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		var tl := Label.new(); tl.text = "WARZONE"; tl.text_direction = Control.TEXT_DIRECTION_LTR; tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; tl.clip_text = true; tl.add_theme_font_size_override("font_size", 82); tl.add_theme_color_override("font_color", tcols[i]); tl.set_anchors_preset(Control.PRESET_FULL_RECT); tl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		if i == 2: tl.material = MenuFx.shine_material(); tl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.55)); tl.add_theme_constant_override("outline_size", 8); _title = tl
 		else: _title_fx.append(tl)
 		tstack.add_child(tl)
-	_sub = Label.new(); _sub.add_theme_font_size_override("font_size", 20); _sub.add_theme_color_override("font_color", UiTheme.MUTED); _sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; lc.add_child(_sub)
-	var sp := Control.new(); sp.custom_minimum_size = Vector2(0, 10); lc.add_child(sp)
-	_start_btn = Button.new(); _start_btn.custom_minimum_size = Vector2(0, 104); UiTheme.style_accent(_start_btn); UiTheme.juicy(_start_btn)
-	var sh := HBoxContainer.new(); sh.set_anchors_preset(Control.PRESET_FULL_RECT); sh.alignment = BoxContainer.ALIGNMENT_CENTER; sh.mouse_filter = Control.MOUSE_FILTER_IGNORE; sh.add_theme_constant_override("separation", 18); _start_btn.add_child(sh)
-	var pi := MenuFx.icon("play"); pi.custom_minimum_size = Vector2(38, 38); pi.size_flags_vertical = Control.SIZE_SHRINK_CENTER; sh.add_child(pi)
-	_start_lab = Label.new(); _start_lab.add_theme_font_size_override("font_size", 40); _start_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE; sh.add_child(_start_lab)
-	_start_btn.pressed.connect(_start_loading); lc.add_child(_start_btn)
-	var pulse := _start_btn.create_tween().set_loops(); pulse.tween_property(_start_btn, "self_modulate", Color(1.18, 1.18, 1.25), 0.9).set_trans(Tween.TRANS_SINE); pulse.tween_property(_start_btn, "self_modulate", Color.WHITE, 0.9).set_trans(Tween.TRANS_SINE)
-	var nb := lc.get_child_count(); _settings_rows(lc, true); var diffbox: Control = lc.get_child(nb)
-	# ---- العمود الثاني: الإعدادات أعلى، ثم LAN، ثم بطاقة الخريطة ----
-	var rc := VBoxContainer.new(); rc.size_flags_horizontal = Control.SIZE_EXPAND_FILL; rc.size_flags_stretch_ratio = 0.9; rc.add_theme_constant_override("separation", 14); hb.add_child(rc)
-	var topr := HBoxContainer.new(); topr.alignment = BoxContainer.ALIGNMENT_END; rc.add_child(topr)
-	_gear = _icon_btn("gear", Vector2(76, 70)); topr.add_child(_gear)
-	var rsp := Control.new(); rsp.size_flags_vertical = Control.SIZE_EXPAND_FILL; rc.add_child(rsp)
-	var lanbox := VBoxContainer.new(); rc.add_child(lanbox); lan.add_menu_buttons(lanbox)
-	_map_lab = Label.new(); _map_lab.add_theme_font_size_override("font_size", 19); _map_lab.add_theme_color_override("font_color", UiTheme.MUTED); rc.add_child(_map_lab)
-	var mc := PanelContainer.new(); mc.custom_minimum_size = Vector2(0, 140); rc.add_child(mc); _map_main = mc
+	var sp0 := Control.new(); sp0.custom_minimum_size = Vector2(0, 6); lc.add_child(sp0)
+	var rows: Array = []
+	var b_sp := _menu_row("user", "لعب فردي", func(): _open(_sp_ov), true); lc.add_child(b_sp); rows.append(b_sp)
+	var b_host := _menu_row("host", "إنشاء غرفة LAN", func(): lan.show_host()); lc.add_child(b_host); rows.append(b_host)
+	var b_join := _menu_row("join", "الانضمام إلى LAN", func(): lan.show_join()); lc.add_child(b_join); rows.append(b_join)
+	var b_set := _menu_row("gear", "الإعدادات", func(): _open(_set_ov)); lc.add_child(b_set); rows.append(b_set)
+	if not OS.has_feature("ios") and not OS.has_feature("web"):
+		var b_exit := _menu_row("exit", "خروج", func(): _confirm_exit()); lc.add_child(b_exit); rows.append(b_exit)
+	_ver_lab = Label.new(); _ver_lab.add_theme_font_size_override("font_size", 17); _ver_lab.add_theme_color_override("font_color", Color(0.55, 0.62, 0.8, 0.8)); lc.add_child(_ver_lab)
+	_menu_items = [tagrow, tstack] + rows + [_ver_lab]
+	# ---- شاشة «لعب فردي»: الخريطة + الصعوبة + النمط ثم ابدأ ----
+	_sp_ov = _overlay("لعب فردي", 820)
+	_map_lab = Label.new(); _map_lab.add_theme_font_size_override("font_size", 19); _map_lab.add_theme_color_override("font_color", UiTheme.MUTED); _sp_ov.add_child(_map_lab)
+	var mc := PanelContainer.new(); mc.custom_minimum_size = Vector2(0, 150); _sp_ov.add_child(mc); _map_main = mc
 	var mh := HBoxContainer.new(); mh.add_theme_constant_override("separation", 8); mc.add_child(mh)
 	var prevb := _icon_btn("chev_a", Vector2(60, 0)); prevb.size_flags_vertical = Control.SIZE_EXPAND_FILL; mh.add_child(prevb)
 	var midp := Control.new(); midp.size_flags_horizontal = Control.SIZE_EXPAND_FILL; midp.custom_minimum_size = Vector2(0, 124); midp.clip_contents = true; mh.add_child(midp)
@@ -387,12 +443,13 @@ func _build_menu() -> void:
 	_chev = [prevb, nextb]
 	prevb.pressed.connect(func(): _pick_map((map_idx + maps.size() - 1) % maps.size()))
 	nextb.pressed.connect(func(): _pick_map((map_idx + 1) % maps.size()))
-	# ---- تصميم معتمد: عمود واحد يمين (الصعوبة ← الخريطة ← LAN ← ابدأ) والشعار فوق، واليسار حرّ للمشهد ----
-	for n in [_map_lab, mc, lanbox]: rc.remove_child(n); lc.add_child(n)
-	lc.move_child(_start_btn, lc.get_child_count() - 1)
-	lc.size_flags_stretch_ratio = 0.95; rc.size_flags_stretch_ratio = 1.25
-	tstack.custom_minimum_size = Vector2(0, 104); _start_btn.custom_minimum_size = Vector2(0, 84); mc.custom_minimum_size = Vector2(0, 112); midp.custom_minimum_size = Vector2(0, 94)
-	_menu_items = [tagrow, tstack, _sub, diffbox, _map_lab, mc, lanbox, _start_btn, topr]
+	_seg(_sp_ov, "الصعوبة", func(): return ["سهل", "عادي", "صعب"].map(func(x): return Settings.t(x)), func(): return diff, func(i): diff = i)
+	_seg(_sp_ov, "النمط", func(): return ["فرق", "كل واحد ضد الكل"].map(func(x): return Settings.t(x)), func(): return 1 if ffa_pref else 0, func(i): ffa_pref = i == 1)
+	_start_btn = Button.new(); _start_btn.custom_minimum_size = Vector2(0, 84); UiTheme.style_accent(_start_btn); UiTheme.juicy(_start_btn)
+	var sh := HBoxContainer.new(); sh.set_anchors_preset(Control.PRESET_FULL_RECT); sh.alignment = BoxContainer.ALIGNMENT_CENTER; sh.mouse_filter = Control.MOUSE_FILTER_IGNORE; sh.add_theme_constant_override("separation", 18); _start_btn.add_child(sh)
+	var pi := MenuFx.icon("play"); pi.custom_minimum_size = Vector2(36, 36); pi.size_flags_vertical = Control.SIZE_SHRINK_CENTER; sh.add_child(pi)
+	_start_lab = Label.new(); _start_lab.add_theme_font_size_override("font_size", 36); _start_lab.mouse_filter = Control.MOUSE_FILTER_IGNORE; sh.add_child(_start_lab)
+	_start_btn.pressed.connect(func(): (_sp_ov.get_meta("root") as Control).visible = false; _start_loading()); _sp_ov.add_child(_start_btn)
 	# ---- شاشة اختيار الخرائط (شبكة بطاقات) + الإعدادات ----
 	var pk := _overlay("اختر الخريطة", 1180)
 	var sc := ScrollContainer.new(); sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED; sc.custom_minimum_size = Vector2(0, 400); pk.add_child(sc)
@@ -401,10 +458,11 @@ func _build_menu() -> void:
 		var c := _map_card(i); c.size_flags_horizontal = Control.SIZE_EXPAND_FILL; gr.add_child(c); _map_cards.append(c)
 	_map_picker = pk
 	mbtn.pressed.connect(func(): _open(pk))
-	var st := _overlay("الإعدادات", 640)
-	_settings_rows(st, false)
-	_set_ov = st; _gear.pressed.connect(func(): _open(st))
+	_set_ov = _build_settings_screen()
 	_refresh()
+
+func _confirm_exit() -> void:
+	get_tree().quit()
 
 func _build_pause() -> void:
 	pause_root = Control.new(); pause_root.name = "Pause"; pause_root.set_anchors_preset(Control.PRESET_FULL_RECT); pause_root.mouse_filter = Control.MOUSE_FILTER_IGNORE; ui_root.add_child(pause_root); _bg_layer(pause_root, true)
@@ -412,7 +470,7 @@ func _build_pause() -> void:
 	var vb := _card(cc, 620)
 	_pause_title = Label.new(); _pause_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; _pause_title.add_theme_font_size_override("font_size", 44); vb.add_child(_pause_title)
 	over_label = Label.new(); over_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; over_label.add_theme_font_size_override("font_size", 34); over_label.add_theme_color_override("font_color", UiTheme.ACCENT2); vb.add_child(over_label)
-	_settings_rows(vb, false)
+	_settings_rows(vb)
 	_res_btn = Button.new(); _res_btn.custom_minimum_size = Vector2(0, 80); _res_btn.add_theme_font_size_override("font_size", 30); UiTheme.style_accent(_res_btn); UiTheme.juicy(_res_btn); _res_btn.pressed.connect(resume); vb.add_child(_res_btn)
 	_menu_btn = Button.new(); _menu_btn.custom_minimum_size = Vector2(0, 72); _menu_btn.add_theme_font_size_override("font_size", 26); UiTheme.style_ghost(_menu_btn); UiTheme.juicy(_menu_btn); _menu_btn.pressed.connect(_show_menu); vb.add_child(_menu_btn)
 
@@ -466,8 +524,16 @@ func toggle_board(force := -1) -> void:
 
 func _refresh() -> void:
 	if _title == null: return
-	_sub.text = Settings.t("حرب فرق ثلاثية الأبعاد — الأحمر ضد الأزرق")
 	_start_lab.text = Settings.t("ابدأ اللعب")
+	var rtl0 := Settings.lang == 0
+	for mr in _menu_rows:
+		var ml: Label = mr["lab"]; ml.text = Settings.t(mr["ar"]); ml.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	if _ver_lab != null: _ver_lab.text = "%s  %s" % [Settings.t("رقم الإصدار"), Updater.version()]; _ver_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	for sd in _sliders:
+		(sd["lab"] as Label).text = Settings.t(sd["ar"]); var sv: float = sd["get"].call(); (sd["sl"] as HSlider).set_value_no_signal(sv); (sd["vl"] as Label).text = (sd["fmt"] as String) % sv
+	var tnames := ["عام", "الرسوميات", "التحكم"]
+	for ti in _set_tabs.size():
+		(_set_tabs[ti] as Button).text = Settings.t(tnames[ti]); _style_chip(_set_tabs[ti], ti == _set_tab); (_set_pages[ti] as Control).visible = ti == _set_tab
 	for r in _rows:
 		r["lab"].text = Settings.t(r["ar"])
 		var o: Array = r["opts"].call(); var g: int = r["get"].call(); var chips: Array = r["chips"]
@@ -491,7 +557,6 @@ func _refresh() -> void:
 	var rtl := Settings.lang == 0
 	ui_root.layout_direction = Control.LAYOUT_DIRECTION_RTL if rtl else Control.LAYOUT_DIRECTION_LTR
 	if _vig != null: (_vig.material as ShaderMaterial).set_shader_parameter("flip", 1.0 if rtl else 0.0)
-	_hero_place()
 	for c in _chev: (c as Control).queue_redraw(); for ch in (c as Control).get_children(): (ch as Control).queue_redraw()
 
 # معاينة ثلاثية الأبعاد حيّة خلف القائمة (كاميرا تدور ببطء)
@@ -1090,6 +1155,7 @@ func _process(dt: float) -> void:
 	if menu_shot != "":
 		if dbg_picker and _map_picker != null: _open(_map_picker)
 		if dbg_settings and _set_ov != null: _open(_set_ov)
+		if dbg_sp and _sp_ov != null: _open(_sp_ov)
 		_mf += 1
 		if _mf == 30 and dbg_intro_at < 0.0:
 			get_viewport().get_texture().get_image().save_png(menu_shot); get_tree().quit(0)

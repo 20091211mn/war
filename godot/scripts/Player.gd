@@ -301,8 +301,12 @@ func _physics_process(dt: float) -> void:
 	if veh != null: _drive_mode(dt); return
 	# ---- نظر ----
 	var look: Vector2 = inp["look"]; inp["look"] = Vector2.ZERO
-	var sens := 0.0042 * (0.5 if ads and float(weapon()["zoom"]) >= 2.0 else 1.0)
-	yaw -= look.x * sens; pitch = clampf(pitch - look.y * sens, -1.5, 1.5)
+	var zk := (0.5 if ads and float(weapon()["zoom"]) >= 2.0 else 1.0) * (Settings.ads_sens if ads else 1.0)
+	var sens := 0.0042 * Settings.sens * zk
+	yaw -= look.x * sens; pitch = clampf(pitch - look.y * sens * (-1.0 if Settings.invert_y else 1.0), -1.5, 1.5)
+	if Settings.gyro and OS.has_feature("mobile"):   # جيروسكوب: الهاتف أفقي، محور x الجهاز = الدوران الرأسي (غير مجرَّب على جهاز حقيقي — فيه خيار عكس)
+		var g := Input.get_gyroscope(); var gf := (-1.0 if Settings.gyro_flip else 1.0) * Settings.gyro_sens * zk * dt * 1.0
+		yaw += g.x * gf; pitch = clampf(pitch + g.y * gf * (-1.0 if Settings.invert_y else 1.0), -1.5, 1.5)
 	rotation.y = yaw; cam.rotation.x = pitch + kick * 0.02
 	# ---- حركة ----
 	var mv: Vector2 = inp["mv"]
@@ -385,7 +389,7 @@ func _physics_process(dt: float) -> void:
 	elif rp <= 0.05: mag_dropped = false
 	_arm_to(arm_r, SHOULDER_R, rh); _arm_to(arm_l, SHOULDER_L, lh)
 	var z := float(weapon()["zoom"])
-	var tfov := 75.0 / (z if ads and z > 1.0 else 1.0) + (5.0 if sprinting and spd > 6.0 else 0.0)
+	var tfov := Settings.fov / (z if ads and z > 1.0 else 1.0) + (5.0 if sprinting and spd > 6.0 else 0.0)
 	cam.fov = lerpf(cam.fov, tfov, minf(1.0, dt * 14.0))
 	var scoped := ads and z >= 2.0
 	rh.visible = true; lh.visible = true
@@ -430,8 +434,8 @@ func _drive_mode(dt: float) -> void:
 	var inp: Dictionary = game.inp
 	var v: Vehicle = veh as Vehicle
 	var look: Vector2 = inp["look"]; inp["look"] = Vector2.ZERO
-	var sens := 0.0042
-	yaw -= look.x * sens; pitch -= look.y * sens
+	var sens := 0.0042 * Settings.sens
+	yaw -= look.x * sens; pitch -= look.y * sens * (-1.0 if Settings.invert_y else 1.0)
 	var fp := v.vtype == 0 and veh_seat == 1
 	chase_idle = 0.0 if look.length() > 0.5 else chase_idle + dt
 	if v.vtype == 0 and veh_seat == 0 and chase_idle > 1.2:

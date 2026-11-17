@@ -58,6 +58,23 @@ static func draw_icon(c: Control, kind: String, col: Color) -> void:
 			var q := m * 0.2; var gap := m * 0.06
 			for i in 2:
 				for j in 2: c.draw_rect(Rect2(ct + Vector2((i - 1) * (q + gap) + (gap * 0.5 if i == 1 else -gap * 0.5), (j - 1) * (q + gap) + (gap * 0.5 if j == 1 else -gap * 0.5)) + Vector2(0, 0), Vector2(q, q)), col)
+		"host":   # بث: نقطة + أقواس
+			c.draw_circle(ct + Vector2(0, m * 0.12), m * 0.08, col)
+			for k in 2:
+				var rr := m * (0.22 + 0.17 * k); c.draw_arc(ct + Vector2(0, m * 0.12), rr, -PI * 0.82, -PI * 0.18, 20, col, maxf(3.0, m * 0.08), true)
+			c.draw_line(ct + Vector2(0, m * 0.12), ct + Vector2(0, m * 0.4), col, maxf(3.0, m * 0.08), true)
+		"join":   # دخول: سهم إلى إطار
+			var w := maxf(3.0, m * 0.08)
+			c.draw_polyline(PackedVector2Array([ct + Vector2(0.04, -0.34) * m, ct + Vector2(0.34, -0.34) * m, ct + Vector2(0.34, 0.34) * m, ct + Vector2(0.04, 0.34) * m]), col, w, true)
+			c.draw_line(ct + Vector2(-0.38, 0) * m, ct + Vector2(0.14, 0) * m, col, w, true)
+			c.draw_polyline(PackedVector2Array([ct + Vector2(-0.1, -0.2) * m, ct + Vector2(0.14, 0) * m, ct + Vector2(-0.1, 0.2) * m]), col, w, true)
+		"exit":   # زر طاقة
+			var w2 := maxf(3.0, m * 0.08)
+			c.draw_arc(ct + Vector2(0, m * 0.04), m * 0.3, -PI * 0.32, PI * 1.32, 28, col, w2, true)
+			c.draw_line(ct + Vector2(0, -m * 0.4), ct + Vector2(0, -m * 0.06), col, w2, true)
+		"user":
+			c.draw_circle(ct + Vector2(0, -m * 0.14), m * 0.15, col)
+			c.draw_arc(ct + Vector2(0, m * 0.46), m * 0.34, PI * 1.12, PI * 1.88, 20, col, maxf(3.0, m * 0.09), true)
 		"gear":
 			var rr := m * 0.3
 			c.draw_arc(ct, rr, 0.0, TAU, 32, col, maxf(3.0, m * 0.09), true)
@@ -80,58 +97,44 @@ static func chev_for(rtl: bool, first: bool) -> String:
 	return "chev_l" if (first != rtl) else "chev_r"
 
 # ---------------------------------------------------------------- مقطع افتتاحي
-# يُعرض مرة عند الفتح: ظهور من الأسود فوق طيران كاميرا سينمائي، RED تصطدم بـ BLUE، ثم عنوان اللعبة. أي لمسة تتخطى.
+# هادئ وسينمائي (~3 ثوانٍ): ظلام ← خط ضوء أفقي يتمدّد ← العنوان يظهر بإشراقة بطيئة ← ينحلّ إلى القائمة. أي لمسة تتخطى.
 static func intro(game: Node, ui: Control, on_done: Callable) -> Control:
 	var vs := ui.get_viewport_rect().size
 	var root := Control.new(); root.set_anchors_preset(Control.PRESET_FULL_RECT); root.mouse_filter = Control.MOUSE_FILTER_STOP; ui.add_child(root)
-	root.layout_direction = Control.LAYOUT_DIRECTION_LTR  # الافتتاحية مرسومة بإحداثيات مطلقة: لا تنعكس مع RTL
+	root.layout_direction = Control.LAYOUT_DIRECTION_LTR
 	var done := [false]
-	var stage := Control.new(); stage.set_anchors_preset(Control.PRESET_FULL_RECT); stage.mouse_filter = Control.MOUSE_FILTER_IGNORE; root.add_child(stage)
-	var black := ColorRect.new(); black.color = Color(0, 0, 0, 1); black.set_anchors_preset(Control.PRESET_FULL_RECT); black.mouse_filter = Control.MOUSE_FILTER_IGNORE; stage.add_child(black)
-	var vig := vignette(stage); vig.material.set_shader_parameter("flip", 0.5)
+	var black := ColorRect.new(); black.color = Color(0, 0, 0, 1); black.set_anchors_preset(Control.PRESET_FULL_RECT); black.mouse_filter = Control.MOUSE_FILTER_IGNORE; root.add_child(black)
+	var vig := vignette(root); vig.material.set_shader_parameter("flip", 0.5)
+	# خط الضوء (فلير أنامورفي): تدرّج أفقي شفاف ← أبيض ← شفاف
+	var gt := GradientTexture2D.new(); gt.fill_from = Vector2(0, 0.5); gt.fill_to = Vector2(1, 0.5); gt.width = 512; gt.height = 4
+	var gg := Gradient.new(); gg.colors = PackedColorArray([Color(0.4, 0.6, 1.0, 0.0), Color(0.85, 0.92, 1.0, 1.0), Color(0.4, 0.6, 1.0, 0.0)]); gg.offsets = PackedFloat32Array([0.0, 0.5, 1.0]); gt.gradient = gg
+	var line := TextureRect.new(); line.texture = gt; line.expand_mode = TextureRect.EXPAND_IGNORE_SIZE; line.stretch_mode = TextureRect.STRETCH_SCALE; line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	line.size = Vector2(vs.x * 0.9, 3.0); line.position = Vector2(vs.x * 0.05, vs.y * 0.5 - 1.5); line.pivot_offset = line.size * 0.5; line.scale = Vector2(0.0, 1.0); root.add_child(line)
+	var title := Label.new(); title.text = "WARZONE"; title.add_theme_font_size_override("font_size", 132); title.add_theme_color_override("font_color", Color.WHITE)
+	title.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.5)); title.add_theme_constant_override("outline_size", 8)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER; title.anchor_left = 0.0; title.anchor_right = 1.0; title.anchor_top = 0.5; title.anchor_bottom = 0.5; title.offset_left = 0; title.offset_right = 0; title.offset_top = -100.0; title.offset_bottom = 100.0
+	title.resized.connect(func(): title.pivot_offset = title.size * 0.5); title.pivot_offset = Vector2(vs.x * 0.5, 100.0); title.scale = Vector2(1.1, 1.1); title.modulate.a = 0.0; title.material = shine_material(); root.add_child(title)
+	var sub := Label.new(); sub.text = "RED  VS  BLUE"; sub.add_theme_font_size_override("font_size", 26); sub.add_theme_color_override("font_color", Color(0.62, 0.72, 0.98))
+	sub.anchor_left = 0.0; sub.anchor_right = 1.0; sub.anchor_top = 0.5; sub.anchor_bottom = 0.5; sub.offset_left = 0; sub.offset_right = 0; sub.offset_top = 78.0; sub.offset_bottom = 118.0; sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; sub.modulate.a = 0.0; root.add_child(sub)
 	var bars: Array = []
 	for top in [true, false]:
-		var b := ColorRect.new(); b.color = Color.BLACK; b.mouse_filter = Control.MOUSE_FILTER_IGNORE; stage.add_child(b)
-		b.set_anchors_preset(Control.PRESET_TOP_WIDE if top else Control.PRESET_BOTTOM_WIDE); b.custom_minimum_size = Vector2(0, vs.y * 0.13); b.offset_bottom = vs.y * 0.13 if top else 0.0; b.offset_top = 0.0 if top else -vs.y * 0.13
-		bars.append(b)
-	var mk := func(txt: String, size: int, col: Color) -> Label:
-		var l := Label.new(); l.text = txt; l.add_theme_font_size_override("font_size", size); l.add_theme_color_override("font_color", col)
-		l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.7)); l.add_theme_constant_override("outline_size", 10)
-		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER; l.size = Vector2(560, 200); l.pivot_offset = l.size * 0.5; l.modulate.a = 0.0; stage.add_child(l); return l
-	var cy := vs.y * 0.5 - 100.0
-	var red: Label = mk.call("RED", 150, Color(1.0, 0.3, 0.3)); var blue: Label = mk.call("BLUE", 150, Color(0.35, 0.6, 1.0)); var vsl: Label = mk.call("VS", 64, Color.WHITE)
-	red.position = Vector2(-600.0, cy); blue.position = Vector2(vs.x + 40.0, cy); vsl.position = Vector2(vs.x * 0.5 - 280.0, cy + 10.0); vsl.scale = Vector2(3, 3)
-	var title: Label = mk.call("WARZONE", 150, Color.WHITE); title.size = Vector2(vs.x, 200); title.position = Vector2(0, cy - 10.0); title.pivot_offset = title.size * 0.5; title.material = shine_material()
-	var sub := Label.new(); sub.text = "RED  VS  BLUE"; sub.add_theme_font_size_override("font_size", 28); sub.add_theme_color_override("font_color", Color(0.6, 0.7, 0.95)); sub.size = Vector2(vs.x, 40); sub.position = Vector2(0, cy + 190.0); sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; sub.modulate.a = 0.0; stage.add_child(sub)
-	var skip := Label.new(); skip.text = Settings.t("المس للتخطي"); skip.add_theme_font_size_override("font_size", 20); skip.add_theme_color_override("font_color", Color(1, 1, 1, 0.55)); skip.size = Vector2(vs.x, 30); skip.position = Vector2(0, vs.y * 0.93 - 4.0); skip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; stage.add_child(skip)
-	var flash := ColorRect.new(); flash.color = Color(1, 1, 1, 0); flash.set_anchors_preset(Control.PRESET_FULL_RECT); flash.mouse_filter = Control.MOUSE_FILTER_IGNORE; stage.add_child(flash)
+		var b := ColorRect.new(); b.color = Color.BLACK; b.mouse_filter = Control.MOUSE_FILTER_IGNORE; root.add_child(b)
+		b.set_anchors_preset(Control.PRESET_TOP_WIDE if top else Control.PRESET_BOTTOM_WIDE); b.offset_bottom = vs.y * 0.12 if top else 0.0; b.offset_top = 0.0 if top else -vs.y * 0.12; bars.append(b)
+	var skip := Label.new(); skip.text = Settings.t("المس للتخطي"); skip.add_theme_font_size_override("font_size", 18); skip.add_theme_color_override("font_color", Color(1, 1, 1, 0.4)); skip.anchor_left = 0.0; skip.anchor_right = 1.0; skip.anchor_top = 0.93; skip.anchor_bottom = 0.93; skip.offset_left = 0; skip.offset_right = 0; skip.offset_top = -4.0; skip.offset_bottom = 24.0; skip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; root.add_child(skip)
 	var finish := func():
 		if done[0]: return
 		done[0] = true
-		var tw := root.create_tween(); tw.tween_property(root, "modulate:a", 0.0, 0.35); tw.tween_callback(func(): root.queue_free(); on_done.call())
+		var tw := root.create_tween(); tw.tween_property(root, "modulate:a", 0.0, 0.5); tw.tween_callback(func(): root.queue_free(); on_done.call())
 	root.gui_input.connect(func(e: InputEvent):
 		if (e is InputEventMouseButton and e.pressed) or (e is InputEventScreenTouch and e.pressed) or (e is InputEventKey and e.pressed): finish.call())
 	var tw := root.create_tween()
-	tw.tween_property(black, "color:a", 0.0, 0.9)
-	tw.parallel().tween_property(red, "modulate:a", 1.0, 0.25).set_delay(0.5)
-	tw.parallel().tween_property(red, "position:x", vs.x * 0.27 - 280.0, 0.5).set_delay(0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.parallel().tween_property(blue, "modulate:a", 1.0, 0.25).set_delay(0.85)
-	tw.parallel().tween_property(blue, "position:x", vs.x * 0.73 - 280.0, 0.5).set_delay(0.85).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.tween_callback(func():
-		if "sfx" in game and not game.selftest: game.sfx_play("boom", game.prev_cam.global_position if game.prev_cam != null else Vector3.ZERO))
-	tw.tween_property(vsl, "modulate:a", 1.0, 0.05)
-	tw.parallel().tween_property(vsl, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tw.parallel().tween_property(flash, "color:a", 0.75, 0.05)
-	tw.tween_property(flash, "color:a", 0.0, 0.4)
-	tw.parallel().tween_property(stage, "position", Vector2(6, -4), 0.04)
-	tw.tween_property(stage, "position", Vector2.ZERO, 0.12)
-	tw.tween_interval(0.35)
-	tw.tween_property(red, "modulate:a", 0.0, 0.25); tw.parallel().tween_property(blue, "modulate:a", 0.0, 0.25); tw.parallel().tween_property(vsl, "modulate:a", 0.0, 0.25)
-	tw.parallel().tween_property(red, "position:x", red.position.x - 120.0, 0.25); tw.parallel().tween_property(blue, "position:x", blue.position.x + 120.0, 0.25)
-	title.scale = Vector2(1.5, 1.5)
-	tw.tween_property(title, "modulate:a", 1.0, 0.3)
-	tw.parallel().tween_property(title, "scale", Vector2.ONE, 0.55).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
-	tw.parallel().tween_property(sub, "modulate:a", 1.0, 0.5).set_delay(0.25)
-	tw.tween_interval(1.1)
+	tw.tween_interval(0.3)
+	tw.tween_property(line, "scale:x", 1.0, 0.8).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	tw.tween_property(title, "modulate:a", 1.0, 0.9).set_trans(Tween.TRANS_SINE)
+	tw.parallel().tween_property(title, "scale", Vector2.ONE, 1.6).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(sub, "modulate:a", 1.0, 0.8).set_delay(0.5)
+	tw.parallel().tween_property(line, "modulate:a", 0.0, 0.9).set_delay(0.4)
+	tw.parallel().tween_property(black, "color:a", 0.35, 1.4)
+	tw.tween_interval(0.7)
 	tw.tween_callback(finish)
 	return root
