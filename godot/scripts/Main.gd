@@ -309,12 +309,33 @@ var intro_done := false
 var cine_t := -1.0
 var dbg_intro_at := -1.0
 
+var _hero_box: Control
+var _hero: MenuHero
+func _build_hero() -> void:
+	_hero_box = Control.new(); _hero_box.mouse_filter = Control.MOUSE_FILTER_IGNORE; _hero_box.layout_direction = Control.LAYOUT_DIRECTION_LTR; menu_root.add_child(_hero_box); menu_root.move_child(_hero_box, 1)  # الطبقة الداكنة تُدرج بعده فتصير بينه وبين الخلفية
+	var dk := ColorRect.new(); dk.color = Color(0.015, 0.03, 0.07, 0.52); dk.set_anchors_preset(Control.PRESET_FULL_RECT); dk.mouse_filter = Control.MOUSE_FILTER_IGNORE; menu_root.add_child(dk); menu_root.move_child(dk, 1)
+	_hero = MenuHero.new(); _hero.names = func(wi: int, mode: int) -> String:
+		var w: Dictionary = weapons[wi]
+		return Settings.t(w["name"]) if mode == 0 else "DMG %d    %s" % [int(w["dmg"]), str(w["kind"]).to_upper()]
+	_hero_box.add_child(_hero)
+	var l := Label.new(); l.add_theme_font_size_override("font_size", 40); l.add_theme_color_override("font_color", Color(1, 1, 1, 0.95)); l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; l.set_anchors_preset(Control.PRESET_BOTTOM_WIDE); l.offset_top = -118; l.offset_bottom = -70; _hero_box.add_child(l); _hero.label = l
+	var sb := Label.new(); sb.add_theme_font_size_override("font_size", 20); sb.add_theme_color_override("font_color", Color(1.0, 0.6, 0.3, 0.9)); sb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; sb.set_anchors_preset(Control.PRESET_BOTTOM_WIDE); sb.offset_top = -70; sb.offset_bottom = -42; _hero_box.add_child(sb); _hero.sub = sb
+	_hero_place()
+
+func _hero_place() -> void:
+	if _hero_box == null: return
+	var rtl := Settings.lang == 0
+	# القائمة على اليمين في العربية فالسلاح يسار الشاشة، والعكس
+	_hero_box.anchor_top = 0.0; _hero_box.anchor_bottom = 1.0; _hero_box.offset_left = 0; _hero_box.offset_right = 0; _hero_box.offset_top = 0; _hero_box.offset_bottom = 0
+	_hero_box.anchor_left = 0.0 if rtl else 0.44; _hero_box.anchor_right = 0.56 if rtl else 1.0
+
 func _icon_btn(kind: String, sz: Vector2) -> Button:
 	var b := Button.new(); b.custom_minimum_size = sz; UiTheme.style_ghost(b); UiTheme.juicy(b); MenuFx.attach_icon(b, kind, Color.WHITE, 16.0); return b
 
 func _build_menu() -> void:
 	menu_root = Control.new(); menu_root.name = "Menu"; menu_root.set_anchors_preset(Control.PRESET_FULL_RECT); menu_root.mouse_filter = Control.MOUSE_FILTER_IGNORE; ui_root.add_child(menu_root)
 	MenuFx.grade(menu_root); _vig = MenuFx.vignette(menu_root); MenuFx.embers(menu_root); MenuFx.letterbox(menu_root)
+	_build_hero()
 	var mg := MarginContainer.new(); mg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	for k in ["left", "right"]: mg.add_theme_constant_override("margin_" + k, 56)
 	for k in ["top", "bottom"]: mg.add_theme_constant_override("margin_" + k, 34)
@@ -470,6 +491,7 @@ func _refresh() -> void:
 	var rtl := Settings.lang == 0
 	ui_root.layout_direction = Control.LAYOUT_DIRECTION_RTL if rtl else Control.LAYOUT_DIRECTION_LTR
 	if _vig != null: (_vig.material as ShaderMaterial).set_shader_parameter("flip", 1.0 if rtl else 0.0)
+	_hero_place()
 	for c in _chev: (c as Control).queue_redraw(); for ch in (c as Control).get_children(): (ch as Control).queue_redraw()
 
 # معاينة ثلاثية الأبعاد حيّة خلف القائمة (كاميرا تدور ببطء)
