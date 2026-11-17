@@ -63,13 +63,27 @@ func _screen(title: String) -> VBoxContainer:
 	vb.set_meta("root", root)
 	return vb
 
+var _lang_built := -1
+# عند تغيير اللغة تُعاد بناء شاشتي LAN (نصوصهما تُترجم وقت البناء)
+func rebuild_ui() -> void:
+	if _lang_built == Settings.lang: return
+	var hv := host_root != null and host_root.visible; var jv := join_root != null and join_root.visible
+	for r in [host_root, join_root]:
+		if r != null: r.queue_free()
+	_host_rows.clear(); build_ui()
+	host_root.visible = hv; join_root.visible = jv
+	if jv: _rebuild_list()
+
 func build_ui() -> void:
+	_lang_built = Settings.lang
 	# ---- شاشة إنشاء غرفة ----
 	var hv := _screen("LAN · " + Settings.t("إنشاء غرفة")); host_root = hv.get_meta("root")
 	var defs := [["اسم الغرفة", "name", 8], ["أقصى لاعبين", "maxp", 7], ["حد النقاط", "lim", 4], ["الوقت", "mins", 4], ["البوتات", "bots", 4], ["النمط", "style", 3]]
+	var rsc := ScrollContainer.new(); rsc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED; rsc.custom_minimum_size = Vector2(0, 340); hv.add_child(rsc)
+	var rows := VBoxContainer.new(); rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL; rows.add_theme_constant_override("separation", 10); rsc.add_child(rows)
 	for d in defs:
 		var key: String = d[1]; var cnt: int = d[2]
-		var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 4); hv.add_child(box)
+		var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 4); rows.add_child(box)
 		var lab := Label.new(); lab.add_theme_font_size_override("font_size", 18); lab.add_theme_color_override("font_color", UiTheme.MUTED); box.add_child(lab)
 		var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 8); box.add_child(hb)
 		var bp := Button.new(); bp.text = "◀"; bp.custom_minimum_size = Vector2(72, 58); UiTheme.style_ghost(bp); UiTheme.juicy(bp); hb.add_child(bp)

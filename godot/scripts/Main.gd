@@ -73,6 +73,8 @@ var menu_shot := ""
 var dbg_picker := false
 var dbg_settings := false
 var dbg_sp := false
+var dbg_setlang := -1
+var dbg_lanhost := false
 var _set_ov: Control
 var thumb_path := ""
 var _mf := 0
@@ -97,7 +99,7 @@ func _ready() -> void:
 	Settings.changed.connect(_on_settings)
 	lan = Lan.new(); lan.game = self; lan.process_mode = Node.PROCESS_MODE_ALWAYS; lan.name = "Lan"; add_child(lan)
 	_build_menu(); _build_pause(); _build_board()
-	lan.build_ui()
+	lan.build_ui(); Settings.changed.connect(lan.rebuild_ui)
 	_show_menu()
 	var args := OS.get_cmdline_user_args()
 	selftest = "--selftest" in args
@@ -108,6 +110,8 @@ func _ready() -> void:
 		if a == "--picker": dbg_picker = true
 		if a == "--settings": dbg_settings = true
 		if a == "--sp": dbg_sp = true
+		if a == "--dbglanhost": dbg_lanhost = true
+		if a.begins_with("--setlang="): dbg_setlang = int(a.substr(10))
 		if a.begins_with("--tab="): _set_tab = int(a.substr(6))
 		if a.begins_with("--thumb="): thumb_path = a.substr(8)
 		if a.begins_with("--quality="): Settings.quality = int(a.substr(10))
@@ -273,7 +277,7 @@ func _build_settings_screen() -> VBoxContainer:
 	# ---- عام ----
 	var g: VBoxContainer = _set_pages[0]
 	_seg(g, "اللغة", func(): return Settings.LANGS, func(): return Settings.lang, func(i): Settings.lang = i; Settings.save())
-	_slider(g, "مستوى الصوت", 0.0, 1.0, 0.05, func(): return Settings.volume, func(v): Settings.volume = v; Settings.save(), "%.0f%%")
+	_slider(g, "مستوى الصوت", 0.0, 100.0, 5.0, func(): return Settings.volume * 100.0, func(v): Settings.volume = v / 100.0; Settings.save(), "%.0f%%")
 	_toggle(g, "التحديث التلقائي", func(): return Settings.auto_update, func(b): Settings.auto_update = b)
 	_update_row(g)
 	# ---- الرسوميات ----
@@ -1157,6 +1161,10 @@ func _process(dt: float) -> void:
 		if dbg_settings and _set_ov != null: _open(_set_ov)
 		if dbg_sp and _sp_ov != null: _open(_sp_ov)
 		_mf += 1
+		if _mf == 8 and dbg_setlang >= 0:
+			for r in _rows:
+				if r["ar"] == "اللغة": (r["chips"][dbg_setlang] as Button).pressed.emit(); break
+		if _mf == 14 and dbg_lanhost: lan.show_host()
 		if _mf == 30 and dbg_intro_at < 0.0:
 			get_viewport().get_texture().get_image().save_png(menu_shot); get_tree().quit(0)
 	var vs := get_viewport().get_visible_rect().size
