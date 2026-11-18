@@ -66,11 +66,15 @@ jobs:
           sed -i "s/^config\/name=.*/&\nconfig\/version=\"$N\"/" godot/project.godot
           grep -E "^config/(name|version)" godot/project.godot
           echo -n "$N" > build/version-android.txt
+          echo "{\"v\": $N}" > build/patch.json
           if [ -n "$KS_B64" ]; then echo "$KS_B64" | base64 -d > $HOME/release.jks; PASS="$KS_PASS"; else cp tools/signing/warzone-release.jks $HOME/release.jks; PASS=warzone2026; fi
           export GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$HOME/release.jks GODOT_ANDROID_KEYSTORE_RELEASE_USER=warzone GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD="$PASS"
           godot --headless --path godot --export-release "Android" ../build/Warzone-godot.apk 2>&1 | grep -v "mesh_get_surface_count\|Parameter \"m\" is null" | tail -15
+          # حزمة التحديث داخل اللعبة (تُنزَّل وتُطبَّق عند الإقلاع بلا متصفح ولا تثبيت)
+          godot --headless --path godot --export-pack "Patch" ../build/warzone-patch.pck 2>&1 | tail -2
           ls -la build/
           test -s build/Warzone-godot.apk
+          test -s build/warzone-patch.pck
           BT=$(ls -d ${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools/* | tail -1)
           $BT/apksigner verify --print-certs build/Warzone-godot.apk | grep -i "DN:\|SHA-256" | head -2
           $BT/aapt dump badging build/Warzone-godot.apk | grep -E "^package:" || true
@@ -86,3 +90,5 @@ jobs:
           files: |
             build/*.apk
             build/version-android.txt
+            build/patch.json
+            build/warzone-patch.pck

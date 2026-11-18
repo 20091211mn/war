@@ -224,6 +224,10 @@ static const TrE TR_TAB[]={
 {"جارٍ الفحص...","Checking...","Comprobando..."},
 {"أنت على آخر إصدار","You have the latest version","Tienes la última versión"},
 {"يوجد إصدار أحدث","A newer version is available","Hay una versión más reciente"},
+{"تعذّر التحديث، تأكد من الاتصال وأعد المحاولة","Update failed. Check your connection and try again","Error al actualizar. Revisa tu conexión e inténtalo de nuevo"},
+{"جارٍ التنزيل","Downloading","Descargando"},
+{"التحديث جاهز: أغلق اللعبة وافتحها لتطبيقه","Update ready: close and reopen the game to apply it","Actualización lista: cierra y vuelve a abrir el juego"},
+{"أغلق اللعبة الآن","Close game now","Cerrar el juego ahora"},
 {"حدّث الآن","Update now","Actualizar ahora"},
 {"تحقق من التحديث","Check for updates","Buscar actualizaciones"},
 {"ضعيفة جداً","Very Low","Muy baja"},
@@ -237,4 +241,4 @@ static const TrE TR_TAB[]={
 {"Español","Español","Español"},
 {"تم حفظ الإعدادات","Settings saved","Ajustes guardados"},
 };
-static const int TR_N=234;
+static const int TR_N=238;

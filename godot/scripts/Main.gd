@@ -67,6 +67,7 @@ var near = null
 var at_f := 0
 var gt_f := 0
 var lan_test := ""
+var updater: Updater
 var dedicated := false   # خادم مخصص بلا واجهة: godot --headless -- --dedicated --port=9330 --maxp=6 --nbots=2
 var lan_frames := 500
 var test_frames := 0
@@ -94,7 +95,9 @@ func _ready() -> void:
 	data = JSON.parse_string(f.get_as_text())
 	maps = data["maps"]; weapons = data["weapons"]
 	_make_sfx()
-	if Settings.auto_update and Updater.state == -1 and OS.get_name() != "Web": var au := Updater.new(); add_child(au); au.check()
+	for ua in OS.get_cmdline_user_args(): if ua.begins_with("--updurl="): Updater.BASES = [ua.substr(9)]
+	updater = Updater.new(); add_child(updater); updater.checked.connect(func(stt: int, _r: String): if stt == 1 and Settings.auto_update: updater.download())
+	if Settings.auto_update and Updater.state == -1 and OS.get_name() != "Web": updater.check()
 	ui = CanvasLayer.new(); ui.layer = 10; ui.process_mode = Node.PROCESS_MODE_ALWAYS; add_child(ui)
 	ui_root = Control.new(); ui_root.theme = UiTheme.make(); ui_root.mouse_filter = Control.MOUSE_FILTER_IGNORE; ui.add_child(ui_root)
 	hud = Hud.new(); hud.game = self; ui.add_child(hud)
@@ -112,6 +115,7 @@ func _ready() -> void:
 		if a == "--picker": dbg_picker = true
 		if a == "--settings": dbg_settings = true
 		if a == "--sp": dbg_sp = true
+		if a.begins_with("--updurl="): Updater.BASES = [a.substr(9)]
 		if a == "--dbglanhost": dbg_lanhost = true
 		if a.begins_with("--setlang="): dbg_setlang = int(a.substr(10))
 		if a.begins_with("--tab="): _set_tab = int(a.substr(6))
@@ -308,24 +312,31 @@ func _update_row(vb: Control) -> void:
 	var ver := Label.new(); ver.add_theme_font_size_override("font_size", 19); ver.add_theme_color_override("font_color", UiTheme.MUTED); box.add_child(ver)
 	var st := Label.new(); st.add_theme_font_size_override("font_size", 19); st.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; box.add_child(st)
 	var btn := Button.new(); btn.custom_minimum_size = Vector2(0, 64); btn.add_theme_font_size_override("font_size", 22); UiTheme.juicy(btn); box.add_child(btn)
-	var upd := Updater.new(); box.add_child(upd)
+	var upd := updater
 	var paint := func():
 		ver.text = "%s  %s" % [Settings.t("رقم الإصدار"), Updater.version()]
+		var col := UiTheme.MUTED
 		match Updater.state:
-			-2: st.text = Settings.t("جارٍ الفحص..."); st.add_theme_color_override("font_color", UiTheme.MUTED)
-			0: st.text = Settings.t("أنت على آخر إصدار"); st.add_theme_color_override("font_color", Color(0.45, 0.9, 0.55))
-			1: st.text = "%s (%s)" % [Settings.t("يوجد إصدار أحدث"), Updater.remote]; st.add_theme_color_override("font_color", Color(1.0, 0.8, 0.3))
-			2: st.text = Settings.t("تعذّر الاتصال"); st.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45))
+			-2: st.text = Settings.t("جارٍ الفحص...")
+			0: st.text = Settings.t("أنت على آخر إصدار"); col = Color(0.45, 0.9, 0.55)
+			1: st.text = "%s (%s)" % [Settings.t("يوجد إصدار أحدث"), Updater.remote]; col = Color(1.0, 0.8, 0.3)
+			2: st.text = Settings.t("تعذّر التحديث، تأكد من الاتصال وأعد المحاولة"); col = Color(1.0, 0.45, 0.45)
+			3: st.text = "%s %d%%" % [Settings.t("جارٍ التنزيل"), int(Updater.progress * 100.0)]; col = Color(1.0, 0.8, 0.3)
+			4: st.text = Settings.t("التحديث جاهز: أغلق اللعبة وافتحها لتطبيقه"); col = Color(0.45, 0.9, 0.55)
 			_: st.text = ""
-		if Updater.state == 1:
-			btn.text = Settings.t("حدّث الآن"); UiTheme.style_accent(btn)
-		else:
-			btn.text = Settings.t("تحقق من التحديث"); UiTheme.style_ghost(btn)
-		btn.disabled = Updater.state == -2
+		st.add_theme_color_override("font_color", col)
+		if Updater.state == 1: btn.text = Settings.t("حدّث الآن"); UiTheme.style_accent(btn)
+		elif Updater.state == 4: btn.text = Settings.t("أغلق اللعبة الآن"); UiTheme.style_accent(btn)
+		else: btn.text = Settings.t("تحقق من التحديث"); UiTheme.style_ghost(btn)
+		btn.disabled = Updater.state == -2 or Updater.state == 3
 	btn.pressed.connect(func():
-		if Updater.state == 1: Updater.install()
-		else: upd.check(); paint.call())
-	upd.checked.connect(func(_s, _r): paint.call())
+		if Updater.state == 1: upd.download()
+		elif Updater.state == 4: get_tree().quit()
+		else: upd.check()
+		paint.call())
+	var cb := func(_s, _r): paint.call()
+	upd.checked.connect(cb)
+	box.tree_exiting.connect(func(): upd.checked.disconnect(cb))
 	Settings.changed.connect(paint)
 	box.tree_exiting.connect(func(): Settings.changed.disconnect(paint))
 	paint.call()
@@ -471,6 +482,7 @@ func _build_menu() -> void:
 	mbtn.pressed.connect(func(): _open(pk))
 	_set_ov = _build_settings_screen()
 	_refresh()
+	Patcher.boot_ok()
 
 func _confirm_exit() -> void:
 	get_tree().quit()
