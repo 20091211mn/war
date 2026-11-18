@@ -221,6 +221,12 @@ static const TrE TR_TAB[]={
 {"عكس المحور الرأسي","Invert vertical axis","Invertir eje vertical"},
 {"التصويب بالجيروسكوب","Gyroscope aiming","Apuntar con giroscopio"},
 {"حساسية الجيروسكوب","Gyroscope sensitivity","Sensibilidad del giroscopio"},
+{"وقت عمل الجيروسكوب","Gyro active","Giroscopio activo"},
+{"دائماً","Always","Siempre"},
+{"عند التصويب فقط","Only when aiming","Solo al apuntar"},
+{"معايرة الجيروسكوب (ثبّت الهاتف ثانية)","Calibrate gyro (hold still 1s)","Calibrar giroscopio (quieto 1 s)"},
+{"جارٍ المعايرة… ثبّت الهاتف","Calibrating… hold still","Calibrando… quieto"},
+{"تمت المعايرة","Calibrated","Calibrado"},
 {"عكس اتجاه الجيروسكوب","Invert gyroscope direction","Invertir giroscopio"},
 {"التحديث التلقائي","Auto update","Actualización automática"},
 {"مفعّل","On","Activado"},
@@ -246,4 +252,4 @@ static const TrE TR_TAB[]={
 {"Español","Español","Español"},
 {"تم حفظ الإعدادات","Settings saved","Ajustes guardados"},
 };
-static const int TR_N=243;
+static const int TR_N=249;

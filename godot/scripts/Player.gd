@@ -304,9 +304,10 @@ func _physics_process(dt: float) -> void:
 	var zk := (0.5 if ads and float(weapon()["zoom"]) >= 2.0 else 1.0) * (Settings.ads_sens if ads else 1.0)
 	var sens := 0.0042 * Settings.sens * zk
 	yaw -= look.x * sens; pitch = clampf(pitch - look.y * sens * (-1.0 if Settings.invert_y else 1.0), -1.5, 1.5)
-	if Settings.gyro and OS.has_feature("mobile"):   # جيروسكوب: الهاتف أفقي، محور x الجهاز = الدوران الرأسي (غير مجرَّب على جهاز حقيقي — فيه خيار عكس)
-		var g := Input.get_gyroscope(); var gf := (-1.0 if Settings.gyro_flip else 1.0) * Settings.gyro_sens * zk * dt * 1.0
-		yaw += g.x * gf; pitch = clampf(pitch + g.y * gf * (-1.0 if Settings.invert_y else 1.0), -1.5, 1.5)
+	if Settings.gyro and (OS.has_feature("mobile") or game.gyro_test) and (Settings.gyro_mode == 0 or ads):
+		var gd: Vector2 = Gyro.step(dt, game.gyro_fake if game.gyro_test else Input.get_gyroscope(), game.gyro_grav if game.gyro_test else Input.get_gravity())
+		var gk := (-1.0 if Settings.gyro_flip else 1.0) * Settings.gyro_sens * zk
+		yaw += gd.x * gk; pitch = clampf(pitch + gd.y * gk * (-1.0 if Settings.invert_y else 1.0), -1.5, 1.5)
 	rotation.y = yaw; cam.rotation.x = pitch + kick * 0.02
 	# ---- حركة ----
 	var mv: Vector2 = inp["mv"]

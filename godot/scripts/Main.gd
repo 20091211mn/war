@@ -79,6 +79,9 @@ var dbg_sp := false
 var dbg_setlang := -1
 var dbg_lanhost := false
 var dbg_online := false
+var gyro_test := false   # اختبار: يحقن قراءات جيرو وهمية
+var gyro_fake := Vector3.ZERO
+var gyro_grav := Vector3(0, 9.8, 0)
 var _set_ov: Control
 var thumb_path := ""
 var _mf := 0
@@ -132,6 +135,7 @@ func _ready() -> void:
 		if a.begins_with("--updurl="): Updater.BASES = [a.substr(9)]
 		if a == "--dbglanhost": dbg_lanhost = true
 		if a == "--dbgonline": dbg_online = true
+		if a == "--gyrotest": gyro_test = true; Settings.gyro = true; gyro_fake = Vector3(0, 0.5, 0.2)
 		if a.begins_with("--setlang="): dbg_setlang = int(a.substr(10))
 		if a.begins_with("--tab="): _set_tab = int(a.substr(6))
 		if a.begins_with("--thumb="): thumb_path = a.substr(8)
@@ -319,7 +323,11 @@ func _build_settings_screen() -> VBoxContainer:
 	_toggle(c, "عكس المحور الرأسي", func(): return Settings.invert_y, func(b): Settings.invert_y = b)
 	_toggle(c, "التصويب بالجيروسكوب", func(): return Settings.gyro, func(b): Settings.gyro = b)
 	_slider(c, "حساسية الجيروسكوب", 0.3, 3.0, 0.05, func(): return Settings.gyro_sens, func(v): Settings.gyro_sens = v; Settings.save(), "%.2f")
+	_seg(c, "وقت عمل الجيروسكوب", func(): return ["دائماً", "عند التصويب فقط"].map(func(x): return Settings.t(x)), func(): return Settings.gyro_mode, func(i): Settings.gyro_mode = i; Settings.save(), 20)
 	_toggle(c, "عكس اتجاه الجيروسكوب", func(): return Settings.gyro_flip, func(b): Settings.gyro_flip = b)
+	var cb := Button.new(); cb.custom_minimum_size = Vector2(0, 56); cb.add_theme_font_size_override("font_size", 22); UiTheme.style_ghost(cb); UiTheme.juicy(cb); cb.text = Settings.t("معايرة الجيروسكوب (ثبّت الهاتف ثانية)")
+	cb.pressed.connect(func(): Gyro.calibrate(); cb.text = Settings.t("جارٍ المعايرة… ثبّت الهاتف"); get_tree().create_timer(1.1).timeout.connect(func(): cb.text = Settings.t("تمت المعايرة")))
+	c.add_child(cb)
 	return st
 
 func _update_row(vb: Control) -> void:
@@ -1165,6 +1173,7 @@ func _tree_points(m: Dictionary, nt: int) -> Array:
 
 # ---------------------------------------------------------------- الحلقة
 func _process(dt: float) -> void:
+	if gyro_test and player != null and Engine.get_process_frames() % 60 == 0: print("GYROTEST yaw=", snappedf(player.yaw, 0.01), " pitch=", snappedf(player.pitch, 0.01))
 	if board_root != null and board_root.visible and state == "play":
 		board_t += dt
 		if board_t > 0.6: board_t = 0.0; fill_board()
@@ -1319,7 +1328,7 @@ func _physics_process(dt: float) -> void:
 		return
 	if selftest:
 		test_frames += 1
-		if not (gren_test and gt_f > 460): inp["fire"] = true; inp["mv"] = Vector2(0, -1); inp["look"] = Vector2(3, 0)
+		if not (gren_test and gt_f > 460): inp["fire"] = true; inp["mv"] = Vector2(0, -1); inp["look"] = Vector2.ZERO if gyro_test else Vector2(3, 0)
 		if test_frames == 20:  # نهاية المباراة ثم "مباراة جديدة": يجب أن تبدأ مباراة نظيفة
 			hud.touches[0] = {"role": "stick", "origin": Vector2.ZERO}; score[0] = score_lim; _end_match()
 			var ok1 := state == "over" and get_tree().paused and hud.touches.is_empty() and _res_btn.text == Settings.t("مباراة جديدة")
