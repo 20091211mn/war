@@ -4,8 +4,8 @@ extends Node
 # المضيف هو الحَكَم (خادم موثوق): يحاكي البوتات والإصابات والنقاط ويبثّ لقطات 15 مرة/ثانية؛ العميل يرسل حالته 20 مرة/ثانية وطلقاته.
 # الاكتشاف: بثّ UDP (broadcast) + مسح مباشر لشبكة /24 (لأن iOS يمنع استقبال البثّ بدون صلاحيات خاصة).
 
-const GPORT := 9330   # منفذ اللعب (ENet)
-const DPORT := 9331   # منفذ الاكتشاف (UDP)
+var GPORT := 9330   # منفذ اللعب (ENet)
+var DPORT := 9331   # منفذ الاكتشاف (UDP)
 const NAMES := ["Falcon", "Lion", "Wolf", "Eagle", "Tiger", "Cobra", "Viper", "Shark"]
 const LIMS := [10, 20, 30, 50]
 const MINS := [0, 5, 10, 15]

@@ -67,6 +67,8 @@ var near = null
 var at_f := 0
 var gt_f := 0
 var lan_test := ""
+var dedicated := false   # خادم مخصص بلا واجهة: godot --headless -- --dedicated --port=9330 --maxp=6 --nbots=2
+var lan_frames := 500
 var test_frames := 0
 var shot_path := ""
 var menu_shot := ""
@@ -136,6 +138,11 @@ func _ready() -> void:
 		if a == "--cine": cine_mode = true
 		if a == "--cinebg": cine_mode = true; cine_bg = true
 		if a == "--lanhost": lan_test = "host"
+		if a == "--dedicated": lan_test = "host"; dedicated = true
+		if a.begins_with("--port="): lan.GPORT = int(a.substr(7)); lan.DPORT = lan.GPORT + 1
+		if a.begins_with("--maxp="): lan.room["maxp"] = clampi(int(a.substr(7)), 0, 6)
+		if a.begins_with("--nbots="): lan.room["bots"] = clampi(int(a.substr(8)), 0, 3)
+		if a.begins_with("--frames="): lan_frames = int(a.substr(9))
 		if a.begins_with("--lanjoin="): lan_test = "join:" + a.substr(10)
 	if cine_mode: shot_path = "x"
 	if not (selftest or shot_path != ""):
@@ -1209,13 +1216,14 @@ func _physics_process(dt: float) -> void:
 	if lan_test != "":
 		test_frames += 1
 		if state == "play" and lan_test.begins_with("join:"): inp["mv"] = Vector2(0, -1); inp["look"] = Vector2(1, 0)
-		if test_frames % 150 == 0 or test_frames == (500 if lan_test.begins_with("join:") else 1300):
+		if test_frames % 150 == 0 or (test_frames == lan_frames and lan_test.begins_with("join:") or (test_frames == 1300 and not dedicated and lan_test == "host")):
 			var hum := 0; var info := []
 			for i in fighters.size():
 				var b := fighters[i] as Bot
 				if b != null and b.human: hum += 1; info.append("%d@%s" % [i, str(b.global_position.snapped(Vector3(1, 1, 1)))])
-			print("LANTEST ", lan_test.get_slice(":", 0), " role=", lan.role, " state=", state, " slot=", lan.my_slot, " humans=", hum, " ", info, " me=", (str(player.global_position.snapped(Vector3(1, 1, 1))) if player != null else "-"), " fighters=", fighters.size(), " score=", score)
-			if test_frames == (500 if lan_test.begins_with("join:") else 1300): get_tree().quit(0)
+			if dedicated: print("DED f=", test_frames, " humans=", hum, " fighters=", fighters.size(), " proc_ms=", snappedf(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0, 0.01), " phys_ms=", snappedf(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0, 0.01), " fps=", Engine.get_frames_per_second())
+			else: print("LANTEST ", lan_test.get_slice(":", 0), " role=", lan.role, " state=", state, " slot=", lan.my_slot, " humans=", hum, " ", info, " me=", (str(player.global_position.snapped(Vector3(1, 1, 1))) if player != null else "-"), " fighters=", fighters.size(), " score=", score)
+			if (test_frames == lan_frames and lan_test.begins_with("join:") or (test_frames == 1300 and not dedicated and lan_test == "host")): get_tree().quit(0)
 		return
 	if to_test and air and player != null:
 		at_f += 1
