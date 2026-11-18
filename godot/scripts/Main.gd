@@ -1215,13 +1215,17 @@ func _physics_process(dt: float) -> void:
 		return
 	if lan_test != "":
 		test_frames += 1
-		if state == "play" and lan_test.begins_with("join:"): inp["mv"] = Vector2(0, -1); inp["look"] = Vector2(1, 0)
+		if state == "play" and lan_test.begins_with("join:"): inp["mv"] = Vector2(0, -1); inp["look"] = Vector2(1, 0); inp["fire"] = (test_frames / 120) % 2 == 0   # يطلق نصف الوقت
 		if test_frames % 150 == 0 or (test_frames == lan_frames and lan_test.begins_with("join:") or (test_frames == 1300 and not dedicated and lan_test == "host")):
 			var hum := 0; var info := []
 			for i in fighters.size():
 				var b := fighters[i] as Bot
 				if b != null and b.human: hum += 1; info.append("%d@%s" % [i, str(b.global_position.snapped(Vector3(1, 1, 1)))])
-			if dedicated: print("DED f=", test_frames, " humans=", hum, " fighters=", fighters.size(), " proc_ms=", snappedf(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0, 0.01), " phys_ms=", snappedf(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0, 0.01), " fps=", Engine.get_frames_per_second())
+			var net := ""
+			if dedicated and lan.multiplayer.multiplayer_peer is ENetMultiplayerPeer:
+				var hc: ENetConnection = (lan.multiplayer.multiplayer_peer as ENetMultiplayerPeer).host
+				net = " out_kBps=%.1f in_kBps=%.1f" % [hc.pop_statistic(ENetConnection.HOST_TOTAL_SENT_DATA) / 1024.0 / 2.5, hc.pop_statistic(ENetConnection.HOST_TOTAL_RECEIVED_DATA) / 1024.0 / 2.5]
+			if dedicated: print("DED f=", test_frames, net, " humans=", hum, " fighters=", fighters.size(), " proc_ms=", snappedf(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0, 0.01), " phys_ms=", snappedf(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0, 0.01), " fps=", Engine.get_frames_per_second())
 			else: print("LANTEST ", lan_test.get_slice(":", 0), " role=", lan.role, " state=", state, " slot=", lan.my_slot, " humans=", hum, " ", info, " me=", (str(player.global_position.snapped(Vector3(1, 1, 1))) if player != null else "-"), " fighters=", fighters.size(), " score=", score)
 			if (test_frames == lan_frames and lan_test.begins_with("join:") or (test_frames == 1300 and not dedicated and lan_test == "host")): get_tree().quit(0)
 		return
