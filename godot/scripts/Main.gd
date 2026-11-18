@@ -78,6 +78,7 @@ var dbg_settings := false
 var dbg_sp := false
 var dbg_setlang := -1
 var dbg_lanhost := false
+var dbg_online := false
 var _set_ov: Control
 var thumb_path := ""
 var _mf := 0
@@ -117,6 +118,7 @@ func _ready() -> void:
 		if a == "--sp": dbg_sp = true
 		if a.begins_with("--updurl="): Updater.BASES = [a.substr(9)]
 		if a == "--dbglanhost": dbg_lanhost = true
+		if a == "--dbgonline": dbg_online = true
 		if a.begins_with("--setlang="): dbg_setlang = int(a.substr(10))
 		if a.begins_with("--tab="): _set_tab = int(a.substr(6))
 		if a.begins_with("--thumb="): thumb_path = a.substr(8)
@@ -402,7 +404,7 @@ var _menu_rows: Array = []
 var _ver_lab: Label
 var _sp_ov: VBoxContainer
 func _menu_row(icon: String, ar: String, cb: Callable, primary := false) -> Button:
-	var b := Button.new(); b.custom_minimum_size = Vector2(0, 68); UiTheme.juicy(b)
+	var b := Button.new(); b.custom_minimum_size = Vector2(0, 58); UiTheme.juicy(b)
 	if primary: UiTheme.style_accent(b)
 	else:
 		b.add_theme_stylebox_override("normal", UiTheme.flat(Color(0.05, 0.08, 0.15, 0.55), 16, Color(1, 1, 1, 0.14), 1))
@@ -410,7 +412,7 @@ func _menu_row(icon: String, ar: String, cb: Callable, primary := false) -> Butt
 		b.add_theme_stylebox_override("pressed", UiTheme.flat(Color(0.2, 0.3, 0.55, 0.85), 16))
 	var h := HBoxContainer.new(); h.set_anchors_preset(Control.PRESET_FULL_RECT); h.mouse_filter = Control.MOUSE_FILTER_IGNORE; h.add_theme_constant_override("separation", 18); h.offset_left = 22; h.offset_right = -22; b.add_child(h)
 	var ic := MenuFx.icon(icon, Color.WHITE if primary else Color(0.8, 0.88, 1.0)); ic.custom_minimum_size = Vector2(34, 34); ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER; h.add_child(ic)
-	var l := Label.new(); l.add_theme_font_size_override("font_size", 30 if primary else 27); l.size_flags_horizontal = Control.SIZE_EXPAND_FILL; l.mouse_filter = Control.MOUSE_FILTER_IGNORE; l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER; h.add_child(l)
+	var l := Label.new(); l.add_theme_font_size_override("font_size", 28 if primary else 25); l.size_flags_horizontal = Control.SIZE_EXPAND_FILL; l.mouse_filter = Control.MOUSE_FILTER_IGNORE; l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER; h.add_child(l)
 	b.pressed.connect(cb); _menu_rows.append({"lab": l, "ar": ar}); return b
 
 func _build_menu() -> void:
@@ -422,22 +424,23 @@ func _build_menu() -> void:
 	menu_root.add_child(mg)
 	var hb := HBoxContainer.new(); hb.add_theme_constant_override("separation", 40); mg.add_child(hb)
 	# ---- عمود القائمة (يمين في العربية / يسار في غيرها) والمشهد الحي حرّ في الجهة الأخرى ----
-	var lc := VBoxContainer.new(); lc.size_flags_horizontal = Control.SIZE_EXPAND_FILL; lc.size_flags_stretch_ratio = 0.8; lc.alignment = BoxContainer.ALIGNMENT_CENTER; lc.add_theme_constant_override("separation", 12); hb.add_child(lc)
+	var lc := VBoxContainer.new(); lc.size_flags_horizontal = Control.SIZE_EXPAND_FILL; lc.size_flags_stretch_ratio = 0.8; lc.alignment = BoxContainer.ALIGNMENT_CENTER; lc.add_theme_constant_override("separation", 9); hb.add_child(lc)
 	var free := Control.new(); free.size_flags_horizontal = Control.SIZE_EXPAND_FILL; free.size_flags_stretch_ratio = 1.2; free.mouse_filter = Control.MOUSE_FILTER_IGNORE; hb.add_child(free)
 	var tagrow := HBoxContainer.new(); tagrow.add_theme_constant_override("separation", 12); lc.add_child(tagrow)
 	for cc in [UiTheme.ACCENT2, Color(0.35, 0.6, 1.0)]:
 		var bar := ColorRect.new(); bar.color = cc; bar.custom_minimum_size = Vector2(46, 6); bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER; tagrow.add_child(bar)
 	var tag := Label.new(); tag.text = "RED  VS  BLUE"; tag.add_theme_font_size_override("font_size", 20); tag.add_theme_color_override("font_color", UiTheme.MUTED); tagrow.add_child(tag)
-	var tstack := Control.new(); tstack.custom_minimum_size = Vector2(0, 104); lc.add_child(tstack)
+	var tstack := Control.new(); tstack.custom_minimum_size = Vector2(0, 92); lc.add_child(tstack)
 	var tcols := [Color(1.0, 0.25, 0.3, 0.8), Color(0.3, 0.55, 1.0, 0.8), Color.WHITE]
 	for i in 3:
-		var tl := Label.new(); tl.text = "WARZONE"; tl.text_direction = Control.TEXT_DIRECTION_LTR; tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; tl.clip_text = true; tl.add_theme_font_size_override("font_size", 82); tl.add_theme_color_override("font_color", tcols[i]); tl.set_anchors_preset(Control.PRESET_FULL_RECT); tl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		var tl := Label.new(); tl.text = "WARZONE"; tl.text_direction = Control.TEXT_DIRECTION_LTR; tl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; tl.clip_text = true; tl.add_theme_font_size_override("font_size", 74); tl.add_theme_color_override("font_color", tcols[i]); tl.set_anchors_preset(Control.PRESET_FULL_RECT); tl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		if i == 2: tl.material = MenuFx.shine_material(); tl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.55)); tl.add_theme_constant_override("outline_size", 8); _title = tl
 		else: _title_fx.append(tl)
 		tstack.add_child(tl)
 	var sp0 := Control.new(); sp0.custom_minimum_size = Vector2(0, 6); lc.add_child(sp0)
 	var rows: Array = []
 	var b_sp := _menu_row("user", "لعب فردي", func(): _open(_sp_ov), true); lc.add_child(b_sp); rows.append(b_sp)
+	var b_on := _menu_row("globe", "لعب أونلاين", func(): lan.show_online()); lc.add_child(b_on); rows.append(b_on)
 	var b_host := _menu_row("host", "إنشاء غرفة LAN", func(): lan.show_host()); lc.add_child(b_host); rows.append(b_host)
 	var b_join := _menu_row("join", "الانضمام إلى LAN", func(): lan.show_join()); lc.add_child(b_join); rows.append(b_join)
 	var b_set := _menu_row("gear", "الإعدادات", func(): _open(_set_ov)); lc.add_child(b_set); rows.append(b_set)
@@ -1184,6 +1187,7 @@ func _process(dt: float) -> void:
 			for r in _rows:
 				if r["ar"] == "اللغة": (r["chips"][dbg_setlang] as Button).pressed.emit(); break
 		if _mf == 14 and dbg_lanhost: lan.show_host()
+		if _mf == 14 and dbg_online: lan.show_online()
 		if _mf == 30 and dbg_intro_at < 0.0:
 			get_viewport().get_texture().get_image().save_png(menu_shot); get_tree().quit(0)
 	var vs := get_viewport().get_visible_rect().size

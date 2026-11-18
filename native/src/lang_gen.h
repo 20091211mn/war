@@ -199,6 +199,11 @@ static const TrE TR_TAB[]={
 {"الإعدادات","Settings","Ajustes"},
 {"الجودة","Quality","Calidad"},
 {"اللغة","Language","Idioma"},
+{"لعب أونلاين","Play Online","Jugar en línea"},
+{"اكتب عنوان الخادم (مثال: play.example.com أو 1.2.3.4:9330)","Enter server address (e.g. play.example.com or 1.2.3.4:9330)","Escribe la dirección del servidor (p. ej. play.example.com o 1.2.3.4:9330)"},
+{"اتصال","Connect","Conectar"},
+{"اكتب عنوان الخادم","Enter a server address","Escribe una dirección"},
+{"منفذ غير صالح","Invalid port","Puerto no válido"},
 {"لعب فردي","Single Player","Un jugador"},
 {"إنشاء غرفة LAN","Host LAN Game","Crear sala LAN"},
 {"الانضمام إلى LAN","Join LAN Game","Unirse a LAN"},
@@ -241,4 +246,4 @@ static const TrE TR_TAB[]={
 {"Español","Español","Español"},
 {"تم حفظ الإعدادات","Settings saved","Ajustes guardados"},
 };
-static const int TR_N=238;
+static const int TR_N=243;

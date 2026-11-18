@@ -72,6 +72,15 @@ static func draw_icon(c: Control, kind: String, col: Color) -> void:
 			var w2 := maxf(3.0, m * 0.08)
 			c.draw_arc(ct + Vector2(0, m * 0.04), m * 0.3, -PI * 0.32, PI * 1.32, 28, col, w2, true)
 			c.draw_line(ct + Vector2(0, -m * 0.4), ct + Vector2(0, -m * 0.06), col, w2, true)
+		"globe":
+			var gw := maxf(3.0, m * 0.07)
+			c.draw_arc(ct, m * 0.38, 0, TAU, 36, col, gw, true)
+			c.draw_line(ct + Vector2(-0.38, 0) * m, ct + Vector2(0.38, 0) * m, col, gw * 0.8, true)
+			var pts := PackedVector2Array(); var pts2 := PackedVector2Array()
+			for k in 25:
+				var a := -PI * 0.5 + PI * k / 24.0
+				pts.append(ct + Vector2(cos(a) * 0.2, sin(a) * 0.38) * m); pts2.append(ct + Vector2(-cos(a) * 0.2, sin(a) * 0.38) * m)
+			c.draw_polyline(pts, col, gw * 0.8, true); c.draw_polyline(pts2, col, gw * 0.8, true)
 		"user":
 			c.draw_circle(ct + Vector2(0, -m * 0.14), m * 0.15, col)
 			c.draw_arc(ct + Vector2(0, m * 0.46), m * 0.34, PI * 1.12, PI * 1.88, 20, col, maxf(3.0, m * 0.09), true)

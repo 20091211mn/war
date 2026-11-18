@@ -44,7 +44,7 @@ func bots_e() -> int: return 0 if int(room["style"]) == 1 else mini(BOTS[int(roo
 func cfg() -> Dictionary:
 	return {"map": game.map_idx, "n": maxp_e(), "lim": LIMS[int(room["lim"])], "mins": MINS[int(room["mins"])], "bots": bots_e(), "ffa": int(room["style"]) == 2, "mid": match_id, "name": NAMES[int(room["name"])]}
 
-func screens() -> Array: return [host_root, join_root]
+func screens() -> Array: return [host_root, join_root, online_root]
 
 # ------------------------------------------------------------ واجهة
 func add_menu_buttons(panel: Control) -> void:
@@ -63,15 +63,21 @@ func _screen(title: String) -> VBoxContainer:
 	vb.set_meta("root", root)
 	return vb
 
+var online_root: Control
+var _on_edit: LineEdit
+var _on_status: Label
+var _on_list: VBoxContainer
+const OFFICIAL := ""   # عنوان الخادم الرسمي حين يتوفر (مثال: "play.example.com:9330")
 var _lang_built := -1
 # عند تغيير اللغة تُعاد بناء شاشتي LAN (نصوصهما تُترجم وقت البناء)
 func rebuild_ui() -> void:
 	if _lang_built == Settings.lang: return
-	var hv := host_root != null and host_root.visible; var jv := join_root != null and join_root.visible
-	for r in [host_root, join_root]:
+	var hv := host_root != null and host_root.visible; var jv := join_root != null and join_root.visible; var ovv := online_root != null and online_root.visible
+	for r in [host_root, join_root, online_root]:
 		if r != null: r.queue_free()
 	_host_rows.clear(); build_ui()
-	host_root.visible = hv; join_root.visible = jv
+	host_root.visible = hv; join_root.visible = jv; online_root.visible = ovv
+	if ovv: _rebuild_online()
 	if jv: _rebuild_list()
 
 func build_ui() -> void:
@@ -99,7 +105,50 @@ func build_ui() -> void:
 	_join_status = Label.new(); _join_status.add_theme_font_size_override("font_size", 20); _join_status.add_theme_color_override("font_color", UiTheme.MUTED); jv.add_child(_join_status)
 	_join_list = VBoxContainer.new(); _join_list.add_theme_constant_override("separation", 10); jv.add_child(_join_list)
 	var jb := Button.new(); jb.custom_minimum_size = Vector2(0, 64); jb.add_theme_font_size_override("font_size", 24); UiTheme.style_ghost(jb); UiTheme.juicy(jb); jb.text = Settings.t("رجوع"); jb.pressed.connect(func(): _scan_stop(); join_root.visible = false); jv.add_child(jb)
+	# ---- شاشة الأونلاين: عنوان خادم (نطاق أو IP[:منفذ]) + آخر الخوادم ----
+	var ov := _screen("Online · " + Settings.t("لعب أونلاين")); online_root = ov.get_meta("root")
+	var hint := Label.new(); hint.text = Settings.t("اكتب عنوان الخادم (مثال: play.example.com أو 1.2.3.4:9330)"); hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; hint.add_theme_font_size_override("font_size", 19); hint.add_theme_color_override("font_color", UiTheme.MUTED); ov.add_child(hint)
+	_on_edit = LineEdit.new(); _on_edit.custom_minimum_size = Vector2(0, 68); _on_edit.add_theme_font_size_override("font_size", 28); _on_edit.placeholder_text = "host:9330"; _on_edit.text_direction = Control.TEXT_DIRECTION_LTR; _on_edit.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_on_edit.add_theme_stylebox_override("normal", UiTheme.flat(Color(0.05, 0.08, 0.15, 0.9), 14, Color(1, 1, 1, 0.2), 1)); _on_edit.add_theme_stylebox_override("focus", UiTheme.flat(Color(0.05, 0.08, 0.15, 0.95), 14, UiTheme.ACCENT, 2))
+	_on_edit.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_URL; _on_edit.text_submitted.connect(func(_t: String): _online_go()); ov.add_child(_on_edit)
+	_on_status = Label.new(); _on_status.add_theme_font_size_override("font_size", 20); _on_status.add_theme_color_override("font_color", UiTheme.MUTED); _on_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; ov.add_child(_on_status)
+	_on_list = VBoxContainer.new(); _on_list.add_theme_constant_override("separation", 8); ov.add_child(_on_list)
+	var og := Button.new(); og.custom_minimum_size = Vector2(0, 80); og.add_theme_font_size_override("font_size", 30); UiTheme.style_accent(og); UiTheme.juicy(og); og.text = Settings.t("اتصال"); og.pressed.connect(_online_go); ov.add_child(og)
+	var ob := Button.new(); ob.custom_minimum_size = Vector2(0, 60); ob.add_theme_font_size_override("font_size", 24); UiTheme.style_ghost(ob); UiTheme.juicy(ob); ob.text = Settings.t("رجوع"); ob.pressed.connect(func(): online_root.visible = false); ov.add_child(ob)
 	_refresh_host()
+
+func show_online() -> void:
+	host_root.visible = false; join_root.visible = false; online_root.visible = true; _scan_stop(); _rebuild_online()
+
+func _rebuild_online() -> void:
+	for c in _on_list.get_children(): c.queue_free()
+	var addrs: Array = []
+	if OFFICIAL != "": addrs.append(OFFICIAL)
+	for a in Settings.servers:
+		if not addrs.has(a): addrs.append(a)
+	if _on_edit.text == "" and not addrs.is_empty(): _on_edit.text = addrs[0]
+	for a in addrs.slice(0, 5):
+		var b := Button.new(); b.custom_minimum_size = Vector2(0, 52); b.add_theme_font_size_override("font_size", 22); UiTheme.style_ghost(b); UiTheme.juicy(b); b.text = ("* " if a == OFFICIAL else "") + str(a); b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		var aa: String = a
+		b.pressed.connect(func(): _on_edit.text = aa; _online_go())
+		_on_list.add_child(b)
+
+# يقبل host أو host:port ويتصل (ENet يحلّ الأسماء تلقائياً)
+func _online_go() -> void:
+	var t := _on_edit.text.strip_edges()
+	if t == "": _on_status.text = Settings.t("اكتب عنوان الخادم"); return
+	var host := t; var port := 9330
+	var ci := t.rfind(":")
+	if ci > 0 and t.count(":") == 1:
+		host = t.substr(0, ci); var ps := t.substr(ci + 1)
+		if not ps.is_valid_int() or int(ps) < 1 or int(ps) > 65535: _on_status.text = Settings.t("منفذ غير صالح"); return
+		port = int(ps)
+	GPORT = port
+	var keep := t if port != 9330 else host
+	Settings.servers.erase(keep); Settings.servers.push_front(keep)
+	if Settings.servers.size() > 8: Settings.servers.resize(8)
+	Settings.save()
+	join(host)
 
 func _refresh_host() -> void:
 	var st := int(room["style"])
@@ -115,10 +164,10 @@ func _refresh_host() -> void:
 		(r["lab"] as Label).text = Settings.t(r["ar"]); (r["val"] as Label).text = txt
 
 func show_host() -> void:
-	_refresh_host(); host_root.visible = true; join_root.visible = false
+	GPORT = 9330; _refresh_host(); host_root.visible = true; join_root.visible = false; online_root.visible = false
 
 func show_join() -> void:
-	host_root.visible = false; join_root.visible = true; _scan_start(); _rebuild_list()
+	host_root.visible = false; join_root.visible = true; online_root.visible = false; _scan_start(); _rebuild_list()
 
 # ------------------------------------------------------------ مضيف
 func host_start() -> bool:
@@ -244,6 +293,7 @@ func leave() -> void:
 
 func _show_status() -> void:
 	if _join_status != null: _join_status.text = status
+	if _on_status != null: _on_status.text = status
 
 # ------------------------------------------------------------ اكتشاف الغرف
 func _local_ip() -> String:

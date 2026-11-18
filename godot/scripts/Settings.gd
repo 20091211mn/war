@@ -15,6 +15,7 @@ var volume := 1.0
 var fps_cap := 1         # 0:30  1:60  2:90  3:120
 var res_pct := 0         # 0 تلقائي حسب الجودة، 1:50% 2:75% 3:100%
 var show_fps := false
+var servers: Array = []   # آخر خوادم الأونلاين المستخدمة (نص host[:port])
 var FPS_CAPS := [30, 60, 90, 120]
 var LANGS := ["العربية", "English", "Español"]
 var QUALS := ["ضعيفة جداً", "ضعيفة", "متوسطة", "عالية", "فائقة"]
@@ -33,6 +34,8 @@ func _ready() -> void:
 		fov = clampf(float(c.get_value("g", "fov", 75.0)), 60.0, 100.0); invert_y = bool(c.get_value("g", "invert_y", false))
 		gyro = bool(c.get_value("g", "gyro", false)); gyro_sens = clampf(float(c.get_value("g", "gyro_sens", 1.0)), 0.3, 3.0); gyro_flip = bool(c.get_value("g", "gyro_flip", false))
 		volume = clampf(float(c.get_value("g", "volume", 1.0)), 0.0, 1.0); fps_cap = clampi(int(c.get_value("g", "fps_cap", 1)), 0, 3)
+		var sv = c.get_value("g", "servers", [])
+		servers = (sv as Array).filter(func(x): return x is String) if sv is Array else []
 		res_pct = clampi(int(c.get_value("g", "res_pct", 0)), 0, 3); show_fps = bool(c.get_value("g", "show_fps", false))
 	_apply_locale(); apply_runtime()
 
@@ -44,7 +47,7 @@ func apply_runtime() -> void:
 func save() -> void:
 	var c := ConfigFile.new()
 	c.set_value("g", "quality", quality); c.set_value("g", "lang", lang); c.set_value("g", "auto_update", auto_update)
-	for k in ["sens", "ads_sens", "fov", "invert_y", "gyro", "gyro_sens", "gyro_flip", "volume", "fps_cap", "res_pct", "show_fps"]: c.set_value("g", k, get(k))
+	for k in ["sens", "ads_sens", "fov", "invert_y", "gyro", "gyro_sens", "gyro_flip", "volume", "fps_cap", "res_pct", "show_fps", "servers"]: c.set_value("g", k, get(k))
 	c.save(CFG); apply_runtime()
 	_apply_locale(); changed.emit()
 
