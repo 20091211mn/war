@@ -91,6 +91,19 @@ var dbg_vehcam := -1
 var veh_test := -1
 var veh_shot := ""
 
+# زر الرجوع في أندرويد + إيقاف تلقائي عند مغادرة التطبيق أثناء اللعب
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_APPLICATION_PAUSED:
+		if state == "play" and not dedicated and hud != null: open_pause()
+	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		if state == "play": open_pause()
+		elif state == "pause": resume()
+		elif state == "menu":
+			var any := false
+			for r in lan.screens() + [_sp_ov.get_meta("root") if _sp_ov != null else null, _set_ov.get_meta("root") if _set_ov != null else null]:
+				if r != null and r.visible: r.visible = false; any = true
+			if not any: _confirm_exit()
+
 func _ready() -> void:
 	var f := FileAccess.open("res://data/game.json", FileAccess.READ)
 	data = JSON.parse_string(f.get_as_text())

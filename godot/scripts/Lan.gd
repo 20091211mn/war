@@ -167,7 +167,7 @@ func show_host() -> void:
 	GPORT = 9330; _refresh_host(); host_root.visible = true; join_root.visible = false; online_root.visible = false
 
 func show_join() -> void:
-	host_root.visible = false; join_root.visible = true; online_root.visible = false; _scan_start(); _rebuild_list()
+	GPORT = 9330; host_root.visible = false; join_root.visible = true; online_root.visible = false; _scan_start(); _rebuild_list()
 
 # ------------------------------------------------------------ مضيف
 func host_start() -> bool:
@@ -273,6 +273,9 @@ func join(ip: String) -> void:
 	var err := pr.create_client(ip, GPORT)
 	if err != OK: status = "ERR %d" % err; _show_status(); return
 	multiplayer.multiplayer_peer = pr; role = 2; _hook(); status = Settings.t("جارٍ الاتصال…"); _show_status()
+	var tk := get_tree().create_timer(10.0)
+	tk.timeout.connect(func():
+		if role == 2 and pr.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTING: _on_failed())
 
 func _on_connected() -> void:
 	if role == 2: rpc_id(1, "n_hello", 1)

@@ -21,3 +21,11 @@ node tools/export-native.js   # -> native/gen/data.h (PS4)
 node tools/export-godot.js    # -> godot/data/game.json
 python3 tools/make-lang.py    # -> native/src/lang_gen.h + godot/data/lang.json
 ```
+
+## تشغيل خادم أونلاين
+```
+docker build -t warzone-server .
+docker run -d --restart=always -p 9330:9330/udp warzone-server
+```
+ثم في اللعبة: «لعب أونلاين» ← اكتب `عنوان-الخادم` (أو `host:port`). افتح المنفذ 9330 **UDP** في جدار الحماية.
+بدون Docker: `godot --headless --path godot -- --dedicated --port=9330 --maxp=8 --nbots=2`.
