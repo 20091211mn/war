@@ -1236,9 +1236,10 @@ func _physics_process(dt: float) -> void:
 			var side := bt.global_transform.basis.x * 2.4 + bt.global_transform.basis.z * -1.6 + Vector3(0, 1.3, 0)
 			player.cam.global_position = bt.global_position + side; player.cam.look_at(bt.global_position + Vector3(0, 1.05, 0)); player.gun_parts.visible = false; player.arm_r.visible = false; player.arm_l.visible = false
 		if dbg_vehcam >= 0 and dbg_vehcam < vehicles.size():
-			var vv: Vehicle = vehicles[dbg_vehcam]; player.global_position = Vector3(0, 80, 0); player.velocity = Vector3.ZERO
-			var sd := vv.global_transform.basis.x * 6.5 + vv.global_transform.basis.z * -4.5 + Vector3(0, 2.8, 0)
-			player.cam.global_position = vv.global_position + sd; player.cam.look_at(vv.global_position + Vector3(0, 1.0, 0)); player.gun_parts.visible = false; player.arm_r.visible = false; player.arm_l.visible = false
+			var vv: Vehicle = vehicles[dbg_vehcam]
+			var off := vv.global_transform.basis.x * 5.2 + vv.global_transform.basis.z * -4.6
+			player.global_position = vv.global_position + off + Vector3(0, 0.05, 0); player.velocity = Vector3.ZERO
+			(player as Player).yaw = atan2(off.x, off.z); (player as Player).pitch = -0.1; player.gun_parts.visible = false; player.arm_r.visible = false; player.arm_l.visible = false
 		if dbg_botcam and test_frames == 120 and fighters.size() > 3:
 			(fighters[3] as Bot).alive = false; (fighters[3] as Bot).play_death(fighters[3].global_position + Vector3(0, 0, -3))
 		if dbg_look != 0.0 and test_frames >= 5 and test_frames < 140: (player as Player).pitch = deg_to_rad(dbg_look)

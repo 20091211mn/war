@@ -172,26 +172,99 @@ func _build_hit() -> void:
 		for i in 4:
 			var cs := CollisionShape3D.new(); var sh := BoxShape3D.new(); sh.size = Vector3(0.4, 0.76, 0.8); cs.shape = sh; cs.position = Vector3(WH[i][0], 0.38, WH[i][1]); hit_body.add_child(cs); hit_parts.append(10 + i)
 
+func _mesh_inst(parent: Node3D, mesh: Mesh, c: Color, metal := 0.35, rough := 0.42, two_sided := false, alpha := 1.0) -> MeshInstance3D:
+	var m := StandardMaterial3D.new(); m.albedo_color = c; m.roughness = rough; m.metallic = metal
+	if two_sided: m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	if alpha < 1.0: m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; m.albedo_color.a = alpha
+	mats.append([m, c])
+	var mi := MeshInstance3D.new(); mi.mesh = mesh; mi.material_override = m
+	if Settings.quality < 2: mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi); return mi
+
+func _cylz(parent: Node3D, r: float, len: float, pos: Vector3, c: Color, unlit := false) -> MeshInstance3D:   # أسطوانة بمحور z (كشافات، مواسير)
+	var mi := MeshInstance3D.new(); var cm := CylinderMesh.new(); cm.top_radius = r; cm.bottom_radius = r; cm.height = len; cm.radial_segments = 12 if Settings.quality >= 2 else 7; cm.rings = 1; mi.mesh = cm
+	mi.rotation.x = PI * 0.5; mi.position = pos; mi.material_override = _mat(c, unlit)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; parent.add_child(mi); return mi
+
+# الشاص (تويوتا لاندكروزر بيك أب): هيكل مُشكَّل بالـloft + زجاج + أقواس عجلات + إطارات ببروفايل مستدير
 func _build_jeep() -> void:
-	for p in JEEP:
-		var mi := _bx(vis, Vector3(p[3], p[4], p[5]), Vector3(p[0], p[1], p[2]), Color(p[6], p[7], p[8]), p[9] == 1)
-		if p[0] == 0 and abs(p[1] - 1.86) < 0.01: team_mats.append(mi.material_override)
+	var paint := Color(0.78, 0.72, 0.58)
+	var arches := [[-1.55, 0.5, 0.9], [1.5, 0.5, 0.9]]
+	var top := [Vector2(-2.5, 0.86), Vector2(-2.44, 0.97), Vector2(-2.3, 1.0), Vector2(-1.3, 1.07), Vector2(-1.06, 1.1), Vector2(-0.5, 1.8), Vector2(-0.4, 1.86), Vector2(0.4, 1.88), Vector2(0.56, 1.84), Vector2(0.66, 1.8)]
+	var cab := _mesh_inst(vis, VehMesh.body(-2.5, 0.66, top, arches), paint)
+	# صندوق الحمولة (مفتوح) + أرضية + حواف
+	var bed := _mesh_inst(vis, VehMesh.body(0.7, 2.56, [Vector2(0.7, 1.13), Vector2(2.56, 1.13)], arches, 0.42, true), paint, 0.35, 0.45, true)
+	_bx(vis, Vector3(1.8, 0.05, 1.8), Vector3(0, 0.88, 1.62), Color(0.1, 0.1, 0.1))
+	for sx in [-1, 1]: _bx(vis, Vector3(0.1, 0.05, 1.86), Vector3(sx * 0.96, 1.14, 1.63), paint * 0.9)
+	_bx(vis, Vector3(1.9, 0.05, 0.1), Vector3(0, 1.14, 2.52), paint * 0.9); _bx(vis, Vector3(1.9, 0.05, 0.1), Vector3(0, 1.14, 0.72), paint * 0.9)
+	# زجاج: أمامي مائل + جانبيان + خلفي
+	var gl := Color(0.05, 0.09, 0.12)
+	var hwf := VehMesh.hw_at(1.5, 1.86) - 0.1
+	_mesh_inst(vis, VehMesh.quad(Vector3(-hwf, 1.13, -1.03), Vector3(hwf, 1.13, -1.03), Vector3(hwf - 0.06, 1.79, -0.52), Vector3(-hwf + 0.06, 1.79, -0.52)), gl, 0.6, 0.05, true, 0.85)
+	for sx in [-1, 1]:
+		var xb := VehMesh.hw_at(1.24, 1.86) + 0.012; var xt := VehMesh.hw_at(1.76, 1.86) + 0.012
+		_mesh_inst(vis, VehMesh.quad(Vector3(sx * xb, 1.24, -0.86), Vector3(sx * xb, 1.24, 0.5), Vector3(sx * xt, 1.76, 0.42), Vector3(sx * xt, 1.76, -0.46)), gl, 0.6, 0.05, true, 0.85)
+		_bx(vis, Vector3(0.012, 0.5, 0.025), Vector3(sx * (xb + xt) * 0.5, 1.5, -0.2), Color(0.03, 0.03, 0.03))   # عمود الباب
+	_mesh_inst(vis, VehMesh.quad(Vector3(-0.76, 1.3, 0.67), Vector3(-0.76, 1.76, 0.67), Vector3(0.76, 1.76, 0.67), Vector3(0.76, 1.3, 0.67)), gl, 0.6, 0.05, true, 0.85)
 	# شريط لون الفريق على السقف
-	var tm := _bx(vis, Vector3(1.5, 0.03, 0.5), Vector3(0, 1.93, -0.15), Color(1, 0, 0)); team_mats.append(tm.material_override)
+	var tm := _bx(vis, Vector3(1.4, 0.03, 0.62), Vector3(0, 1.89, 0.1), Color(1, 0, 0)); team_mats.append(tm.material_override)
+	# مقدمة: مصد، شبك بقضبان، كشافات دائرية، إشارات
+	_bx(vis, Vector3(2.04, 0.2, 0.14), Vector3(0, 0.5, -2.58), Color(0.12, 0.12, 0.13))
+	_bx(vis, Vector3(0.5, 0.06, 0.08), Vector3(0, 0.42, -2.66), Color(0.5, 0.5, 0.52))           # خُطّاف سحب
+	_bx(vis, Vector3(1.1, 0.3, 0.05), Vector3(0, 0.82, -2.5), Color(0.04, 0.04, 0.05))
+	for i in 3: _bx(vis, Vector3(1.1, 0.025, 0.06), Vector3(0, 0.72 + i * 0.09, -2.54), Color(0.62, 0.64, 0.68))
+	for sx in [-1, 1]:
+		_cylz(vis, 0.14, 0.1, Vector3(sx * 0.72, 0.9, -2.5), Color(0.95, 0.92, 0.8), true)
+		_cylz(vis, 0.17, 0.06, Vector3(sx * 0.72, 0.9, -2.47), Color(0.1, 0.1, 0.11))
+		_bx(vis, Vector3(0.2, 0.1, 0.05), Vector3(sx * 0.95, 0.9, -2.46), Color(1, 0.6, 0.1), true)
+		_bx(vis, Vector3(0.09, 0.15, 0.1), Vector3(sx * 1.12, 1.36, -0.86), Color(0.06, 0.06, 0.06))   # مرآة
+		_bx(vis, Vector3(0.16, 0.025, 0.03), Vector3(sx * 1.05, 1.34, -0.86), Color(0.06, 0.06, 0.06))
+		_bx(vis, Vector3(0.08, 0.05, 0.22), Vector3(sx * 0.97, 0.95, -0.2), Color(0.1, 0.1, 0.1))        # مقبض الباب
+		_bx(vis, Vector3(0.3, 0.12, 0.05), Vector3(sx * 0.7, 0.62, 2.54), Color(0.9, 0.1, 0.1), true)    # ضوء خلفي
+		_bx(vis, Vector3(0.05, 0.4, 0.28), Vector3(sx * 1.0, 0.62, -1.15), Color(0.08, 0.08, 0.08))       # رفرف أمام العجلة
+		_bx(vis, Vector3(0.05, 0.4, 0.28), Vector3(sx * 1.0, 0.62, 1.05), Color(0.08, 0.08, 0.08))
+	_bx(vis, Vector3(2.0, 0.14, 0.14), Vector3(0, 0.45, 2.6), Color(0.14, 0.14, 0.15))              # مصد خلفي
+	# حواف (fender flares) على أقواس العجلات
+	for ar in arches:
+		for sx in [-1, 1]:
+			for k in 9:
+				var an := PI * (0.05 + 0.9 * float(k) / 8.0); var zc: float = ar[0]
+				var bb := _bx(vis, Vector3(0.07, 0.045, 0.13), Vector3(sx * 1.03, 0.42 + sin(an) * 0.5, zc + cos(an) * 0.54), Color(0.07, 0.07, 0.08)); bb.rotation.x = -(an - PI * 0.5) * 0.9
+	# عدّة السقف: مجرى + رف + جركن + أنبوب تنفس snorkel
+	for sx in [-1, 1]: _bx(vis, Vector3(0.04, 0.05, 1.1), Vector3(sx * 0.7, 1.96, 0.1), Color(0.1, 0.1, 0.1))
+	for i in 5: _bx(vis, Vector3(1.45, 0.03, 0.05), Vector3(0, 1.97, -0.4 + i * 0.25), Color(0.1, 0.1, 0.1))
+	_bx(vis, Vector3(0.4, 0.3, 0.18), Vector3(0.35, 2.13, 0.3), Color(0.28, 0.3, 0.2))
+	_bx(vis, Vector3(0.07, 0.07, 0.9), Vector3(1.0, 1.42, -0.95), Color(0.06, 0.06, 0.06)); _bx(vis, Vector3(0.1, 0.18, 0.1), Vector3(1.0, 1.9, -0.52), Color(0.06, 0.06, 0.06))
+	# إطار احتياطي + أدوات في الصندوق + هوائي
+	var sp0 := Node3D.new(); sp0.position = Vector3(0.45, 1.45, 1.0); vis.add_child(sp0)
+	var spare := MeshInstance3D.new(); var tm0 := TorusMesh.new(); tm0.inner_radius = 0.18; tm0.outer_radius = 0.36; tm0.rings = 14; tm0.ring_segments = 8; spare.mesh = tm0; spare.rotation.x = PI * 0.5; spare.material_override = _mat(Color(0.06, 0.06, 0.07), false); sp0.add_child(spare)
+	_bx(vis, Vector3(0.5, 0.35, 0.3), Vector3(-0.45, 1.05, 2.0), Color(0.22, 0.28, 0.17))
+	_bx(vis, Vector3(0.012, 0.012, 0.9), Vector3(-0.9, 1.25, 0.5), Color(0.05, 0.05, 0.05)).rotation.x = -0.9
+	# عجلات: إطار ببروفايل مستدير (Torus) + حافة + صرة + براغي
 	for i in 4:
 		var pv := Node3D.new(); pv.position = Vector3(WH[i][0], 0.38, WH[i][1]); vis.add_child(pv)
 		var sp := Node3D.new(); pv.add_child(sp)
-		var wm := _cyl(sp, 0.38, 0.34, Vector3.ZERO, Color(0.06, 0.06, 0.07))
-		_bx(wm, Vector3(0.12, 0.04, 0.12), Vector3(0.26, 0.18, 0.0), Color(0.55, 0.55, 0.58))   # صامولة لرؤية الدوران
+		var tire := MeshInstance3D.new(); var tmh := TorusMesh.new(); tmh.inner_radius = 0.22; tmh.outer_radius = 0.38; tmh.rings = 20 if Settings.quality >= 2 else 10; tmh.ring_segments = 10 if Settings.quality >= 2 else 6; tire.mesh = tmh
+		tire.rotation.z = PI * 0.5; tire.scale = Vector3(1, 0.9, 1); tire.material_override = _mat(Color(0.05, 0.05, 0.055), false); sp.add_child(tire)
+		_cyl(sp, 0.24, 0.2, Vector3.ZERO, Color(0.55, 0.56, 0.6))
+		_cyl(sp, 0.1, 0.26, Vector3.ZERO, Color(0.35, 0.36, 0.4))
+		for k in 5:
+			var a := TAU * float(k) / 5.0
+			_bx(sp, Vector3(0.28, 0.04, 0.04), Vector3(0, sin(a) * 0.16, cos(a) * 0.16), Color(0.25, 0.26, 0.28))
 		wheels.append([pv, sp])
 	# الرشاش المثبّت
 	mg_yaw = Node3D.new(); mg_yaw.position = Vector3(0, 1.72, 1.6); vis.add_child(mg_yaw)
 	mg_pitch = Node3D.new(); mg_yaw.add_child(mg_pitch)
 	_bx(mg_pitch, Vector3(0.16, 0.16, 0.7), Vector3(0, 0, -0.15), Color(0.1, 0.1, 0.11))
 	_bx(mg_pitch, Vector3(0.8, 0.45, 0.04), Vector3(0, 0.13, -0.2), Color(0.78, 0.72, 0.58))
-	_bx(mg_pitch, Vector3(0.05, 0.05, 0.55), Vector3(0, -0.04, -0.75), Color(0.06, 0.06, 0.06))
+	_cylz(mg_pitch, 0.025, 0.55, Vector3(0, -0.04, -0.75), Color(0.06, 0.06, 0.06))
+	_bx(mg_pitch, Vector3(0.1, 0.12, 0.3), Vector3(0, -0.12, 0.05), Color(0.2, 0.22, 0.16))   # صندوق الذخيرة
 	mg_muzzle = Node3D.new(); mg_muzzle.position = Vector3(0, -0.04, -1.05); mg_pitch.add_child(mg_muzzle)
 	flash_m = _flash(mg_muzzle, 0.45)
+	# وحل/غبار على الجوانب السفلية والأقواس (غير مؤثر بالضرر)
+	var mud := StandardMaterial3D.new(); mud.albedo_color = Color(0.5, 0.4, 0.27, 0.55); mud.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; mud.roughness = 1.0
+	for sx in [-1, 1]:
+		var mi := MeshInstance3D.new(); var bm := BoxMesh.new(); bm.size = Vector3(0.01, 0.16, 4.9); mi.mesh = bm; mi.position = Vector3(sx * 1.012, 0.52, 0.05); mi.material_override = mud; mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; vis.add_child(mi)
 
 func _flash(parent: Node3D, sz: float) -> MeshInstance3D:
 	var q := QuadMesh.new(); q.size = Vector2(sz, sz)
@@ -199,38 +272,52 @@ func _flash(parent: Node3D, sz: float) -> MeshInstance3D:
 	var mi := MeshInstance3D.new(); mi.mesh = q; mi.material_override = m; mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; mi.visible = false; parent.add_child(mi); return mi
 
 func _build_tank() -> void:
-	var B := Color(0.34, 0.39, 0.25); var D := Color(0.11, 0.12, 0.1); var tint := B
-	_bx(vis, Vector3(2.55, 0.62, 6.0), Vector3(0, 0.78, 0), B)
+	var B := Color(0.34, 0.39, 0.25); var D := Color(0.11, 0.12, 0.1); var RB := Color(0.05, 0.05, 0.055)
+	# بدن مُشكَّل: لوح أمامي مائل (glacis) وسطح محرك
+	var htop := [Vector2(-3.1, 0.62), Vector2(-2.9, 0.78), Vector2(-1.9, 1.2), Vector2(2.2, 1.22), Vector2(2.7, 1.12), Vector2(3.05, 1.08)]
+	_mesh_inst(vis, VehMesh.body(-3.1, 3.05, htop, [], 0.42, false, 1.0, 1.22), B, 0.2, 0.7)
 	for sx in [-1, 1]:
 		_bx(vis, Vector3(0.62, 0.85, 6.5), Vector3(sx * 1.45, 0.5, 0), Color(0.07, 0.07, 0.07))
 		_bx(vis, Vector3(0.7, 0.06, 6.4), Vector3(sx * 1.45, 0.96, 0), D)
-		_bx(vis, Vector3(0.1, 0.2, 6.4), Vector3(sx * 1.78, 0.9, 0), B * 0.8)   # رفرف
+		for i in 6: _bx(vis, Vector3(0.05, 0.5, 0.85), Vector3(sx * 1.86, 0.98, -2.55 + i * 1.02), B * (0.85 + 0.05 * (i % 2)))   # ألواح حماية جانبية
 		for i in 6:
 			var z := -2.5 + i * 1.0
 			var sp := Node3D.new(); sp.position = Vector3(sx * 1.5, 0.4, z); vis.add_child(sp)
-			var rw := _cyl(sp, 0.37, 0.42, Vector3.ZERO, Color(0.2, 0.21, 0.19)); wheels.append([sp, sp])
-			_bx(rw, Vector3(0.12, 0.05, 0.12), Vector3(0.25, 0.22, 0.0), Color(0.5, 0.5, 0.48))
+			var tr := MeshInstance3D.new(); var tmh := TorusMesh.new(); tmh.inner_radius = 0.2; tmh.outer_radius = 0.37; tmh.rings = 16; tmh.ring_segments = 8; tr.mesh = tmh; tr.rotation.z = PI * 0.5; tr.material_override = _mat(RB, false); sp.add_child(tr)
+			var hub := _cyl(sp, 0.22, 0.44, Vector3.ZERO, Color(0.2, 0.21, 0.19)); wheels.append([sp, sp])
+			_bx(hub, Vector3(0.12, 0.05, 0.12), Vector3(0.25, 0.2, 0.0), Color(0.5, 0.5, 0.48))
+		for zz in [-3.15, 3.15]:   # عجلة دفع أمامية وعجلة توتير خلفية
+			var sp2 := Node3D.new(); sp2.position = Vector3(sx * 1.5, 0.52, zz); vis.add_child(sp2)
+			_cyl(sp2, 0.45, 0.4, Vector3.ZERO, RB); _cyl(sp2, 0.24, 0.46, Vector3.ZERO, Color(0.28, 0.29, 0.27)); wheels.append([sp2, sp2])
 		for i in 16:   # حلقات جنزير متحركة على السطح العلوي
 			var rb := _bx(vis, Vector3(0.74, 0.05, 0.22), Vector3(sx * 1.45, 1.0, 0), Color(0.05, 0.05, 0.05)); ribs.append([rb, i / 16.0 * 6.4])
-	var gl := _bx(vis, Vector3(2.5, 0.3, 1.5), Vector3(0, 1.0, -2.55), B); gl.rotation.x = -0.5
-	_bx(vis, Vector3(2.4, 0.26, 1.2), Vector3(0, 1.12, 2.7), B)
-	for i in 4: _bx(vis, Vector3(0.3, 0.03, 0.9), Vector3(-0.7 + i * 0.47, 1.28, 2.7), D)
-	_bx(vis, Vector3(0.55, 0.24, 0.55), Vector3(0.75, 1.2, -2.2), D); _bx(vis, Vector3(2.4, 0.4, 0.08), Vector3(0, 0.7, -3.08), D)
-	_bx(vis, Vector3(0.32, 0.18, 0.06), Vector3(-0.95, 0.88, -3.1), Color(1, 0.95, 0.75), true); _bx(vis, Vector3(0.32, 0.18, 0.06), Vector3(0.95, 0.88, -3.1), Color(1, 0.95, 0.75), true)
-	_bx(vis, Vector3(0.3, 0.14, 0.05), Vector3(-1.0, 0.72, 3.04), Color(0.9, 0.1, 0.1), true); _bx(vis, Vector3(0.3, 0.14, 0.05), Vector3(1.0, 0.72, 3.04), Color(0.9, 0.1, 0.1), true)
-	var tm := _bx(vis, Vector3(0.7, 0.04, 0.7), Vector3(-0.7, 1.3, 2.7), Color(1, 0, 0)); team_mats.append(tm.material_override)
-	# البرج
-	turret = Node3D.new(); turret.position = Vector3(0, 1.3, -0.1); vis.add_child(turret)
-	_bx(turret, Vector3(2.3, 0.62, 2.9), Vector3(0, 0.32, 0.25), B)
-	var fr := _bx(turret, Vector3(1.7, 0.54, 0.7), Vector3(0, 0.3, -1.3), B); fr.rotation.x = -0.3
-	_bx(turret, Vector3(1.8, 0.4, 0.5), Vector3(0, 0.22, 1.7), B)
-	_bx(turret, Vector3(0.75, 0.12, 0.75), Vector3(0.55, 0.72, 0.6), D)
-	for sx in [-1, 1]: _bx(turret, Vector3(0.08, 0.3, 1.4), Vector3(sx * 1.18, 0.35, 0.3), Color(0.45, 0.47, 0.44))
-	_bx(turret, Vector3(0.8, 0.7, 0.3), Vector3(0, 0.35, -1.75), D)   # قناع المدفع
+		_bx(vis, Vector3(0.1, 0.2, 6.4), Vector3(sx * 1.78, 1.28, 0), B * 0.8)   # رفرف
+		_cyl(vis, 0.11, 0.55, Vector3(sx * 0.9, 1.34, 2.9), D).rotation = Vector3(PI * 0.5, 0, 0)      # عادم
+	_bx(vis, Vector3(2.4, 0.4, 0.08), Vector3(0, 0.7, -3.08), D)
+	for sx in [-1, 1]: _bx(vis, Vector3(0.32, 0.18, 0.06), Vector3(sx * 0.95, 0.88, -3.1), Color(1, 0.95, 0.75), true); _bx(vis, Vector3(0.3, 0.14, 0.05), Vector3(sx * 1.0, 0.72, 3.04), Color(0.9, 0.1, 0.1), true)
+	for i in 4: _bx(vis, Vector3(0.3, 0.03, 0.9), Vector3(-0.7 + i * 0.47, 1.26, 2.5), D)      # شبكة المحرك
+	_bx(vis, Vector3(0.55, 0.24, 0.55), Vector3(0.75, 1.3, -2.2), D)                                 # فتحة السائق
+	_bx(vis, Vector3(1.4, 0.08, 0.5), Vector3(0, 1.1, -2.4), Color(0.12, 0.13, 0.1)); _bx(vis, Vector3(0.5, 0.35, 0.35), Vector3(-0.7, 1.34, 2.9), Color(0.3, 0.32, 0.22))   # جنزير احتياطي/صندوق
+	var tm := _bx(vis, Vector3(0.7, 0.04, 0.7), Vector3(-0.7, 1.3, 1.6), Color(1, 0, 0)); team_mats.append(tm.material_override)
+	# البرج: إسفين مُشكَّل
+	turret = Node3D.new(); turret.position = Vector3(0, 1.22, -0.1); vis.add_child(turret)
+	var ttop := [Vector2(-1.85, 0.3), Vector2(-1.5, 0.52), Vector2(-0.6, 0.66), Vector2(1.2, 0.7), Vector2(1.95, 0.56)]
+	_mesh_inst(turret, VehMesh.body(-1.85, 1.95, ttop, [], 0.0, false, 0.5, 1.12), B, 0.2, 0.7)
+	_bx(turret, Vector3(0.8, 0.72, 0.3), Vector3(0, 0.35, -1.75), D)   # قناع المدفع
+	for sx in [-1, 1]:
+		_bx(turret, Vector3(0.08, 0.3, 1.4), Vector3(sx * 1.2, 0.38, 0.3), Color(0.45, 0.47, 0.44))
+		for k in 3: _cylz(turret, 0.06, 0.16, Vector3(sx * 0.9, 0.52, -1.35 + k * 0.0 - 0.0), D).position.x = sx * (0.55 + k * 0.12)   # قاذفات دخان
+	var cup := MeshInstance3D.new(); var cm := CylinderMesh.new(); cm.top_radius = 0.3; cm.bottom_radius = 0.32; cm.height = 0.2; cup.mesh = cm; cup.position = Vector3(0.55, 0.78, 0.6); cup.material_override = _mat(D, false); turret.add_child(cup)
+	_bx(turret, Vector3(0.1, 0.12, 0.35), Vector3(0.55, 0.92, 0.35), Color(0.08, 0.08, 0.08))          # رشاش القائد
+	var lh := MeshInstance3D.new(); var lcm := CylinderMesh.new(); lcm.top_radius = 0.26; lcm.bottom_radius = 0.26; lcm.height = 0.07; lh.mesh = lcm; lh.position = Vector3(-0.5, 0.72, 0.9); lh.material_override = _mat(D * 1.2, false); turret.add_child(lh)
+	_bx(turret, Vector3(0.02, 0.02, 0.9), Vector3(-0.95, 1.2, 1.6), Color(0.05, 0.05, 0.05)).rotation.x = -0.08      # هوائي
+	var tarp := _cyl(turret, 0.16, 1.6, Vector3(0, 0.62, 2.1), Color(0.28, 0.27, 0.2)); tarp.rotation = Vector3(0, 0, PI * 0.5)
+	_bx(turret, Vector3(1.5, 0.28, 0.4), Vector3(0, 0.3, 2.05), B * 0.9)                              # صندوق مؤخرة البرج
 	gun_pivot = Node3D.new(); gun_pivot.position = Vector3(0, 0.35, -1.7); turret.add_child(gun_pivot)
 	gun_slide = Node3D.new(); gun_pivot.add_child(gun_slide)
-	_bx(gun_slide, Vector3(0.24, 0.24, 3.2), Vector3(0, 0, -1.4), D)
-	_bx(gun_slide, Vector3(0.36, 0.36, 0.34), Vector3(0, 0, -3.15), Color(0.07, 0.07, 0.07))
+	_cylz(gun_slide, 0.11, 3.3, Vector3(0, 0, -1.45), D)                                              # ماسورة أسطوانية
+	_cylz(gun_slide, 0.17, 0.7, Vector3(0, 0, -1.2), Color(0.09, 0.09, 0.08))                         # مستخلص الدخان
+	_cylz(gun_slide, 0.15, 0.4, Vector3(0, 0, -3.05), Color(0.07, 0.07, 0.07))                        # فوهة
 	muzzle = Node3D.new(); muzzle.position = Vector3(0, 0, -3.5); gun_slide.add_child(muzzle)
 	flash_m = _flash(muzzle, 1.6)
 
