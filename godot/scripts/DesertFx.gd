@@ -10,15 +10,15 @@ extends RefCounted
 static func profile(m: Dictionary) -> Dictionary:
 	var nm := str(m.get("name", ""))
 	var sand := Color(0.84, 0.7, 0.46)
-	if nm.contains("الشاص"): return {"ground": 0, "dust": sand, "kinds": [0, 0, 0, 1, 0, 2, 0, 0, 0], "custom": true, "palms": true, "extras": 1.0, "wind": 1, "rust": 0.4}
-	if nm.contains("أطلال"): return {"ground": 0, "dust": sand, "kinds": [0, 0, 0, 3, 0, 2, 0, 0, 0], "custom": true, "palms": true, "extras": 0.8, "wind": 1, "rust": 0.3}
-	if nm.contains("الجيزة"): return {"ground": 0, "dust": Color(0.88, 0.74, 0.48), "kinds": [3, 3, 3, 3, 0, 2, 3, 0, 0], "custom": true, "palms": true, "extras": 0.8, "wind": 1, "rust": 0.2}
-	if nm.contains("القديمة"): return {"ground": 0, "dust": Color(0.86, 0.78, 0.62), "kinds": [0, 0, 0, 0, 0, 2, 0, 0, 0], "custom": false, "palms": false, "extras": 0.4, "wind": 0, "rust": 0.2}
-	if nm.contains("المدينة"): return {"ground": 1, "dust": Color(0.6, 0.58, 0.54), "kinds": [0, 0, 5, 1, 0, 2, 5, 0, 0], "custom": false, "palms": false, "extras": 0.5, "wind": 0, "rust": 0.5}
-	if nm.contains("القطب"): return {"ground": 2, "dust": Color(0.93, 0.96, 1.0), "kinds": [1, 1, 1, 3, 0, 2, 5, 1, 1], "custom": false, "palms": false, "extras": 0.5, "wind": 2, "rust": 0.1}
-	if nm.contains("الإسكندرية"): return {"ground": 1, "dust": Color(0.66, 0.64, 0.6), "kinds": [1, 1, 1, 1, 0, 2, 1, 1, 1], "custom": false, "palms": false, "extras": 0.4, "wind": 0, "rust": 0.45}
-	if nm.contains("جوية"): return {"ground": 3, "dust": Color(0.62, 0.6, 0.52), "kinds": [0, 1, 1, 0, 0, 2, 1, 0, 0], "custom": false, "palms": false, "extras": 0.0, "wind": 0, "rust": 0.3}
-	if nm == "المستودع": return {"ground": 4, "dust": Color(0.55, 0.54, 0.52), "kinds": [0, 1, 1, 1, 0, 2, 1, 1, 1], "custom": false, "palms": false, "extras": 0.0, "wind": 0, "rust": 0.6}
+	if nm.contains("الشاص"): return {"ground": 0, "dust": sand, "kinds": [0, 0, 0, 1, 0, 2, 0, 0, 0], "custom": true, "palms": true, "extras": 1.0, "wind": 1, "rust": 0.4, "win": 0}
+	if nm.contains("أطلال"): return {"ground": 0, "dust": sand, "kinds": [0, 0, 0, 3, 0, 2, 0, 0, 0], "custom": true, "palms": true, "extras": 0.8, "wind": 1, "rust": 0.3, "win": 2}
+	if nm.contains("الجيزة"): return {"ground": 0, "dust": Color(0.88, 0.74, 0.48), "kinds": [3, 3, 3, 3, 0, 2, 3, 0, 0], "custom": true, "palms": true, "extras": 0.8, "wind": 1, "rust": 0.2, "win": 0}
+	if nm.contains("القديمة"): return {"ground": 0, "dust": Color(0.86, 0.78, 0.62), "kinds": [0, 0, 0, 0, 0, 2, 0, 0, 0], "custom": false, "palms": false, "extras": 0.4, "wind": 0, "rust": 0.2, "win": 2}
+	if nm.contains("المدينة"): return {"ground": 1, "dust": Color(0.6, 0.58, 0.54), "kinds": [0, 0, 5, 1, 0, 2, 5, 0, 0], "custom": false, "palms": false, "extras": 0.5, "wind": 0, "rust": 0.5, "win": 1}
+	if nm.contains("القطب"): return {"ground": 2, "dust": Color(0.93, 0.96, 1.0), "kinds": [1, 1, 1, 3, 0, 2, 5, 1, 1], "custom": false, "palms": false, "extras": 0.5, "wind": 2, "rust": 0.1, "win": 1}
+	if nm.contains("الإسكندرية"): return {"ground": 1, "dust": Color(0.66, 0.64, 0.6), "kinds": [1, 1, 1, 1, 0, 2, 1, 1, 1], "custom": false, "palms": false, "extras": 0.4, "wind": 0, "rust": 0.45, "win": 1}
+	if nm.contains("جوية"): return {"ground": 3, "dust": Color(0.62, 0.6, 0.52), "kinds": [0, 1, 1, 0, 0, 2, 1, 0, 0], "custom": false, "palms": false, "extras": 0.0, "wind": 0, "rust": 0.3, "win": 0}
+	if nm == "المستودع": return {"ground": 4, "dust": Color(0.55, 0.54, 0.52), "kinds": [0, 1, 1, 1, 0, 2, 1, 1, 1], "custom": false, "palms": false, "extras": 0.0, "wind": 0, "rust": 0.6, "win": 0}
 	return {}
 
 static func is_real(m: Dictionary) -> bool:
@@ -123,19 +123,21 @@ void fragment(){
 	return mt
 
 # kind: 0 طين/حجر رملي، 1 معدن صدئ، 2 خشب/لحاء، 3 صخر أحمر (هضاب)
-static func solid_mat(col: Color, kind: int, edge := 1.0, dust := Color(0.84, 0.7, 0.46), rust := 0.4) -> ShaderMaterial:
+static func solid_mat(col: Color, kind: int, edge := 1.0, dust := Color(0.84, 0.7, 0.46), rust := 0.4, win := 0) -> ShaderMaterial:
 	if _s_sh == null:
 		_s_sh = Shader.new(); _s_sh.code = "shader_type spatial;\nrender_mode diffuse_lambert, specular_schlick_ggx;\n" + """
 uniform vec3 base : source_color = vec3(0.7, 0.6, 0.45);
 uniform vec3 sand : source_color = vec3(0.84, 0.7, 0.46);
 uniform float rustk = 0.4;
+uniform int win = 0;
 uniform int kind = 0;
 uniform float edge = 1.0;
-varying vec3 wp; varying vec3 wn; varying vec3 lp; varying vec3 sc;
+varying vec3 wp; varying vec3 wn; varying vec3 lp; varying vec3 sc; varying vec2 yr;
 """ + NOISE + """
 void vertex(){
 	wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; wn = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz); lp = VERTEX;
 	sc = vec3(length(MODEL_MATRIX[0].xyz), length(MODEL_MATRIX[1].xyz), length(MODEL_MATRIX[2].xyz));
+	yr = vec2(MODEL_MATRIX[3].y - sc.y * 0.5, MODEL_MATRIX[3].y + sc.y * 0.5);
 }
 void fragment(){
 	vec2 xz = wp.xz + wp.y * 0.37;
@@ -160,8 +162,35 @@ void fragment(){
 	} else if (kind == 5) {
 		// زجاج/ألواح عاكسة: داكن أملس مع تدرّج رأسي
 		col *= 0.8 + 0.2 * smoothstep(0.0, 8.0, wp.y); rough = 0.15; met = 0.3;
+		float ug = abs(wn.x) > abs(wn.z) ? wp.z : wp.x; vec2 gc = abs(fract(vec2(ug / 1.5, wp.y / 1.6)) - 0.5); col *= 1.0 - step(0.47, max(gc.x, gc.y)) * 0.45 * side;
 	} else if (kind == 2) {
 		col *= 0.8 + 0.3 * noise(vec2(wp.x * 3.0 + wp.z * 3.0, wp.y * 14.0)); rough = 0.9;
+	}
+	// واجهات المباني: نوافذ وإطارات وقاعدة (plinth) وكورنيش — للأجسام العالية فقط
+	float bld = step(4.2, sc.y) * step(2.8, min(sc.x, sc.z)) * smoothstep(0.55, 0.85, side);
+	vec3 emit = vec3(0.0);
+	if (bld > 0.5) {
+		float hr = wp.y - yr.x; float top = yr.y;
+		float u = abs(wn.x) > abs(wn.z) ? wp.z : wp.x;
+		col *= mix(1.0, 0.8, 1.0 - smoothstep(0.0, 1.0, hr));                    // قاعدة أغمق
+		col *= mix(1.0, 0.86, smoothstep(top - 0.5, top - 0.3, wp.y));           // حزام الكورنيش
+		if (win == 1 && kind == 0 && hr > 1.8 && wp.y < top - 1.0) {
+			vec2 cs = vec2(2.7, 3.2); vec2 q = vec2(u / cs.x, (wp.y - yr.x - 1.2) / cs.y); vec2 id = floor(q); vec2 f = fract(q);
+			float r = hash(id + 3.1);
+			float inw = step(0.2, f.x) * step(f.x, 0.8) * step(0.25, f.y) * step(f.y, 0.82);
+			float fr = step(0.16, f.x) * step(f.x, 0.84) * step(0.21, f.y) * step(f.y, 0.86);
+			vec3 glass = mix(vec3(0.1, 0.17, 0.26), vec3(0.45, 0.6, 0.75), smoothstep(0.25, 0.82, f.y) * 0.6 + r * 0.15);
+			if (r > 0.88) { glass = vec3(0.95, 0.8, 0.45); emit = glass * 0.5; }
+			else if (r < 0.2) glass = mix(glass, vec3(0.75, 0.7, 0.6), smoothstep(0.5, 0.8, f.y) * 0.8);
+			col = mix(col, col * 0.7, fr - inw); col = mix(col, glass, inw); rough = mix(rough, 0.12, inw); met = mix(met, 0.4, inw);
+			col = mix(col, col * 1.12, step(0.8, f.y) * step(0.14, f.x) * step(f.x, 0.86) * (1.0 - inw) * 0.0); // عتبة
+		} else if (win == 2 && kind == 0 && hr > 1.5 && wp.y < top - 0.8) {
+			vec2 cs = vec2(3.4, 3.0); vec2 q = vec2(u / cs.x, (wp.y - yr.x - 1.5) / cs.y); vec2 id = floor(q); vec2 f = fract(q);
+			float aw = abs(f.x - 0.5);
+			float arch = step(aw, 0.15) * step(f.y, 0.55 - smoothstep(0.1, 0.15, aw) * 0.25) * step(0.1, f.y);
+			float rim = step(aw, 0.2) * step(f.y, 0.62 - smoothstep(0.1, 0.2, aw) * 0.25) * step(0.06, f.y);
+			col = mix(col, col * 1.1, rim - arch); col = mix(col, vec3(0.06, 0.05, 0.05) * (0.6 + hash(id) * 0.6), arch);
+		}
 	}
 	// غبار الرمل: على الأسطح العلوية ويتراكم عند القاعدة
 	col = mix(col, sand * (0.88 + n2 * 0.22), up * (0.5 + n1 * 0.4) * (1.0 - thin * 0.75));
@@ -174,7 +203,7 @@ void fragment(){
 		col += vec3(0.05) * (1.0 - smoothstep(0.0, 0.05, med)) * up;
 	}
 	col *= mix(0.7, 1.0, smoothstep(0.0, 0.8, wp.y + thin));
-	ALBEDO = col; ROUGHNESS = rough; METALLIC = met; SPECULAR = 0.2;
+	ALBEDO = col; ROUGHNESS = rough; METALLIC = met; SPECULAR = 0.2; EMISSION = emit;
 }"""
 	var m := ShaderMaterial.new(); m.shader = _s_sh
 	m.set_shader_parameter("base", col); m.set_shader_parameter("kind", kind); m.set_shader_parameter("edge", edge); m.set_shader_parameter("sand", dust); m.set_shader_parameter("rustk", rust)

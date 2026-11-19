@@ -1109,19 +1109,16 @@ func build_scenery() -> void:
 	if nt > 0 and map_idx < 8:
 		var pts := _tree_points(m, nt)
 		if pts.size() > 0:
-			var trunk := MultiMesh.new(); trunk.transform_format = MultiMesh.TRANSFORM_3D; trunk.use_custom_data = true
-			var cm := CylinderMesh.new(); cm.top_radius = 0.1; cm.bottom_radius = 0.16; cm.height = 3.6; trunk.mesh = cm; trunk.instance_count = pts.size()
-			var fol := MultiMesh.new(); fol.transform_format = MultiMesh.TRANSFORM_3D; fol.use_custom_data = true
-			var sph := SphereMesh.new(); sph.radius = 1.4; sph.height = 2.4 if not desert else 0.8; fol.mesh = sph; fol.instance_count = pts.size()
+			var kind := 1 if snow else (2 if map_idx in [1, 4, 5] else 0)
+			var tmm := MultiMesh.new(); tmm.transform_format = MultiMesh.TRANSFORM_3D; tmm.use_colors = true; tmm.use_custom_data = true
+			tmm.mesh = TreeFx.mesh(kind); tmm.instance_count = pts.size()
+			var trng := RandomNumberGenerator.new(); trng.seed = 99 + map_idx
 			for i in pts.size():
-				var p: Vector3 = pts[i]; var s := p.y; var ph := randf() * 6.28
-				trunk.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3(s, s, s)), Vector3(p.x, 1.8 * s, p.z))); trunk.set_instance_custom_data(i, Color(ph, 0, 0, 0))
-				fol.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3(s, s, s)), Vector3(p.x, 3.9 * s, p.z))); fol.set_instance_custom_data(i, Color(ph, 0, 0, 0))
-			var tm := ShaderMaterial.new(); tm.shader = _get_tree_shader(); tm.set_shader_parameter("col", Vector3(0.33, 0.22, 0.12)); tm.set_shader_parameter("y0", 1.8)
-			var fm := ShaderMaterial.new(); fm.shader = _get_tree_shader(); fm.set_shader_parameter("col", Vector3(0.16, 0.34, 0.2) if snow else (Vector3(0.3, 0.5, 0.16) if desert else Vector3(0.14, 0.42, 0.16))); fm.set_shader_parameter("y0", 3.9)
-			var a := MultiMeshInstance3D.new(); a.multimesh = trunk; a.material_override = tm; scenery.add_child(a)
-			var b := MultiMeshInstance3D.new(); b.multimesh = fol; b.material_override = fm; scenery.add_child(b)
-	var nw := Settings.windows()
+				var p: Vector3 = pts[i]; var s := p.y * trng.randf_range(0.9, 1.25)
+				tmm.set_instance_transform(i, Transform3D(Basis.from_euler(Vector3(0, trng.randf() * TAU, 0)).scaled(Vector3(s, s * trng.randf_range(0.9, 1.15), s)), Vector3(p.x, 0, p.z)))
+				tmm.set_instance_color(i, Color.WHITE); tmm.set_instance_custom_data(i, Color(trng.randf() * 6.28, trng.randf(), 0, 0))
+			var tmi := MultiMeshInstance3D.new(); tmi.multimesh = tmm; tmi.material_override = TreeFx.mat(0.7 if snow else 0.0); scenery.add_child(tmi)
+	var nw := 0 if DesertFx.is_real(m) else Settings.windows()   # الواجهات صارت بالشيدر (كل الجودات)
 	if nw > 0 and map_idx < 8:
 		var dark: Array = []; var lit: Array = []
 		var used := 0

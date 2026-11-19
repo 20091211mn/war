@@ -36,7 +36,7 @@ static func build(m: Dictionary, root: Node3D) -> Dictionary:
 		var mi := MultiMeshInstance3D.new(); mi.multimesh = mm
 		var kc: int = k % cols.size()
 		if real:
-			mi.material_override = DesertFx.solid_mat(_col(cols[kc]), int(prof["kinds"][kc] if kc < prof["kinds"].size() else 0), 1.0, prof["dust"], float(prof["rust"])); root.add_child(mi)
+			mi.material_override = DesertFx.solid_mat(_col(cols[kc]), int(prof["kinds"][kc] if kc < prof["kinds"].size() else 0), 1.0, prof["dust"], float(prof["rust"]), int(prof["win"])); root.add_child(mi)
 			continue
 		var mat := StandardMaterial3D.new(); mat.albedo_color = _col(cols[kc]); mat.roughness = 0.95; mat.metallic_specular = 0.1
 		mi.material_override = mat; root.add_child(mi)
