@@ -14,16 +14,19 @@ static func build(m: Dictionary, root: Node3D) -> Dictionary:
 	var gb := StaticBody3D.new(); gb.name = "Ground"; gb.collision_layer = 1
 	var gs := CollisionShape3D.new(); var gsh := BoxShape3D.new(); gsh.size = Vector3(W + 40, 2, D + 40); gs.shape = gsh; gs.position = Vector3(0, -1, 0); gb.add_child(gs)
 	var gm := MeshInstance3D.new(); var gmesh := BoxMesh.new(); gmesh.size = Vector3(W + 400, 0.2, D + 400); gm.mesh = gmesh; gm.position = Vector3(0, -0.1, 0)
-	var gmat: Material = _ground_mat(th, m)
+	var real := DesertFx.is_real(m)
+	var dx := DesertFx.new_dx()
+	var gmat: Material = DesertFx.ground_mat(th) if real else _ground_mat(th, m)
 	gm.material_override = gmat; gm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; gb.add_child(gm)
 	root.add_child(gb)
 	# ---- صناديق صلبة وديكور: MultiMesh لكل لون ----
 	var body := StaticBody3D.new(); body.name = "Solids"; body.collision_layer = 1; root.add_child(body)
 	var groups := {}
 	for b in m["boxes"]:
-		_add_box(body, groups, b, cols, true)
+		_add_box(body, groups, b, cols, true, real and DesertFx.is_palm_trunk(b))
 	for b in m["deco"]:
 		if b[3] - b[0] <= 0.0: continue
+		if real and DesertFx.take_deco(b, W, D, dx): continue
 		_add_box(body, groups, b, cols, false)
 	for k in groups:
 		var arr: Array = groups[k]
@@ -31,7 +34,11 @@ static func build(m: Dictionary, root: Node3D) -> Dictionary:
 		mm.instance_count = arr.size()
 		for i in arr.size(): mm.set_instance_transform(i, arr[i])
 		var mi := MultiMeshInstance3D.new(); mi.multimesh = mm
-		var mat := StandardMaterial3D.new(); mat.albedo_color = _col(cols[k % cols.size()]); mat.roughness = 0.95; mat.metallic_specular = 0.1
+		var kc: int = k % cols.size()
+		if real:
+			mi.material_override = DesertFx.solid_mat(_col(cols[kc]), 1 if kc == 3 else (2 if kc == 5 else 0)); root.add_child(mi)
+			continue
+		var mat := StandardMaterial3D.new(); mat.albedo_color = _col(cols[kc]); mat.roughness = 0.95; mat.metallic_specular = 0.1
 		mi.material_override = mat; root.add_child(mi)
 	# ---- البيئة والشمس ----
 	var env := Environment.new()
@@ -55,17 +62,19 @@ static func build(m: Dictionary, root: Node3D) -> Dictionary:
 	var sd: Array = th["sun"]; var dir := Vector3(sd[0], sd[1], sd[2]).normalized()
 	sun.light_energy = float(th["sunI"]) * 0.45; sun.directional_shadow_max_distance = 55.0; sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL; sun.shadow_bias = 0.05
 	root.add_child(sun); sun.look_at_from_position(dir * 50.0, Vector3.ZERO, Vector3.UP)
-	_horizon(root, m, th, W, D)
+	if real: DesertFx.build(m, root, dx, th, sun, env)
+	else: _horizon(root, m, th, W, D)
 	out["env"] = env; out["sun"] = sun; out["theme"] = th
 	return out
 
-static func _add_box(body: StaticBody3D, groups: Dictionary, b: Array, cols: Array, solid: bool) -> void:
+static func _add_box(body: StaticBody3D, groups: Dictionary, b: Array, cols: Array, solid: bool, hide_visual := false) -> void:
 	var sx: float = b[3] - b[0]; var sy: float = b[4] - b[1]; var sz: float = b[5] - b[2]
 	if sx <= 0.0 or sy <= 0.0 or sz <= 0.0: return
 	var c := Vector3((b[0] + b[3]) * 0.5, (b[1] + b[4]) * 0.5, (b[2] + b[5]) * 0.5)
 	var k: int = int(b[6])
-	if not groups.has(k): groups[k] = []
-	groups[k].append(Transform3D(Basis.from_scale(Vector3(sx, sy, sz)), c))
+	if not hide_visual:
+		if not groups.has(k): groups[k] = []
+		groups[k].append(Transform3D(Basis.from_scale(Vector3(sx, sy, sz)), c))
 	if solid:
 		var cs := CollisionShape3D.new(); var sh := BoxShape3D.new(); sh.size = Vector3(sx, sy, sz); cs.shape = sh; cs.position = c; body.add_child(cs)
 
