@@ -14,16 +14,16 @@ static func build(m: Dictionary, root: Node3D) -> Dictionary:
 	var gb := StaticBody3D.new(); gb.name = "Ground"; gb.collision_layer = 1
 	var gs := CollisionShape3D.new(); var gsh := BoxShape3D.new(); gsh.size = Vector3(W + 40, 2, D + 40); gs.shape = gsh; gs.position = Vector3(0, -1, 0); gb.add_child(gs)
 	var gm := MeshInstance3D.new(); var gmesh := BoxMesh.new(); gmesh.size = Vector3(W + 400, 0.2, D + 400); gm.mesh = gmesh; gm.position = Vector3(0, -0.1, 0)
-	var real := DesertFx.is_real(m)
-	var dx := DesertFx.new_dx()
-	var gmat: Material = DesertFx.ground_mat(th) if real else _ground_mat(th, m)
+	var prof := DesertFx.profile(m); var real := not prof.is_empty()
+	var dx := DesertFx.new_dx(prof)
+	var gmat: Material = DesertFx.ground_mat(th, int(prof["ground"])) if real else _ground_mat(th, m)
 	gm.material_override = gmat; gm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; gb.add_child(gm)
 	root.add_child(gb)
 	# ---- صناديق صلبة وديكور: MultiMesh لكل لون ----
 	var body := StaticBody3D.new(); body.name = "Solids"; body.collision_layer = 1; root.add_child(body)
 	var groups := {}
 	for b in m["boxes"]:
-		_add_box(body, groups, b, cols, true, real and DesertFx.is_palm_trunk(b))
+		_add_box(body, groups, b, cols, true, real and prof["palms"] and DesertFx.is_palm_trunk(b))
 	for b in m["deco"]:
 		if b[3] - b[0] <= 0.0: continue
 		if real and DesertFx.take_deco(b, W, D, dx): continue
@@ -36,7 +36,7 @@ static func build(m: Dictionary, root: Node3D) -> Dictionary:
 		var mi := MultiMeshInstance3D.new(); mi.multimesh = mm
 		var kc: int = k % cols.size()
 		if real:
-			mi.material_override = DesertFx.solid_mat(_col(cols[kc]), 1 if kc == 3 else (2 if kc == 5 else 0)); root.add_child(mi)
+			mi.material_override = DesertFx.solid_mat(_col(cols[kc]), int(prof["kinds"][kc] if kc < prof["kinds"].size() else 0), 1.0, prof["dust"], float(prof["rust"])); root.add_child(mi)
 			continue
 		var mat := StandardMaterial3D.new(); mat.albedo_color = _col(cols[kc]); mat.roughness = 0.95; mat.metallic_specular = 0.1
 		mi.material_override = mat; root.add_child(mi)
@@ -62,7 +62,9 @@ static func build(m: Dictionary, root: Node3D) -> Dictionary:
 	var sd: Array = th["sun"]; var dir := Vector3(sd[0], sd[1], sd[2]).normalized()
 	sun.light_energy = float(th["sunI"]) * 0.45; sun.directional_shadow_max_distance = 55.0; sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL; sun.shadow_bias = 0.05
 	root.add_child(sun); sun.look_at_from_position(dir * 50.0, Vector3.ZERO, Vector3.UP)
-	if real: DesertFx.build(m, root, dx, th, sun, env)
+	if real:
+		DesertFx.build(m, root, dx, th, sun, env)
+		if not prof["custom"]: _horizon(root, m, th, W, D)
 	else: _horizon(root, m, th, W, D)
 	out["env"] = env; out["sun"] = sun; out["theme"] = th
 	return out

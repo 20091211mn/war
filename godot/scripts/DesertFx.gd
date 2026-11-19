@@ -5,8 +5,24 @@ extends RefCounted
 # وغبار تذروه الرياح. كل التفاصيل بلا تصادم (زخرفية) كي لا تتأثر الفيزياء أو مسارات الذكاء الاصطناعي.
 # كل عناصر التوزيع بذرة ثابتة => نفس الشكل عند جميع اللاعبين.
 
+# ملفات تعريف الخرائط: ground = sand/asphalt/snow/grass/concrete ؛ kinds = نوع مادة كل لون (0 جص/حجر، 1 معدن، 2 خشب، 3 صخر، 5 زجاج)
+# dust = لون الغبار/الثلج فوق الأسطح ؛ custom = أفق مخصّص (كثبان+هضاب) ؛ palms = نخيل+ماء ؛ extras = صخور/أعشاب
+static func profile(m: Dictionary) -> Dictionary:
+	var nm := str(m.get("name", ""))
+	var sand := Color(0.84, 0.7, 0.46)
+	if nm.contains("الشاص"): return {"ground": 0, "dust": sand, "kinds": [0, 0, 0, 1, 0, 2, 0, 0, 0], "custom": true, "palms": true, "extras": 1.0, "wind": 1, "rust": 0.4}
+	if nm.contains("أطلال"): return {"ground": 0, "dust": sand, "kinds": [0, 0, 0, 3, 0, 2, 0, 0, 0], "custom": true, "palms": true, "extras": 0.8, "wind": 1, "rust": 0.3}
+	if nm.contains("الجيزة"): return {"ground": 0, "dust": Color(0.88, 0.74, 0.48), "kinds": [3, 3, 3, 3, 0, 2, 3, 0, 0], "custom": true, "palms": true, "extras": 0.8, "wind": 1, "rust": 0.2}
+	if nm.contains("القديمة"): return {"ground": 0, "dust": Color(0.86, 0.78, 0.62), "kinds": [0, 0, 0, 0, 0, 2, 0, 0, 0], "custom": false, "palms": false, "extras": 0.4, "wind": 0, "rust": 0.2}
+	if nm.contains("المدينة"): return {"ground": 1, "dust": Color(0.6, 0.58, 0.54), "kinds": [0, 0, 5, 1, 0, 2, 5, 0, 0], "custom": false, "palms": false, "extras": 0.5, "wind": 0, "rust": 0.5}
+	if nm.contains("القطب"): return {"ground": 2, "dust": Color(0.93, 0.96, 1.0), "kinds": [1, 1, 1, 3, 0, 2, 5, 1, 1], "custom": false, "palms": false, "extras": 0.5, "wind": 2, "rust": 0.1}
+	if nm.contains("الإسكندرية"): return {"ground": 1, "dust": Color(0.66, 0.64, 0.6), "kinds": [1, 1, 1, 1, 0, 2, 1, 1, 1], "custom": false, "palms": false, "extras": 0.4, "wind": 0, "rust": 0.45}
+	if nm.contains("جوية"): return {"ground": 3, "dust": Color(0.62, 0.6, 0.52), "kinds": [0, 1, 1, 0, 0, 2, 1, 0, 0], "custom": false, "palms": false, "extras": 0.0, "wind": 0, "rust": 0.3}
+	if nm == "المستودع": return {"ground": 4, "dust": Color(0.55, 0.54, 0.52), "kinds": [0, 1, 1, 1, 0, 2, 1, 1, 1], "custom": false, "palms": false, "extras": 0.0, "wind": 0, "rust": 0.6}
+	return {}
+
 static func is_real(m: Dictionary) -> bool:
-	return str(m.get("name", "")).contains("الشاص")
+	return not profile(m).is_empty()
 
 # ------------------------------------------------------------------ شيدرات
 const NOISE := """
@@ -20,59 +36,99 @@ static func _sh(cache: Shader, code: String) -> Shader:
 	if cache != null: return cache
 	var s := Shader.new(); s.code = code; return s
 
-static func ground_mat(th: Dictionary) -> ShaderMaterial:
+static func ground_mat(th: Dictionary, mode := 0) -> ShaderMaterial:
 	if _g_sh == null:
-		_g_sh = Shader.new(); _g_sh.code = "shader_type spatial;\nrender_mode diffuse_lambert, specular_disabled;\n" + """
+		_g_sh = Shader.new(); _g_sh.code = "shader_type spatial;\nrender_mode diffuse_lambert, specular_schlick_ggx;\n" + """
 uniform vec3 base : source_color = vec3(0.84, 0.7, 0.46);
 uniform float detail = 1.0;
+uniform int mode = 0;   // 0 رمل، 1 أسفلت، 2 ثلج، 3 عشب/تراب، 4 خرسانة
 varying vec3 wp; varying vec3 wn;
 """ + NOISE + """
+// مسافة حافة خلية فورونوي (للتشققات) والمعرّف
+vec2 vor(vec2 q){
+	vec2 g = floor(q); vec2 f = fract(q); float d1 = 8.0; float d2 = 8.0; float id = 0.0;
+	for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) {
+		vec2 o = vec2(float(i), float(j)); vec2 h = vec2(hash(g + o), hash(g + o + 17.3));
+		float d = length(o + h - f);
+		if (d < d1) { d2 = d1; d1 = d; id = hash(g + o + 5.1); } else if (d < d2) { d2 = d; }
+	}
+	return vec2(d2 - d1, id);
+}
 void vertex(){ wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; wn = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz); }
 void fragment(){
 	vec2 p = wp.xz;
 	float dist = length(VERTEX);
 	float fade = 1.0 - smoothstep(25.0, 110.0, dist);
 	float large = noise(p * 0.018); float mid = noise(p * 0.09 + 7.0);
-	vec3 pale = base * vec3(1.12, 1.1, 1.06); vec3 dark = base * vec3(0.82, 0.76, 0.68);
-	vec3 col = mix(dark, pale, large * 0.65 + mid * 0.35);
-	// تموّجات رياح بخطوط ملتوية
-	vec2 wd = normalize(vec2(0.82, 0.57));
-	float warp = noise(p * 0.32) * 4.5 + noise(p * 0.06) * 10.0;
-	float rp = dot(p, wd) * 2.3 + warp;
-	float s = sin(rp);
-	float rip = (s * 0.5 + 0.5); rip *= rip;
 	float grain = noise(p * 13.0) * 0.5 + noise(p * 41.0) * 0.5;
-	col *= 0.93 + rip * 0.13 * fade + (grain - 0.5) * 0.14 * detail;
-	// حصى وأحجار صغيرة (خلايا)
-	if (detail > 0.5 && fade > 0.01) {
-		vec2 q = p * 2.6; vec2 g = floor(q); vec2 f = fract(q); float md = 1.0; float id = 0.0;
-		for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) {
-			vec2 o = vec2(float(i), float(j)); vec2 h = vec2(hash(g + o), hash(g + o + 17.3));
-			float d = length(o + h - f); if (d < md) { md = d; id = hash(g + o + 5.1); }
+	vec3 col = base; float rough = 1.0; float spec = 0.3;
+	vec3 n = wn;
+	if (mode == 0) {
+		vec3 pale = base * vec3(1.12, 1.1, 1.06); vec3 dark = base * vec3(0.82, 0.76, 0.68);
+		col = mix(dark, pale, large * 0.65 + mid * 0.35);
+		vec2 wd = normalize(vec2(0.82, 0.57));
+		float warp = noise(p * 0.32) * 4.5 + noise(p * 0.06) * 10.0;
+		float rp = dot(p, wd) * 2.3 + warp;
+		float rip = (sin(rp) * 0.5 + 0.5); rip *= rip;
+		col *= 0.93 + rip * 0.13 * fade + (grain - 0.5) * 0.14 * detail;
+		if (detail > 0.5 && fade > 0.01) {
+			float patch = smoothstep(0.58, 0.74, noise(p * 0.21 + 3.0));
+			vec2 q = p * 2.6; vec2 g = floor(q); vec2 f = fract(q); float md = 1.0; float pid = 0.0;
+			for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) {
+				vec2 o = vec2(float(i), float(j)); vec2 h = vec2(hash(g + o), hash(g + o + 17.3));
+				float d = length(o + h - f); if (d < md) { md = d; pid = hash(g + o + 5.1); }
+			}
+			float peb = smoothstep(0.13, 0.07, md) * patch;
+			col = mix(col, vec3(0.58, 0.5, 0.4) * (0.78 + pid * 0.5), peb * fade * 0.7);
 		}
-		float patch = smoothstep(0.58, 0.74, noise(p * 0.21 + 3.0));
-		float peb = smoothstep(0.13, 0.07, md) * patch;
-		col = mix(col, vec3(0.58, 0.5, 0.4) * (0.78 + id * 0.5), peb * fade * 0.7);
+		col = mix(col, col * vec3(0.8, 0.72, 0.62), smoothstep(0.62, 0.8, noise(p * 0.045 + 19.0)) * 0.55);
+		float k = 0.16 * fade; n = normalize(wn + vec3(-cos(rp) * k * wd.x, 0.0, -cos(rp) * k * wd.y));
+	} else if (mode == 1) {
+		// أسفلت: حبيبات + تشققات + بقع زيت/رطوبة + ترقيعات
+		col = base * (0.82 + large * 0.3 + mid * 0.18);
+		col *= 0.9 + (grain - 0.5) * 0.35 * detail + step(0.93, hash(floor(p * 45.0))) * 0.25 * fade;
+		vec2 v = vor(p * 0.28); float crack = smoothstep(0.05, 0.0, v.x) * step(0.45, v.y) * fade;
+		col *= 1.0 - crack * 0.55;
+		float st = smoothstep(0.58, 0.8, noise(p * 0.13 + 4.0)); col = mix(col, col * 0.55, st * 0.5); rough = mix(0.85, 0.35, st);
+		float pt = step(0.7, hash(floor(p * 0.07))); col *= mix(1.0, 0.86, pt);
+		spec = 0.4;
+	} else if (mode == 2) {
+		// ثلج: ظلال زرقاء، كثبان ريح، بريق بلّوري
+		col = mix(base * vec3(0.8, 0.86, 0.96), base * vec3(1.03, 1.03, 1.04), large * 0.6 + mid * 0.4);
+		vec2 wd = normalize(vec2(0.7, 0.7)); float rp = dot(p, wd) * 1.6 + noise(p * 0.25) * 9.0;
+		float rip = sin(rp) * 0.5 + 0.5; col *= 0.95 + rip * 0.07 * fade;
+		float sp = step(0.987, hash(floor(p * 70.0 + floor(TIME * 0.0)))) * fade; col += vec3(0.5, 0.55, 0.6) * sp * detail;
+		float k = 0.1 * fade; n = normalize(wn + vec3(-cos(rp) * k * wd.x, 0.0, -cos(rp) * k * wd.y));
+		spec = 0.5; rough = 0.55;
+	} else if (mode == 3) {
+		// عشب جاف وتراب
+		vec3 dirt = base * vec3(1.08, 1.0, 0.82); vec3 gr = base * vec3(0.9, 1.0, 0.85);
+		float m2 = smoothstep(0.3, 0.7, noise(p * 0.012 + 11.0) * 0.7 + noise(p * 0.09) * 0.3);
+		col = mix(dirt, gr, m2); col *= 0.82 + large * 0.3 + (grain - 0.5) * 0.25 * detail;
+		col *= 0.95 + 0.1 * sin(p.x * 3.0 + noise(p * 0.5) * 6.0) * fade;
+	} else {
+		// خرسانة: بلاطات ووصلات وبقع
+		col = base * (0.85 + large * 0.25 + (grain - 0.5) * 0.18 * detail);
+		vec2 sl = abs(fract(p / 6.0) - 0.5); float joint = smoothstep(0.488, 0.5, max(sl.x, sl.y)); col *= 1.0 - joint * 0.45 * fade;
+		col = mix(col, col * 0.6, smoothstep(0.62, 0.82, noise(p * 0.2 + 2.0)) * 0.5);
+		spec = 0.35; rough = 0.7;
 	}
-	// بقع أرض متشققة/داكنة
-	col = mix(col, col * vec3(0.8, 0.72, 0.62), smoothstep(0.62, 0.8, noise(p * 0.045 + 19.0)) * 0.55);
-	ALBEDO = col; ROUGHNESS = 1.0;
-	// نُظمة بالتموّج: تعطي ظلاً دقيقاً للقمم
-	float k = 0.16 * fade;
-	vec3 n = normalize(wn + vec3(-cos(rp) * k * wd.x, 0.0, -cos(rp) * k * wd.y));
+	ALBEDO = col; ROUGHNESS = rough; SPECULAR = spec;
 	NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 }"""
 	var mt := ShaderMaterial.new(); mt.shader = _g_sh
 	mt.set_shader_parameter("base", Color(th["ground"][0], th["ground"][1], th["ground"][2]))
 	mt.set_shader_parameter("detail", 1.0 if Settings.quality >= 2 else 0.0)
+	mt.set_shader_parameter("mode", mode)
 	return mt
 
 # kind: 0 طين/حجر رملي، 1 معدن صدئ، 2 خشب/لحاء، 3 صخر أحمر (هضاب)
-static func solid_mat(col: Color, kind: int, edge := 1.0) -> ShaderMaterial:
+static func solid_mat(col: Color, kind: int, edge := 1.0, dust := Color(0.84, 0.7, 0.46), rust := 0.4) -> ShaderMaterial:
 	if _s_sh == null:
 		_s_sh = Shader.new(); _s_sh.code = "shader_type spatial;\nrender_mode diffuse_lambert, specular_schlick_ggx;\n" + """
 uniform vec3 base : source_color = vec3(0.7, 0.6, 0.45);
 uniform vec3 sand : source_color = vec3(0.84, 0.7, 0.46);
+uniform float rustk = 0.4;
 uniform int kind = 0;
 uniform float edge = 1.0;
 varying vec3 wp; varying vec3 wn; varying vec3 lp; varying vec3 sc;
@@ -98,9 +154,12 @@ void fragment(){
 		if (kind == 0) { float cr = step(0.93, fract(wp.y * 2.4 + 0.5)) * side; col *= 1.0 - cr * 0.09; }
 	} else if (kind == 1) {
 		float r = smoothstep(0.6, 0.85, noise(xz * 1.4 + wp.y * 2.1));
-		col = mix(col, vec3(0.45, 0.22, 0.1) * (0.8 + n3 * 0.5), r * 0.4);
+		col = mix(col, vec3(0.45, 0.22, 0.1) * (0.8 + n3 * 0.5), r * rustk * (1.0 - thin));
 		col *= 0.9 + 0.1 * sin((wp.x + wp.z) * 18.0);   // تعرّج حاويات
 		rough = 0.55; met = 0.25 * (1.0 - r);
+	} else if (kind == 5) {
+		// زجاج/ألواح عاكسة: داكن أملس مع تدرّج رأسي
+		col *= 0.8 + 0.2 * smoothstep(0.0, 8.0, wp.y); rough = 0.15; met = 0.3;
 	} else if (kind == 2) {
 		col *= 0.8 + 0.3 * noise(vec2(wp.x * 3.0 + wp.z * 3.0, wp.y * 14.0)); rough = 0.9;
 	}
@@ -118,7 +177,7 @@ void fragment(){
 	ALBEDO = col; ROUGHNESS = rough; METALLIC = met; SPECULAR = 0.2;
 }"""
 	var m := ShaderMaterial.new(); m.shader = _s_sh
-	m.set_shader_parameter("base", col); m.set_shader_parameter("kind", kind); m.set_shader_parameter("edge", edge)
+	m.set_shader_parameter("base", col); m.set_shader_parameter("kind", kind); m.set_shader_parameter("edge", edge); m.set_shader_parameter("sand", dust); m.set_shader_parameter("rustk", rust)
 	return m
 
 static func water_mat() -> ShaderMaterial:
@@ -178,8 +237,10 @@ void fragment(){
 # تُرجع true إن كان الصندوق سيُستبدل ببناء خاص (خارج الحدود: كتل الأفق / سعف النخيل / ماء)
 static func take_deco(b: Array, W: float, D: float, dx: Dictionary) -> bool:
 	var cx := (float(b[0]) + float(b[3])) * 0.5; var cz := (float(b[2]) + float(b[5])) * 0.5
-	if absf(cx) > W * 0.5 + 0.5 or absf(cz) > D * 0.5 + 0.5: return true
+	var pr: Dictionary = dx["prof"]
+	if pr["custom"] and (absf(cx) > W * 0.5 + 0.5 or absf(cz) > D * 0.5 + 0.5): return true
 	var k := int(b[6])
+	if not pr["palms"]: return false
 	if k == 4:
 		var key := "%d,%d" % [roundi(cx * 4.0), roundi(cz * 4.0)]
 		if not dx["crowns"].has(key): dx["crowns"][key] = Vector3(cx, float(b[1]), cz)
@@ -191,8 +252,8 @@ static func take_deco(b: Array, W: float, D: float, dx: Dictionary) -> bool:
 static func is_palm_trunk(b: Array) -> bool:
 	return int(b[6]) == 5 and absf(float(b[3]) - float(b[0]) - 0.7) < 0.02 and absf(float(b[5]) - float(b[2]) - 0.7) < 0.02
 
-static func new_dx() -> Dictionary:
-	return {"crowns": {}, "water": [], "trunks": []}
+static func new_dx(prof := {}) -> Dictionary:
+	return {"crowns": {}, "water": [], "trunks": [], "prof": prof}
 
 # ------------------------------------------------------------------ مولّدات الميش
 static func _frond_mesh() -> ArrayMesh:
@@ -267,13 +328,27 @@ static func build(m: Dictionary, root: Node3D, dx: Dictionary, th: Dictionary, s
 	var q := Settings.quality
 	var full := q >= 3
 	var rng := RandomNumberGenerator.new(); rng.seed = 4404
+	var pr: Dictionary = dx["prof"]; var gm: int = pr["ground"]
 	# ---- جو ----
-	env.fog_density = 0.0011; env.fog_sun_scatter = 0.2
-	env.adjustment_contrast = 1.1; env.adjustment_saturation = 1.04
-	if sun != null: sun.light_color = Color(1.0, 0.94, 0.82); sun.directional_shadow_max_distance = 75.0
+	match gm:
+		0:
+			env.fog_density = 0.0011; env.fog_sun_scatter = 0.2; env.adjustment_contrast = 1.1; env.adjustment_saturation = 1.04
+			if sun != null: sun.light_color = Color(1.0, 0.94, 0.82); sun.directional_shadow_max_distance = 75.0
+		1:
+			env.fog_density = 0.0009; env.fog_sun_scatter = 0.12; env.adjustment_contrast = 1.1; env.adjustment_saturation = 1.0
+			if sun != null: sun.light_color = Color(1.0, 0.96, 0.9); sun.directional_shadow_max_distance = 70.0
+		2:
+			env.fog_density = 0.0018; env.fog_sun_scatter = 0.1; env.adjustment_contrast = 1.06; env.adjustment_saturation = 0.95
+			if sun != null: sun.light_color = Color(0.93, 0.96, 1.0); sun.directional_shadow_max_distance = 70.0
+		3:
+			env.fog_density = 0.0006; env.adjustment_contrast = 1.08; env.adjustment_saturation = 1.06
+			if sun != null: sun.light_color = Color(1.0, 0.96, 0.88)
+		_:
+			env.adjustment_contrast = 1.08
 	# ---- كثبان ناعمة حول الحدود + هضاب بعيدة ----
-	_dunes(root, th, W, D, q)
-	_mesas(root, W, D, rng)
+	if pr["custom"]:
+		_dunes(root, th, W, D, q)
+		_mesas(root, W, D, rng)
 	# ---- نخيل ----
 	var fr := _frond_mesh(); var lm := leaf_mat()
 	var fronds: Array = []; var trunks: Array = []
@@ -302,7 +377,8 @@ static func build(m: Dictionary, root: Node3D, dx: Dictionary, th: Dictionary, s
 		var mi := MeshInstance3D.new(); var pm := PlaneMesh.new(); pm.size = Vector2(w[2], w[3]); mi.mesh = pm; mi.material_override = wm
 		mi.position = Vector3(w[0], 0.035, w[1]); mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; mi.name = "Water"; root.add_child(mi)
 	# ---- صخور صغيرة/متوسطة (زخرفية، ≤ 0.5م) ----
-	var rocks_n := (260 if full else 120)
+	var ex: float = pr["extras"]
+	var rocks_n := int((260 if full else 120) * ex)
 	var rm := [_rock_mesh(11, 0.75), _rock_mesh(23, 0.6), _rock_mesh(37, 0.9)]
 	var rt: Array = [[], [], []]
 	var tries := 0
@@ -314,27 +390,32 @@ static func build(m: Dictionary, root: Node3D, dx: Dictionary, th: Dictionary, s
 		var tf := Transform3D(Basis.from_euler(Vector3(rng.randf_range(-0.2, 0.2), rng.randf() * TAU, rng.randf_range(-0.2, 0.2))).scaled(Vector3(s * rng.randf_range(1.0, 1.5), s, s * rng.randf_range(0.9, 1.3))), Vector3(x, s * 0.12, z))
 		rt[tries % 3].append(tf)
 	var rcols := [Color(0.5, 0.44, 0.37), Color(0.6, 0.5, 0.38), Color(0.42, 0.38, 0.34)]
-	for i in 3: _mm(root, rm[i], solid_mat(rcols[i], 3, 0.0), rt[i], false, "Rocks")
+	if gm == 1 or gm == 4: rcols = [Color(0.45, 0.45, 0.44), Color(0.55, 0.54, 0.52), Color(0.36, 0.36, 0.37)]
+	elif gm == 2: rcols = [Color(0.34, 0.36, 0.4), Color(0.42, 0.44, 0.48), Color(0.3, 0.32, 0.36)]
+	for i in 3: _mm(root, rm[i], solid_mat(rcols[i], 3, 0.0, pr["dust"], 0.0), rt[i], false, "Rocks")
 	# ---- شجيرات وأعشاب جافة ----
-	var dry := _tuft_mesh(9, 0.55, 0.09, Color(0.74, 0.62, 0.32), 5)
+	var gcol := Color(0.74, 0.62, 0.32) if gm == 0 else Color(0.5, 0.54, 0.32)
+	var dry := _tuft_mesh(9, 0.55, 0.09, gcol, 5)
 	var shrub := _tuft_mesh(16, 0.9, 0.12, Color(0.36, 0.38, 0.2), 9)
 	var tuf: Array = []; var shr: Array = []
-	var tn := (520 if full else 220)
+	var tn := int((520 if full else 220) * ex) if gm != 2 else 0
 	tries = 0
 	while tries < tn * 5 and (tuf.size() + shr.size()) < tn:
 		tries += 1
 		var x := rng.randf_range(-W * 0.5 + 2.0, W * 0.5 - 2.0); var z := rng.randf_range(-D * 0.5 + 2.0, D * 0.5 - 2.0)
 		if _blocked(boxes, x, z, 0.5): continue
 		# تتجمع قرب الواحة (z≈±48) والوادي
-		var oasis := minf(absf(z - 48.0), absf(z + 48.0)) < 22.0 and absf(x) < 26.0
-		if not oasis and rng.randf() < 0.55: continue
+		var oasis := false
+		for w in dx["water"]:
+			if absf(x - w[0]) < w[2] * 0.5 + 8.0 and absf(z - w[1]) < w[3] * 0.5 + 8.0: oasis = true; break
+		if not oasis and rng.randf() < (0.55 if not dx["water"].is_empty() else 0.2): continue
 		var s := rng.randf_range(0.7, 1.5)
 		var tf := Transform3D(Basis.from_euler(Vector3(0, rng.randf() * TAU, 0)).scaled(Vector3(s, s * rng.randf_range(0.8, 1.3), s)), Vector3(x, 0.0, z))
 		if rng.randf() < 0.28: shr.append(tf)
 		else: tuf.append(tf)
 	_mm(root, dry, lm, tuf, false, "DryGrass"); _mm(root, shrub, lm, shr, false, "Shrubs")
 	# ---- غبار تذروه الرياح ----
-	if q >= 2: _wind_dust(root, W, D, q)
+	if q >= 2 and int(pr["wind"]) > 0: _wind_dust(root, W, D, q, int(pr["wind"]))
 
 static func _dunes(root: Node3D, th: Dictionary, W: float, D: float, q: int) -> void:
 	var fn := FastNoiseLite.new(); fn.seed = 77; fn.frequency = 0.0042; fn.fractal_octaves = 3; fn.noise_type = FastNoiseLite.TYPE_SIMPLEX
@@ -381,17 +462,23 @@ static func _mesas(root: Node3D, W: float, D: float, rng: RandomNumberGenerator)
 	var cyl := CylinderMesh.new(); cyl.top_radius = 0.42; cyl.bottom_radius = 0.5; cyl.height = 1.0; cyl.radial_segments = 9; cyl.rings = 1
 	_mm(root, cyl, solid_mat(Color(0.66, 0.46, 0.3), 3, 0.0), tiers, false, "Mesas")
 
-static func _wind_dust(root: Node3D, W: float, D: float, q: int) -> void:
-	var p := GPUParticles3D.new(); p.name = "WindDust"; p.amount = 700 if q >= 3 else 350; p.lifetime = 7.0; p.preprocess = 7.0
-	p.visibility_aabb = AABB(Vector3(-W * 0.5, -2, -D * 0.5), Vector3(W, 12, D))
-	var pm := ParticleProcessMaterial.new()
-	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX; pm.emission_box_extents = Vector3(W * 0.5, 2.5, D * 0.5)
-	pm.direction = Vector3(0.85, 0.04, 0.5); pm.spread = 12.0; pm.initial_velocity_min = 4.0; pm.initial_velocity_max = 9.0; pm.gravity = Vector3.ZERO
-	pm.scale_min = 0.5; pm.scale_max = 1.6; pm.turbulence_enabled = true; pm.turbulence_noise_strength = 0.6
-	p.process_material = pm
-	var qm := QuadMesh.new(); qm.size = Vector2(0.09, 0.09)
-	var mat := StandardMaterial3D.new(); mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; mat.albedo_color = Color(0.93, 0.82, 0.6, 0.4)
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	qm.material = mat; p.draw_pass_1 = qm
-	p.position = Vector3(0, 1.2, 0); p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+static func _wind_dust(root: Node3D, W: float, D: float, q: int, kind := 1) -> void:
+	var p := GPUParticles3D.new(); p.name = "WindDust" if kind == 1 else "Snow"
+	var pm := ParticleProcessMaterial.new(); pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX; pm.gravity = Vector3.ZERO
+	var qm := QuadMesh.new(); var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED; mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	if kind == 1:
+		p.amount = 700 if q >= 3 else 350; p.lifetime = 7.0; p.preprocess = 7.0
+		p.visibility_aabb = AABB(Vector3(-W * 0.5, -2, -D * 0.5), Vector3(W, 12, D)); p.position = Vector3(0, 1.2, 0)
+		pm.emission_box_extents = Vector3(W * 0.5, 2.5, D * 0.5); pm.direction = Vector3(0.85, 0.04, 0.5); pm.spread = 12.0
+		pm.initial_velocity_min = 4.0; pm.initial_velocity_max = 9.0; pm.scale_min = 0.5; pm.scale_max = 1.6
+		qm.size = Vector2(0.09, 0.09); mat.albedo_color = Color(0.93, 0.82, 0.6, 0.4)
+	else:
+		p.amount = 1000 if q >= 3 else 500; p.lifetime = 5.0; p.preprocess = 5.0
+		p.visibility_aabb = AABB(Vector3(-W * 0.5, -2, -D * 0.5), Vector3(W, 20, D)); p.position = Vector3(0, 12.0, 0)
+		pm.emission_box_extents = Vector3(W * 0.5, 1.0, D * 0.5); pm.direction = Vector3(0.35, -1.0, 0.15); pm.spread = 10.0
+		pm.initial_velocity_min = 2.5; pm.initial_velocity_max = 4.5; pm.scale_min = 0.6; pm.scale_max = 1.6; pm.turbulence_enabled = true; pm.turbulence_noise_strength = 0.4
+		qm.size = Vector2(0.07, 0.07); mat.albedo_color = Color(1, 1, 1, 0.85)
+	pm.turbulence_enabled = true
+	p.process_material = pm; qm.material = mat; p.draw_pass_1 = qm; p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(p)
