@@ -77,6 +77,7 @@ var dbg_picker := false
 var dbg_settings := false
 var dbg_sp := false
 var dbg_setlang := -1
+var dbg_setlang2 := -1
 var dbg_lanhost := false
 var dbg_online := false
 var gyro_test := false   # اختبار: يحقن قراءات جيرو وهمية
@@ -138,6 +139,7 @@ func _ready() -> void:
 		if a == "--dbgonline": dbg_online = true
 		if a == "--gyrotest": gyro_test = true; Settings.gyro = true; gyro_fake = Vector3(0, 0.5, 0.2)
 		if a.begins_with("--setlang="): dbg_setlang = int(a.substr(10))
+		if a.begins_with("--setlang2="): dbg_setlang2 = int(a.substr(11))
 		if a.begins_with("--tab="): _set_tab = int(a.substr(6))
 		if a.begins_with("--thumb="): thumb_path = a.substr(8)
 		if a.begins_with("--quality="): Settings.quality = int(a.substr(10))
@@ -240,7 +242,7 @@ func _seg(parent: Control, label_ar: String, opts: Callable, get_i: Callable, se
 		var b := Button.new(); b.custom_minimum_size = Vector2(0, 64); b.size_flags_stretch_ratio = 1.0; b.size_flags_horizontal = Control.SIZE_EXPAND_FILL; b.clip_text = false
 		b.add_theme_font_size_override("font_size", fs); UiTheme.juicy(b)
 		var idx := i
-		b.pressed.connect(func(): set_i.call(idx); _refresh())
+		b.pressed.connect(func(): set_i.call(idx); _refresh.call_deferred())
 		row.add_child(b); chips.append(b)
 	_rows.append({"lab": lab, "chips": chips, "ar": label_ar, "opts": opts, "get": get_i})
 
@@ -615,6 +617,11 @@ func _build_preview() -> void:
 	prev_world = Node3D.new(); prev_world.name = "Preview"; add_child(prev_world)
 	var m: Dictionary = maps[map_idx]
 	MapBuilder.build(m, prev_world)
+	# القائمة: خلفية أخف على الأجهزة الضعيفة (بلا ظلال/توهج، دقة أقل) حتى تبقى الواجهة سلسة
+	for n in prev_world.find_children("*", "DirectionalLight3D", true, false): (n as DirectionalLight3D).shadow_enabled = Settings.quality >= 3
+	for n in prev_world.find_children("*", "WorldEnvironment", true, false):
+		var we := n as WorldEnvironment
+		if we.environment != null: we.environment.glow_enabled = false; we.environment.ssao_enabled = false
 	prev_cam = Camera3D.new(); prev_cam.fov = 62.0; prev_cam.far = 600.0; prev_world.add_child(prev_cam); prev_cam.current = true
 	_orbit(0.0)
 	_menu_actors_build()
@@ -624,7 +631,7 @@ var _actors: Array = []
 func _menu_actors_build() -> void:
 	_actors.clear()
 	var m: Dictionary = maps[map_idx]; var W := float(m["W"]); var D := float(m["D"])
-	for k in 6:
+	for k in (6 if Settings.quality >= 2 else 4):
 		var t := k & 1; var b := Bot.new(); b.game = self; b.team = t; b.fname = "M%d" % k; b.net_ctrl = true; b.alive = true
 		prev_world.add_child(b)
 		var lane := (float(k / 2) - 1.0) * D * 0.09
@@ -669,8 +676,12 @@ func _cine(t: float) -> void:
 	prev_cam.position = Vector3(cos(a) * rad, h, sin(a) * rad); prev_cam.fov = lerpf(78.0, 58.0, k)
 	prev_cam.look_at(Vector3(0, 1.6 + k * 2.0, 0))
 
+var _q_sig := ""
 func _on_settings() -> void:
-	_refresh(); apply_quality()
+	_refresh()
+	# إعادة بناء المشهد/الدقة فقط إن تغيّر ما يخص الرسوميات (تبديل اللغة أو الصوت لا يعيد البناء)
+	var sig := "%d|%d|%d" % [Settings.quality, Settings.res_pct, Settings.fps_cap]
+	if sig != _q_sig: _q_sig = sig; apply_quality()
 
 func _fade_in(c: Control) -> void:
 	c.modulate.a = 0.0; var tw := c.create_tween(); tw.tween_property(c, "modulate:a", 1.0, 0.18)
@@ -1089,6 +1100,7 @@ func _apply_scale() -> void:
 	var sz := Vector2i(vp.get_visible_rect().size * vp.get_final_transform().get_scale()) if vp != null else Vector2i(1280, 720)
 	var base := Settings.res_scale(DisplayServer.window_get_size() if DisplayServer.window_get_size().x > 0 else sz)
 	var sc := clampf(base * (dyn_scale if Settings.res_pct == 0 else 1.0), 0.4, 1.0)
+	if state == "menu" and Settings.quality < 2: sc = minf(sc, 0.7)
 	if absf(vp.scaling_3d_scale - sc) > 0.004: vp.scaling_3d_scale = sc
 	var ms: int = [Viewport.MSAA_DISABLED, Viewport.MSAA_2X, Viewport.MSAA_4X][Settings.msaa(sc)]
 	if vp.msaa_3d != ms: vp.msaa_3d = ms
@@ -1228,9 +1240,9 @@ func _process(dt: float) -> void:
 		if dbg_settings and _set_ov != null: _open(_set_ov)
 		if dbg_sp and _sp_ov != null: _open(_sp_ov)
 		_mf += 1
-		if _mf == 8 and dbg_setlang >= 0:
+		if (_mf == 8 and dbg_setlang >= 0) or (_mf == 16 and dbg_setlang2 >= 0):
 			for r in _rows:
-				if r["ar"] == "اللغة": (r["chips"][dbg_setlang] as Button).pressed.emit(); break
+				if r["ar"] == "اللغة": (r["chips"][dbg_setlang if _mf == 8 else dbg_setlang2] as Button).pressed.emit(); break
 		if _mf == 14 and dbg_lanhost: lan.show_host()
 		if _mf == 14 and dbg_online: lan.show_online()
 		if _mf == 30 and dbg_intro_at < 0.0:
