@@ -41,6 +41,7 @@ static func ground_mat(th: Dictionary, mode := 0) -> ShaderMaterial:
 		_g_sh = Shader.new(); _g_sh.code = "shader_type spatial;\nrender_mode diffuse_lambert, specular_schlick_ggx;\n" + """
 uniform vec3 base : source_color = vec3(0.84, 0.7, 0.46);
 uniform float detail = 1.0;
+uniform bool lite = false;
 uniform int mode = 0;   // 0 رمل، 1 أسفلت، 2 ثلج، 3 عشب/تراب، 4 خرسانة
 varying vec3 wp; varying vec3 wn;
 """ + NOISE + """
@@ -57,6 +58,11 @@ vec2 vor(vec2 q){
 void vertex(){ wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; wn = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz); }
 void fragment(){
 	vec2 p = wp.xz;
+	if (lite) {   // مسار رخيص للأجهزة الضعيفة: ضوضاءان فقط
+		float l = noise(p * 0.02); float g = noise(p * 9.0);
+		vec3 c = base * (0.88 + l * 0.22 + (g - 0.5) * (mode == 1 ? 0.25 : 0.1));
+		ALBEDO = c; ROUGHNESS = 1.0; SPECULAR = 0.0;
+	} else {
 	float dist = length(VERTEX);
 	float fade = 1.0 - smoothstep(25.0, 110.0, dist);
 	float large = noise(p * 0.018); float mid = noise(p * 0.09 + 7.0);
@@ -115,11 +121,12 @@ void fragment(){
 	}
 	ALBEDO = col; ROUGHNESS = rough; SPECULAR = spec;
 	NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
+	}
 }"""
 	var mt := ShaderMaterial.new(); mt.shader = _g_sh
 	mt.set_shader_parameter("base", Color(th["ground"][0], th["ground"][1], th["ground"][2]))
 	mt.set_shader_parameter("detail", 1.0 if Settings.quality >= 2 else 0.0)
-	mt.set_shader_parameter("mode", mode)
+	mt.set_shader_parameter("mode", mode); mt.set_shader_parameter("lite", Settings.quality < 2)
 	return mt
 
 # kind: 0 طين/حجر رملي، 1 معدن صدئ، 2 خشب/لحاء، 3 صخر أحمر (هضاب)
@@ -129,6 +136,7 @@ static func solid_mat(col: Color, kind: int, edge := 1.0, dust := Color(0.84, 0.
 uniform vec3 base : source_color = vec3(0.7, 0.6, 0.45);
 uniform vec3 sand : source_color = vec3(0.84, 0.7, 0.46);
 uniform float rustk = 0.4;
+uniform bool lite = false;
 uniform int win = 0;
 uniform int kind = 0;
 uniform float edge = 1.0;
@@ -140,6 +148,12 @@ void vertex(){
 	yr = vec2(MODEL_MATRIX[3].y - sc.y * 0.5, MODEL_MATRIX[3].y + sc.y * 0.5);
 }
 void fragment(){
+	if (lite) {
+		float n = noise(wp.xz * 0.35 + wp.y * 0.2); float up0 = clamp(wn.y, 0.0, 1.0);
+		vec3 c = mix(base * (0.9 + n * 0.2), sand * 0.92, up0 * 0.5);
+		c *= mix(0.75, 1.0, smoothstep(0.0, 0.8, wp.y));
+		ALBEDO = c; ROUGHNESS = 1.0; SPECULAR = 0.0;
+	} else {
 	vec2 xz = wp.xz + wp.y * 0.37;
 	float n1 = noise(xz * 0.35); float n2 = noise(xz * 2.3 + wp.y * 1.7); float n3 = noise((xz + wp.y) * 9.0);
 	vec3 col = base * (0.88 + n1 * 0.22 + n2 * 0.1 + (n3 - 0.5) * 0.09);
@@ -204,9 +218,10 @@ void fragment(){
 	}
 	col *= mix(0.7, 1.0, smoothstep(0.0, 0.8, wp.y + thin));
 	ALBEDO = col; ROUGHNESS = rough; METALLIC = met; SPECULAR = 0.2; EMISSION = emit;
+	}
 }"""
 	var m := ShaderMaterial.new(); m.shader = _s_sh
-	m.set_shader_parameter("base", col); m.set_shader_parameter("kind", kind); m.set_shader_parameter("edge", edge); m.set_shader_parameter("sand", dust); m.set_shader_parameter("rustk", rust)
+	m.set_shader_parameter("base", col); m.set_shader_parameter("kind", kind); m.set_shader_parameter("edge", edge); m.set_shader_parameter("sand", dust); m.set_shader_parameter("rustk", rust); m.set_shader_parameter("lite", Settings.quality < 2)
 	return m
 
 static func water_mat() -> ShaderMaterial:
