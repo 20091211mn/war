@@ -1,7 +1,15 @@
 extends Node
 # إعدادات اللعبة: الجودة (0..4) واللغة (0 عربي، 1 English، 2 Español) — تُحفظ في user://settings.cfg
 signal changed
-var quality := (2 if OS.has_feature("mobile") else 3)
+var quality := _default_quality()
+
+# جودة افتراضية حسب كرت الشاشة عند أول تشغيل (قبل أي حفظ): أجهزة الفئة الاقتصادية (Adreno 5xx/6[0-2]x، Mali-G5x/G6x/G7[0-2]، Mali-T/4xx، PowerVR) → منخفضة
+static func _default_quality() -> int:
+	if not OS.has_feature("mobile"): return 3
+	var g := RenderingServer.get_video_adapter_name().to_lower() if DisplayServer.get_name() != "headless" else ""
+	var rx := RegEx.new()
+	rx.compile("adreno.*\\b(3\\d\\d|4\\d\\d|5\\d\\d|60\\d|61\\d|62\\d)\\b|mali-?(4\\d\\d|t\\d+|g5\\d|g31|g51|g52|g57|g68|g71|g72)\\b|powervr|videocore")
+	return 1 if rx.search(g) != null else 2
 var lang := 0
 var auto_update := true
 var sens := 1.0          # حساسية النظر (0.3..2.5)
