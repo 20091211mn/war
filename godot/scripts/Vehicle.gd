@@ -142,10 +142,53 @@ func setup(g: Node, t: int, x: float, z: float, hd: float) -> void:
 	vis = Node3D.new(); add_child(vis)
 	if t == 0: _build_jeep()
 	else: _build_tank()
+	_merge_all()
 	_build_fx()
 	_set_team_color()
 
 # ---------------------------------------------------------------- مواد ونماذج
+# دمج الأجزاء الثابتة داخل ميش واحد بألوان رؤوس (يقلّل نداءات الرسم من ~100 إلى ~15 لكل مركبة)
+func _merge(parent: Node3D, shared: StandardMaterial3D) -> void:
+	var st := SurfaceTool.new(); st.begin(Mesh.PRIMITIVE_TRIANGLES); var n := 0
+	for c in parent.get_children():
+		var mi := c as MeshInstance3D
+		if mi == null or mi.mesh == null or mi.get_child_count() > 0 or mi == flash_m: continue
+		var m := mi.material_override as StandardMaterial3D
+		if m == null or m.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED or m.emission_enabled or m.cull_mode != BaseMaterial3D.CULL_BACK or team_mats.has(m): continue
+		var animated := false
+		for r in ribs:
+			if r[0] == mi: animated = true
+		if animated: continue
+		var arr := mi.mesh.surface_get_arrays(0)
+		var vs: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]; var ns: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+		var idx = arr[Mesh.ARRAY_INDEX]
+		var tf := mi.transform; var nb := tf.basis.inverse().transposed()
+		var base := m.albedo_color
+		var cnt: int = idx.size() if idx != null else vs.size()
+		for k in cnt:
+			var i: int = idx[k] if idx != null else k
+			st.set_color(base); st.set_normal((nb * ns[i]).normalized()); st.add_vertex(tf * vs[i])
+		n += 1
+		for e in range(mats.size() - 1, -1, -1):
+			if mats[e][0] == m: mats.remove_at(e); break
+		mi.queue_free()
+	if n == 0: return
+	var out := MeshInstance3D.new(); out.mesh = st.commit(); out.material_override = shared
+	if Settings.quality < 2: out.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(out)
+
+func _merge_all() -> void:
+	var sh := StandardMaterial3D.new(); sh.vertex_color_use_as_albedo = true; sh.roughness = 0.6; sh.metallic = 0.2
+	mats.append([sh, Color.WHITE])
+	var targets: Array = [vis]
+	if turret != null: targets.append(turret)
+	if gun_slide != null: targets.append(gun_slide)
+	if mg_pitch != null: targets.append(mg_pitch)
+	for w in wheels:
+		for nd in [w[0], w[1]]:
+			if not targets.has(nd): targets.append(nd)
+	for t in targets: _merge(t, sh)
+
 func _mat(c: Color, unlit: bool) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new(); m.albedo_color = c; m.roughness = 0.75; m.metallic = 0.12
 	if unlit: m.emission_enabled = true; m.emission = c; m.emission_energy_multiplier = 1.6

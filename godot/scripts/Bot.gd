@@ -87,6 +87,28 @@ func _prim(parent: Node3D, kind: String, size: Vector3, pos: Vector3, c: Color, 
 	mi.scale = Vector3(size.x, size.y * 0.5, size.z) if kind == "capsule" else size
 	mi.position = pos; mi.rotation = rot; mi.material_override = _mat(c, rough, metal); parent.add_child(mi); return mi
 
+# دمج الأجزاء الثابتة لكل مفصل في ميش واحد بألوان رؤوس: ~70 ميش → ~10 لكل جندي (يخفّض نداءات الرسم كثيراً)
+static var _merged_mat: StandardMaterial3D
+func _merge(parent: Node3D) -> void:
+	if _merged_mat == null:
+		_merged_mat = StandardMaterial3D.new(); _merged_mat.vertex_color_use_as_albedo = true; _merged_mat.roughness = 0.8; _merged_mat.metallic = 0.05
+	var st := SurfaceTool.new(); st.begin(Mesh.PRIMITIVE_TRIANGLES); var n := 0
+	for c in parent.get_children():
+		var mi := c as MeshInstance3D
+		if mi == null or mi.mesh == null or mi.get_child_count() > 0: continue
+		var m := mi.material_override as StandardMaterial3D
+		if m == null or m.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED or m.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED: continue
+		var arr := mi.mesh.surface_get_arrays(0)
+		var vs: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]; var ns: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]; var idx = arr[Mesh.ARRAY_INDEX]
+		var tf := mi.transform; var nb := tf.basis.inverse().transposed()
+		var cnt: int = idx.size() if idx != null else vs.size()
+		for k in cnt:
+			var i: int = idx[k] if idx != null else k
+			st.set_color(m.albedo_color); st.set_normal((nb * ns[i]).normalized()); st.add_vertex(tf * vs[i])
+		n += 1; mi.queue_free()
+	if n == 0: return
+	var out := MeshInstance3D.new(); out.mesh = st.commit(); out.material_override = _merged_mat; parent.add_child(out)
+
 func _pivot(parent: Node3D, pos: Vector3) -> Node3D:
 	var n := Node3D.new(); n.position = pos; parent.add_child(n); return n
 
@@ -136,6 +158,9 @@ func _build_model() -> void:
 	arm_l = _prim(model, "capsule", Vector3(0.085, 0.3, 0.085), Vector3.ZERO, uni); fore_l = _prim(model, "capsule", Vector3(0.07, 0.28, 0.07), Vector3.ZERO, uni * 0.95)
 	far_hide = [arm_r, arm_l, fore_r, fore_l, gunn] + legs
 	_build_gun()
+	_merge(torso); _merge(rh); _merge(lh)
+	for hp_ in legs: _merge(hp_)
+	for kn_ in knees: _merge(kn_)
 
 func _build_gun() -> void:
 	gun_key = wi
@@ -164,6 +189,7 @@ func _build_gun() -> void:
 		var q := QuadMesh.new(); q.size = Vector2(0.3, 0.3); var qi := MeshInstance3D.new(); qi.mesh = q; qi.material_override = fm; qi.rotation.z = r; qi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF; flash.add_child(qi)
 	flash.visible = false
 	rh.position = Vector3(0, -0.09, 0.0); lh.position = Vector3(0, -0.06, -L * 0.5 - 0.02)
+	_merge(gunn)
 
 func _puppet(dt: float) -> void:
 	if gun_key != wi and gunn != null: _build_gun()

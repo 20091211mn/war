@@ -1246,6 +1246,20 @@ func _physics_process(dt: float) -> void:
 		if dbg_board and test_frames == 100:
 			for i in fighters.size(): fighters[i].kills = (i * 7) % 11; fighters[i].deaths = (i * 5) % 7
 			toggle_board(1)
+		if test_frames == 149 and OS.get_cmdline_user_args().has("--perf"):
+			var cnt := {}
+			var stack: Array = [self]
+			while not stack.is_empty():
+				var nd: Node = stack.pop_back()
+				if nd is MeshInstance3D or nd is MultiMeshInstance3D:
+					var an: Node = nd
+					while an.get_parent() != null and an.get_parent() != world and an.get_parent() != self: an = an.get_parent()
+					var key := str(an.get_class()) + ":" + str(an.name).substr(0, 14) + (":" + str(an.get_script().resource_path.get_file()) if an.get_script() != null else "")
+					cnt[key] = int(cnt.get(key, 0)) + 1
+				stack.append_array(nd.get_children())
+			var keys := cnt.keys(); keys.sort_custom(func(a, b): return cnt[a] > cnt[b])
+			for k in keys.slice(0, 8): print("  MESHES ", k, " ", cnt[k])
+			print("PERF map=", map_idx, " draws=", int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)), " objs=", int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)), " prims=", int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)), " nodes=", int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)), " phys=", int(Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS)))
 		if test_frames == 150:
 			get_viewport().get_texture().get_image().save_png(shot_path); print("SHOT saved"); get_tree().quit(0)
 		return
