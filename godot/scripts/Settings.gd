@@ -61,9 +61,14 @@ func t(ar: String) -> String:
 	return _tab[ar][lang - 1]
 
 # إعدادات الرسم حسب الجودة
-func res_scale() -> float: return [0.6, 0.75, 0.9, 1.0, 1.0][quality] if res_pct == 0 else [0.5, 0.75, 1.0][res_pct - 1]
+# دقة العرض ثلاثية الأبعاد: في الوضع التلقائي تُحسب من «ميزانية بكسلات» لكل جودة (مليون بكسل) فلا تُرسم بكسلات زائدة على الشاشات العالية الدقة
+const PIXEL_BUDGET := [0.55, 0.9, 1.3, 1.9, 2.8]
+func res_scale(sz := Vector2i(1280, 720)) -> float:
+	if res_pct != 0: return [0.5, 0.75, 1.0][res_pct - 1]
+	var px := float(maxi(sz.x * sz.y, 1)) / 1.0e6
+	return clampf(sqrt(PIXEL_BUDGET[quality] / px), 0.5, 1.0)
 func shadows() -> bool: return quality >= 2
-func msaa() -> int: return 0 if quality < 2 else (2 if quality >= 4 else 1)
+func msaa(scale := 1.0) -> int: return 0 if (quality < 2 or scale < 0.85) else (2 if quality >= 4 else 1)
 func fog_k() -> float: return [0.45, 0.7, 1.0, 1.5, 2.2][quality]
 func trees() -> int: return [0, 0, 10, 28, 60][quality]
 func windows() -> int: return [0, 0, 0, 150, 300][quality]

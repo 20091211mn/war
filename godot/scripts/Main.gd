@@ -108,6 +108,7 @@ func _notification(what: int) -> void:
 			if not any: _confirm_exit()
 
 func _ready() -> void:
+	get_viewport().size_changed.connect(_apply_scale)
 	var f := FileAccess.open("res://data/game.json", FileAccess.READ)
 	data = JSON.parse_string(f.get_as_text())
 	maps = data["maps"]; weapons = data["weapons"]
@@ -1079,10 +1080,34 @@ func _end_match() -> void:
 	toggle_board(1); board_title.text = over_label.text
 
 # ---------------------------------------------------------------- الجودة والمشاهد
+# دقة ديناميكية: في الوضع التلقائي تُخفَّض الدقة عند هبوط الإطارات وتُرفع عند الفائض (لا بكسلات زائدة تسبّب لاق)
+var dyn_scale := 1.0
+var _dyn_t := 0.0
+var _dyn_frames := 0
+func _apply_scale() -> void:
+	var vp := get_viewport()
+	var sz := Vector2i(vp.get_visible_rect().size * vp.get_final_transform().get_scale()) if vp != null else Vector2i(1280, 720)
+	var base := Settings.res_scale(DisplayServer.window_get_size() if DisplayServer.window_get_size().x > 0 else sz)
+	var sc := clampf(base * (dyn_scale if Settings.res_pct == 0 else 1.0), 0.4, 1.0)
+	if absf(vp.scaling_3d_scale - sc) > 0.004: vp.scaling_3d_scale = sc
+	var ms: int = [Viewport.MSAA_DISABLED, Viewport.MSAA_2X, Viewport.MSAA_4X][Settings.msaa(sc)]
+	if vp.msaa_3d != ms: vp.msaa_3d = ms
+
+func _dyn_update(dt: float) -> void:
+	if Settings.res_pct != 0 or state != "play" or DisplayServer.get_name() == "headless": _dyn_t = 0.0; _dyn_frames = 0; return
+	_dyn_t += dt; _dyn_frames += 1
+	if _dyn_t < 0.6: return
+	var fps := float(_dyn_frames) / _dyn_t; _dyn_t = 0.0; _dyn_frames = 0
+	var hz := DisplayServer.screen_get_refresh_rate(); if hz <= 0.0: hz = 60.0
+	var target := minf(float(Settings.FPS_CAPS[Settings.fps_cap]), hz)
+	var old := dyn_scale
+	if fps < target * 0.88: dyn_scale = maxf(dyn_scale - 0.07, 0.6)
+	elif fps > target * 0.97 and dyn_scale < 1.0: dyn_scale = minf(dyn_scale + 0.025, 1.0)
+	if dyn_scale != old: _apply_scale()
+
 func apply_quality() -> void:
 	var vp := get_viewport()
-	vp.scaling_3d_scale = Settings.res_scale()
-	vp.msaa_3d = [Viewport.MSAA_DISABLED, Viewport.MSAA_2X, Viewport.MSAA_4X][Settings.msaa()]
+	_apply_scale()
 	vp.use_taa = false
 	if map_info.has("sun") and is_instance_valid(map_info["sun"]) and world != null:
 		(map_info["sun"] as DirectionalLight3D).shadow_enabled = Settings.shadows()
@@ -1170,6 +1195,7 @@ func _tree_points(m: Dictionary, nt: int) -> Array:
 
 # ---------------------------------------------------------------- الحلقة
 func _process(dt: float) -> void:
+	_dyn_update(dt)
 	if gyro_test and player != null and Engine.get_process_frames() % 60 == 0: print("GYROTEST yaw=", snappedf(player.yaw, 0.01), " pitch=", snappedf(player.pitch, 0.01))
 	if board_root != null and board_root.visible and state == "play":
 		board_t += dt
@@ -1259,7 +1285,7 @@ func _physics_process(dt: float) -> void:
 				stack.append_array(nd.get_children())
 			var keys := cnt.keys(); keys.sort_custom(func(a, b): return cnt[a] > cnt[b])
 			for k in keys.slice(0, 8): print("  MESHES ", k, " ", cnt[k])
-			print("PERF map=", map_idx, " draws=", int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)), " objs=", int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)), " prims=", int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)), " nodes=", int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)), " phys=", int(Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS)))
+			print("PERF scale=", snappedf(get_viewport().scaling_3d_scale, 0.01), " msaa=", get_viewport().msaa_3d, " map=", map_idx, " draws=", int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)), " objs=", int(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)), " prims=", int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)), " nodes=", int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)), " phys=", int(Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS)))
 		if test_frames == 150:
 			get_viewport().get_texture().get_image().save_png(shot_path); print("SHOT saved"); get_tree().quit(0)
 		return
