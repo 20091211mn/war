@@ -30,11 +30,12 @@ const EYE := 1.62
 
 func setup_weapon(i: int) -> void:
 	wi = i
-	var w: Dictionary = game.weapons[i]
+	var w: Dictionary = game.mod_weapon(i) if self == game.player else game.weapons[i]
 	ammo = int(w["mag"]); reserve = int(w["mag"]) * int(w["mags"])
 	cd = 0.0; reload_t = 0.0
 
 func weapon() -> Dictionary:
+	if self == game.player: return game.mod_weapon(wi)
 	return game.weapons[wi]
 
 func eye_pos() -> Vector3:
@@ -73,7 +74,7 @@ func try_fire(origin: Vector3, dir: Vector3, ads: bool, extra_spread: float) -> 
 	var w := weapon()
 	ammo -= 1; cd = 60.0 / float(w["rpm"])
 	recoil = minf(1.0, recoil + 0.35)
-	var spread: float = (float(w["ads"]) if ads else float(w["hip"])) + extra_spread + recoil * 0.004
+	var spread: float = (float(w["ads"]) if ads else float(w["hip"])) + extra_spread + recoil * 0.004 * float(w.get("recm", 1.0))
 	for p in int(w["pellets"]):
 		var d := dir
 		var right := dir.cross(Vector3.UP).normalized()

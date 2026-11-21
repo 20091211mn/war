@@ -234,6 +234,9 @@ static const TrE TR_TAB[]={
 {"حجم +","Size +","Tamaño +"},
 {"إعادة الضبط","Reset","Restablecer"},
 {"تم","Done","Hecho"},
+{"كاتم صوت (ارتداد أقل)","Suppressor (less recoil)","Silenciador (menos retroceso)"},
+{"منظار (تقريب وتصويب أدق)","Scope (more zoom, tighter aim)","Mira (más zoom y precisión)"},
+{"مخزن موسّع (+40% ذخيرة)","Extended mag (+40% ammo)","Cargador extendido (+40% munición)"},
 {"توفير البطارية (30 إطار)","Battery saver (30 FPS)","Ahorro de batería (30 FPS)"},
 {"انقطع الاتصال… إعادة المحاولة","Connection lost… retrying","Conexión perdida… reintentando"},
 {"التحديث التلقائي","Auto update","Actualización automática"},
@@ -260,4 +263,4 @@ static const TrE TR_TAB[]={
 {"Español","Español","Español"},
 {"تم حفظ الإعدادات","Settings saved","Ajustes guardados"},
 };
-static const int TR_N=257;
+static const int TR_N=260;

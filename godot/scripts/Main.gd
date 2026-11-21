@@ -313,6 +313,9 @@ func _build_settings_screen() -> VBoxContainer:
 	var g: VBoxContainer = _set_pages[0]
 	_seg(g, "اللغة", func(): return Settings.LANGS, func(): return Settings.lang, func(i): Settings.lang = i; Settings.save())
 	_slider(g, "مستوى الصوت", 0.0, 100.0, 5.0, func(): return Settings.volume * 100.0, func(v): Settings.volume = v / 100.0; Settings.save(), "%.0f%%")
+	for at in [["كاتم صوت (ارتداد أقل)", 1], ["منظار (تقريب وتصويب أدق)", 2], ["مخزن موسّع (+40% ذخيرة)", 4]]:
+		var bit: int = at[1]
+		_toggle(g, at[0], func(): return (Settings.attach & bit) != 0, func(b): Settings.attach = (Settings.attach | bit) if b else (Settings.attach & ~bit); _wmod.clear())
 	_toggle(g, "التحديث التلقائي", func(): return Settings.auto_update, func(b): Settings.auto_update = b)
 	_update_row(g)
 	# ---- الرسوميات ----
@@ -854,6 +857,22 @@ func switch_weapon(f: Fighter, d: int) -> void:
 	if f is Player: (f as Player).rebuild_viewmodel(); hud.say(Settings.t(f.weapon()["name"]))
 
 # ---------------------------------------------------------------- الإطلاق والضرر
+# ملحقات السلاح للاعب المحلي: كاتم (ارتداد أقل)، منظار (تقريب أكبر وتصويب أدق)، مخزن موسّع (+40% ذخيرة) — لا تغيّر الضرر فتبقى المباريات عادلة
+var _wmod := {}
+func mod_weapon(i: int) -> Dictionary:
+	var a := Settings.attach
+	if a == 0: return weapons[i]
+	var key := i * 8 + a
+	if _wmod.has(key): return _wmod[key]
+	var w: Dictionary = (weapons[i] as Dictionary).duplicate()
+	var k := String(w["kind"]); var heavy := k == "launcher" or k == "shotgun"
+	if a & 1 and not heavy: w["recm"] = 0.65; w["hip"] = float(w["hip"]) * 0.9
+	if a & 2 and not heavy:
+		w["ads"] = float(w["ads"]) * 0.75
+		if float(w["zoom"]) < 2.0: w["zoom"] = float(w["zoom"]) * 1.35
+	if a & 4 and k != "launcher": w["mag"] = int(ceil(float(w["mag"]) * 1.4))
+	_wmod[key] = w; return w
+
 func hitscan(shooter: Fighter, from: Vector3, dir: Vector3, w: Dictionary, muz := Vector3.INF) -> void:
 	if lan.role == 2 and shooter == player: lan.send_fire(from, dir, shooter.wi)   # العميل: المضيف يحسم الضرر
 	if lan.role == 1: lan.send_fx(fighters.find(shooter), from, dir)

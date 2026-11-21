@@ -24,6 +24,7 @@ var volume := 1.0
 var fps_cap := 1         # 0:30  1:60  2:90  3:120
 var btn_scale := 1.0     # حجم أزرار اللمس
 var btn_pos := {}        # اسم الزر -> [x,y] كنسبة من الشاشة (تخصيص المواضع)
+var attach := 0          # ملحقات السلاح (بتّات): 1 كاتم، 2 منظار، 4 مخزن موسّع
 var battery := false     # توفير البطارية: 30 إطار، دقة أقل، بلا ظلال
 var res_pct := 0         # 0 تلقائي حسب الجودة، 1:50% 2:75% 3:100%
 var show_fps := false
@@ -46,6 +47,7 @@ func _ready() -> void:
 		fov = clampf(float(c.get_value("g", "fov", 75.0)), 60.0, 100.0); invert_y = bool(c.get_value("g", "invert_y", false))
 		gyro = bool(c.get_value("g", "gyro", false)); gyro_sens = clampf(float(c.get_value("g", "gyro_sens", 1.0)), 0.3, 3.0); gyro_flip = bool(c.get_value("g", "gyro_flip", false)); gyro_mode = clampi(int(c.get_value("g", "gyro_mode", 0)), 0, 1)
 		volume = clampf(float(c.get_value("g", "volume", 1.0)), 0.0, 1.0); fps_cap = clampi(int(c.get_value("g", "fps_cap", 1)), 0, 3)
+		attach = clampi(int(c.get_value("g", "attach", 0)), 0, 7)
 		battery = bool(c.get_value("g", "battery", false))
 		btn_scale = clampf(float(c.get_value("g", "btn_scale", 1.0)), 0.7, 1.5)
 		var bp = c.get_value("g", "btn_pos", {})
@@ -63,7 +65,7 @@ func apply_runtime() -> void:
 func save() -> void:
 	var c := ConfigFile.new()
 	c.set_value("g", "quality", quality); c.set_value("g", "lang", lang); c.set_value("g", "auto_update", auto_update)
-	for k in ["sens", "ads_sens", "fov", "invert_y", "gyro", "gyro_sens", "gyro_flip", "gyro_mode", "volume", "fps_cap", "res_pct", "show_fps", "servers", "btn_scale", "btn_pos", "battery"]: c.set_value("g", k, get(k))
+	for k in ["sens", "ads_sens", "fov", "invert_y", "gyro", "gyro_sens", "gyro_flip", "gyro_mode", "volume", "fps_cap", "res_pct", "show_fps", "servers", "btn_scale", "btn_pos", "battery", "attach"]: c.set_value("g", k, get(k))
 	c.save(CFG); apply_runtime()
 	_apply_locale(); changed.emit()
 
