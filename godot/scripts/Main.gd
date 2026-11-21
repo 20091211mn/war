@@ -76,6 +76,7 @@ var menu_shot := ""
 var dbg_picker := false
 var dbg_settings := false
 var dbg_sp := false
+var dbg_editui := false
 var dbg_setlang := -1
 var dbg_setlang2 := -1
 var dbg_lanhost := false
@@ -151,6 +152,7 @@ func _ready() -> void:
 		if a == "--fire": dbg_fire = true
 		if a == "--botcam": dbg_botcam = true
 		if a == "--touch": show_touch = true
+		if a == "--editui": dbg_editui = true
 		if a.begins_with("--vshot="): veh_shot = a.substr(8)
 		if a.begins_with("--vehtest="): veh_test = int(a.substr(10))
 		if a == "--grentest": gren_test = true
@@ -331,6 +333,8 @@ func _build_settings_screen() -> VBoxContainer:
 	var cb := Button.new(); cb.custom_minimum_size = Vector2(0, 56); cb.add_theme_font_size_override("font_size", 22); UiTheme.style_ghost(cb); UiTheme.juicy(cb); cb.text = Settings.t("معايرة الجيروسكوب (ثبّت الهاتف ثانية)")
 	cb.pressed.connect(func(): Gyro.calibrate(); cb.text = Settings.t("جارٍ المعايرة… ثبّت الهاتف"); get_tree().create_timer(1.1).timeout.connect(func(): cb.text = Settings.t("تمت المعايرة")))
 	c.add_child(cb)
+	var eb := Button.new(); eb.custom_minimum_size = Vector2(0, 56); eb.add_theme_font_size_override("font_size", 22); UiTheme.style_ghost(eb); UiTheme.juicy(eb); eb.text = Settings.t("تعديل مواضع وحجم الأزرار")
+	eb.pressed.connect(start_layout_edit); c.add_child(eb); _edit_btn = eb
 	return st
 
 func _update_row(vb: Control) -> void:
@@ -578,6 +582,7 @@ func _refresh() -> void:
 	var rtl0 := Settings.lang == 0
 	for mr in _menu_rows:
 		var ml: Label = mr["lab"]; ml.text = Settings.t(mr["ar"]); ml.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	if _edit_btn != null: _edit_btn.text = Settings.t("تعديل مواضع وحجم الأزرار")
 	if _ver_lab != null: _ver_lab.text = "%s  %s" % [Settings.t("رقم الإصدار"), Updater.version()]; _ver_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	for sd in _sliders:
 		(sd["lab"] as Label).text = Settings.t(sd["ar"]); var sv: float = sd["get"].call(); (sd["sl"] as HSlider).set_value_no_signal(sv); (sd["vl"] as Label).text = (sd["fmt"] as String) % sv
@@ -677,6 +682,15 @@ func _cine(t: float) -> void:
 	prev_cam.look_at(Vector3(0, 1.6 + k * 2.0, 0))
 
 var _q_sig := ""
+var _edit_btn: Button
+var _edit_prev := {}
+func start_layout_edit() -> void:
+	_edit_prev = {"menu": menu_root.visible, "pause": pause_root.visible, "hud": hud.visible}
+	menu_root.visible = false; pause_root.visible = false; hud.start_edit()
+func finish_layout_edit() -> void:
+	menu_root.visible = _edit_prev.get("menu", true); pause_root.visible = _edit_prev.get("pause", false); hud.visible = _edit_prev.get("hud", false)
+	hud.queue_redraw()
+
 func _on_settings() -> void:
 	_refresh()
 	# إعادة بناء المشهد/الدقة فقط إن تغيّر ما يخص الرسوميات (تبديل اللغة أو الصوت لا يعيد البناء)
@@ -1243,6 +1257,7 @@ func _process(dt: float) -> void:
 		if (_mf == 8 and dbg_setlang >= 0) or (_mf == 16 and dbg_setlang2 >= 0):
 			for r in _rows:
 				if r["ar"] == "اللغة": (r["chips"][dbg_setlang if _mf == 8 else dbg_setlang2] as Button).pressed.emit(); break
+		if _mf == 14 and dbg_editui: Settings.btn_pos["fire"] = [0.5, 0.5]; start_layout_edit()
 		if _mf == 14 and dbg_lanhost: lan.show_host()
 		if _mf == 14 and dbg_online: lan.show_online()
 		if _mf == 30 and dbg_intro_at < 0.0:

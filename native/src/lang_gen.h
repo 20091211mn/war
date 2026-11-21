@@ -228,6 +228,13 @@ static const TrE TR_TAB[]={
 {"جارٍ المعايرة… ثبّت الهاتف","Calibrating… hold still","Calibrando… quieto"},
 {"تمت المعايرة","Calibrated","Calibrado"},
 {"عكس اتجاه الجيروسكوب","Invert gyroscope direction","Invertir giroscopio"},
+{"تعديل مواضع وحجم الأزرار","Edit button layout and size","Editar botones y tamaño"},
+{"اسحب الأزرار لتغيير مواضعها","Drag buttons to move them","Arrastra los botones para moverlos"},
+{"حجم −","Size −","Tamaño −"},
+{"حجم +","Size +","Tamaño +"},
+{"إعادة الضبط","Reset","Restablecer"},
+{"تم","Done","Hecho"},
+{"انقطع الاتصال… إعادة المحاولة","Connection lost… retrying","Conexión perdida… reintentando"},
 {"التحديث التلقائي","Auto update","Actualización automática"},
 {"مفعّل","On","Activado"},
 {"متوقف","Off","Desactivado"},
@@ -252,4 +259,4 @@ static const TrE TR_TAB[]={
 {"Español","Español","Español"},
 {"تم حفظ الإعدادات","Settings saved","Ajustes guardados"},
 };
-static const int TR_N=249;
+static const int TR_N=256;

@@ -267,7 +267,11 @@ func n_restart(slot: int, c: Dictionary) -> void:
 	game.start_lan_match(2, slot, c)
 
 # ------------------------------------------------------------ عميل
+var _last_ip := ""
+var _retry := 0
+const MAX_RETRY := 5
 func join(ip: String) -> void:
+	_last_ip = ip
 	leave()
 	var pr := ENetMultiplayerPeer.new()
 	var err := pr.create_client(ip, GPORT)
@@ -278,13 +282,32 @@ func join(ip: String) -> void:
 		if role == 2 and pr.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTING: _on_failed())
 
 func _on_connected() -> void:
-	if role == 2: rpc_id(1, "n_hello", 1)
+	if role == 2: _retry = 0; rpc_id(1, "n_hello", 1)
 
 func _on_failed() -> void:
-	status = Settings.t("تعذّر الاتصال"); leave(); _show_status()
+	if _retry > 0 and _try_reconnect(): return
+	var was_retry := _retry > 0
+	status = Settings.t("تعذّر الاتصال"); leave(); _retry = 0; _show_status()
+	if was_retry and game.state != "menu":
+		game._show_menu(); show_join(); _show_status()
+
+# إعادة اتصال تلقائية (حتى 5 محاولات) إن انقطع الاتصال أثناء المباراة
+func _try_reconnect() -> bool:
+	if _last_ip == "" or _retry >= MAX_RETRY: return false
+	_retry += 1
+	var msg := "%s (%d/%d)" % [Settings.t("انقطع الاتصال… إعادة المحاولة"), _retry, MAX_RETRY]
+	status = msg; _show_status(); if game.hud != null: game.hud.say(msg)
+	var ip := _last_ip; var n := _retry
+	leave()
+	get_tree().create_timer(3.0).timeout.connect(func():
+		if _retry == n and role == 0 and game.state != "menu":
+			join(ip); _retry = n)
+	return true
 
 func _on_lost() -> void:
-	status = Settings.t("انقطع الاتصال بالمضيف"); var was := role == 2; leave()
+	var was := role == 2
+	if was and game.state != "menu" and _try_reconnect(): return
+	status = Settings.t("انقطع الاتصال بالمضيف"); leave(); _retry = 0
 	if was and game.state != "menu": game._show_menu(); show_join(); _show_status()
 
 func leave() -> void:

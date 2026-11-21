@@ -35,6 +35,17 @@ func add_feed(s: String) -> void:
 
 # ---- مناطق الأزرار (نسبة إلى حجم الشاشة) ----
 func _btn(name: String) -> Dictionary:
+	var d := _btn_def(name)
+	var alias := {"tup": "sprint", "tdn": "crouch"}
+	var key: String = alias.get(name, name)
+	if d["r"] == 0.0: return d
+	var s := size
+	var o = Settings.btn_pos.get(key)
+	if o is Array and o.size() == 2: d["c"] = Vector2(float(o[0]) * s.x, float(o[1]) * s.y)
+	d["r"] = float(d["r"]) * Settings.btn_scale
+	return d
+
+func _btn_def(name: String) -> Dictionary:
 	var s := size
 	match name:
 		"fire": return {"c": Vector2(s.x - 120, s.y - 120), "r": 68.0}
@@ -76,7 +87,42 @@ func _hit(p: Vector2) -> String:
 		if p.distance_to(b["c"]) <= float(b["r"]) * 1.25: return n
 	return ""
 
+# ---- وضع تعديل مواضع الأزرار: اسحب أي زر لتحريكه، وأزرار الشريط السفلي للحجم والإعادة ----
+var edit_mode := false
+var _edit_drag := ""
+var _edit_bar: HBoxContainer
+func start_edit() -> void:
+	edit_mode = true; visible = true; mouse_filter = Control.MOUSE_FILTER_STOP; _edit_drag = ""
+	if _edit_bar == null:
+		_edit_bar = HBoxContainer.new(); _edit_bar.add_theme_constant_override("separation", 12); add_child(_edit_bar)
+		for d in [["حجم −", func(): Settings.btn_scale = maxf(0.7, Settings.btn_scale - 0.1); Settings.save()], ["حجم +", func(): Settings.btn_scale = minf(1.5, Settings.btn_scale + 0.1); Settings.save()], ["إعادة الضبط", func(): Settings.btn_pos = {}; Settings.btn_scale = 1.0; Settings.save()], ["تم", func(): stop_edit()]]:
+			var b := Button.new(); b.custom_minimum_size = Vector2(150, 60); b.add_theme_font_size_override("font_size", 22); b.focus_mode = Control.FOCUS_NONE; UiTheme.juicy(b)
+			b.text = Settings.t(d[0]); var cb: Callable = d[1]; b.pressed.connect(func(): cb.call(); queue_redraw()); _edit_bar.add_child(b)
+	_edit_bar.visible = true; _edit_bar.layout_direction = Control.LAYOUT_DIRECTION_LTR
+	_edit_bar.position = Vector2(size.x * 0.5 - 330, size.y * 0.2)
+	queue_redraw()
+func stop_edit() -> void:
+	edit_mode = false; mouse_filter = Control.MOUSE_FILTER_IGNORE; if _edit_bar != null: _edit_bar.visible = false
+	game.finish_layout_edit()
+func _edit_input(ev: InputEvent) -> void:
+	var pos := Vector2.ZERO; var kind := 0
+	if ev is InputEventMouseButton and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT: pos = (ev as InputEventMouseButton).position; kind = 1 if ev.pressed else 3
+	elif ev is InputEventMouseMotion and (ev.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0: pos = (ev as InputEventMouseMotion).position; kind = 2
+	else: return
+	if kind == 1:
+		_edit_drag = ""; var best := 1e9
+		for n in BTNS:
+			var b := _btn(n); var dd := pos.distance_to(b["c"])
+			if dd <= float(b["r"]) * 1.3 and dd < best: best = dd; _edit_drag = n
+	elif kind == 2 and _edit_drag != "":
+		var m := 30.0; var q := Vector2(clampf(pos.x, m, size.x - m), clampf(pos.y, m, size.y - m))
+		Settings.btn_pos[_edit_drag] = [q.x / size.x, q.y / size.y]; queue_redraw()
+	elif kind == 3:
+		if _edit_drag != "": Settings.save()
+		_edit_drag = ""
+
 func _input(ev: InputEvent) -> void:
+	if edit_mode: _edit_input(ev); return
 	if game == null or game.state != "play" or game.overlay: return
 	var inp: Dictionary = game.inp
 	if ev is InputEventScreenTouch:
@@ -300,6 +346,13 @@ func _hud_jet(p: Player, s: Vector2) -> void:
 	if not J.gnd and J.vel.y < 0.0 and J.position.y < -J.vel.y * 6.0 + 40.0: _txt(Vector2(s.x * 0.5 - 200, s.y * 0.26), "PULL UP", 34, Color(1, 0.2, 0.15, 0.6 + 0.4 * sin(Time.get_ticks_msec() * 0.02)), HORIZONTAL_ALIGNMENT_CENTER, 400.0)
 
 func _draw() -> void:
+	if edit_mode:
+		draw_rect(Rect2(Vector2.ZERO, size), Color(0.02, 0.03, 0.06, 0.78))
+		_txt(Vector2(0, size.y * 0.12), Settings.t("اسحب الأزرار لتغيير مواضعها"), 30, Color(0.85, 0.92, 1.0), HORIZONTAL_ALIGNMENT_CENTER, size.x)
+		for n in BTNS:
+			if n == "tup" or n == "tdn": continue
+			var b := _btn(n); _btn_draw(n, b["c"], b["r"], n == _edit_drag)
+		return
 	if game == null or game.state != "play" or game.player == null: return
 	var p: Fighter = game.player
 	var s := size
