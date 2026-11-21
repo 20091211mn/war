@@ -248,6 +248,7 @@ E=[
 ("حجم +","Size +","Tamaño +"),
 ("إعادة الضبط","Reset","Restablecer"),
 ("تم","Done","Hecho"),
+("توفير البطارية (30 إطار)","Battery saver (30 FPS)","Ahorro de batería (30 FPS)"),
 ("انقطع الاتصال… إعادة المحاولة","Connection lost… retrying","Conexión perdida… reintentando"),
 ("التحديث التلقائي","Auto update","Actualización automática"),
 ("مفعّل","On","Activado"),

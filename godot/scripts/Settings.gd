@@ -24,6 +24,7 @@ var volume := 1.0
 var fps_cap := 1         # 0:30  1:60  2:90  3:120
 var btn_scale := 1.0     # حجم أزرار اللمس
 var btn_pos := {}        # اسم الزر -> [x,y] كنسبة من الشاشة (تخصيص المواضع)
+var battery := false     # توفير البطارية: 30 إطار، دقة أقل، بلا ظلال
 var res_pct := 0         # 0 تلقائي حسب الجودة، 1:50% 2:75% 3:100%
 var show_fps := false
 var servers: Array = []   # آخر خوادم الأونلاين المستخدمة (نص host[:port])
@@ -45,6 +46,7 @@ func _ready() -> void:
 		fov = clampf(float(c.get_value("g", "fov", 75.0)), 60.0, 100.0); invert_y = bool(c.get_value("g", "invert_y", false))
 		gyro = bool(c.get_value("g", "gyro", false)); gyro_sens = clampf(float(c.get_value("g", "gyro_sens", 1.0)), 0.3, 3.0); gyro_flip = bool(c.get_value("g", "gyro_flip", false)); gyro_mode = clampi(int(c.get_value("g", "gyro_mode", 0)), 0, 1)
 		volume = clampf(float(c.get_value("g", "volume", 1.0)), 0.0, 1.0); fps_cap = clampi(int(c.get_value("g", "fps_cap", 1)), 0, 3)
+		battery = bool(c.get_value("g", "battery", false))
 		btn_scale = clampf(float(c.get_value("g", "btn_scale", 1.0)), 0.7, 1.5)
 		var bp = c.get_value("g", "btn_pos", {})
 		btn_pos = bp if bp is Dictionary else {}
@@ -55,13 +57,13 @@ func _ready() -> void:
 
 # إعدادات تسري فوراً: سقف الإطارات وصوت الماستر
 func apply_runtime() -> void:
-	Engine.max_fps = FPS_CAPS[fps_cap]
+	Engine.max_fps = 30 if battery else FPS_CAPS[fps_cap]
 	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(volume, 0.0001)))
 
 func save() -> void:
 	var c := ConfigFile.new()
 	c.set_value("g", "quality", quality); c.set_value("g", "lang", lang); c.set_value("g", "auto_update", auto_update)
-	for k in ["sens", "ads_sens", "fov", "invert_y", "gyro", "gyro_sens", "gyro_flip", "gyro_mode", "volume", "fps_cap", "res_pct", "show_fps", "servers", "btn_scale", "btn_pos"]: c.set_value("g", k, get(k))
+	for k in ["sens", "ads_sens", "fov", "invert_y", "gyro", "gyro_sens", "gyro_flip", "gyro_mode", "volume", "fps_cap", "res_pct", "show_fps", "servers", "btn_scale", "btn_pos", "battery"]: c.set_value("g", k, get(k))
 	c.save(CFG); apply_runtime()
 	_apply_locale(); changed.emit()
 
@@ -77,10 +79,10 @@ func t(ar: String) -> String:
 # دقة العرض ثلاثية الأبعاد: في الوضع التلقائي تُحسب من «ميزانية بكسلات» لكل جودة (مليون بكسل) فلا تُرسم بكسلات زائدة على الشاشات العالية الدقة
 const PIXEL_BUDGET := [0.55, 0.9, 1.3, 1.9, 2.8]
 func res_scale(sz := Vector2i(1280, 720)) -> float:
-	if res_pct != 0: return [0.5, 0.75, 1.0][res_pct - 1]
+	if res_pct != 0: return [0.5, 0.75, 1.0][res_pct - 1] * (0.8 if battery else 1.0)
 	var px := float(maxi(sz.x * sz.y, 1)) / 1.0e6
-	return clampf(sqrt(PIXEL_BUDGET[quality] / px), 0.5, 1.0)
-func shadows() -> bool: return quality >= 2
+	return clampf(sqrt(PIXEL_BUDGET[quality] / px) * (0.8 if battery else 1.0), 0.45, 1.0)
+func shadows() -> bool: return quality >= 2 and not battery
 func msaa(scale := 1.0) -> int: return 0 if (quality < 2 or scale < 0.85) else (2 if quality >= 4 else 1)
 func fog_k() -> float: return [0.45, 0.7, 1.0, 1.5, 2.2][quality]
 func trees() -> int: return [0, 0, 10, 28, 60][quality]

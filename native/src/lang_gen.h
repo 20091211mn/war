@@ -234,6 +234,7 @@ static const TrE TR_TAB[]={
 {"حجم +","Size +","Tamaño +"},
 {"إعادة الضبط","Reset","Restablecer"},
 {"تم","Done","Hecho"},
+{"توفير البطارية (30 إطار)","Battery saver (30 FPS)","Ahorro de batería (30 FPS)"},
 {"انقطع الاتصال… إعادة المحاولة","Connection lost… retrying","Conexión perdida… reintentando"},
 {"التحديث التلقائي","Auto update","Actualización automática"},
 {"مفعّل","On","Activado"},
@@ -259,4 +260,4 @@ static const TrE TR_TAB[]={
 {"Español","Español","Español"},
 {"تم حفظ الإعدادات","Settings saved","Ajustes guardados"},
 };
-static const int TR_N=256;
+static const int TR_N=257;

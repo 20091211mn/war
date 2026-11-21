@@ -212,7 +212,8 @@ func _pick_slot() -> int:
 	for s in f.size():
 		var b := f[s] as Bot
 		if s == 0 or (b != null and b.net_ctrl): cnt[(f[s] as Fighter).team] += 1
-	var pref := 0 if cnt[0] <= cnt[1] else 1
+	# موازنة تلقائية: الفريق الأقل لاعبين يستقبل القادم، وعند التعادل الفريق الأقل نقاطاً (لا يُترك فريق متأخر بلا دعم)
+	var pref := 0 if cnt[0] < cnt[1] else (1 if cnt[1] < cnt[0] else (0 if game.score[0] <= game.score[1] else 1))
 	for pk in 2:
 		for pass_i in 2:
 			for s in range(1, f.size()):

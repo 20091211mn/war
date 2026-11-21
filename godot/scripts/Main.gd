@@ -319,6 +319,7 @@ func _build_settings_screen() -> VBoxContainer:
 	var r: VBoxContainer = _set_pages[1]
 	_seg(r, "الجودة", func(): return Settings.QUALS.map(func(x): return Settings.t(x)), func(): return Settings.quality, func(i): Settings.quality = i; Settings.save(), 16)
 	_seg(r, "دقة العرض", func(): return [Settings.t("تلقائي"), "50%", "75%", "100%"], func(): return Settings.res_pct, func(i): Settings.res_pct = i; Settings.save())
+	_toggle(r, "توفير البطارية (30 إطار)", func(): return Settings.battery, func(b): Settings.battery = b)
 	_seg(r, "سقف الإطارات", func(): return ["30", "60", "90", "120"], func(): return Settings.fps_cap, func(i): Settings.fps_cap = i; Settings.save())
 	_slider(r, "مجال الرؤية FOV", 60.0, 100.0, 1.0, func(): return Settings.fov, func(v): Settings.fov = v; Settings.save(), "%.0f")
 	# ---- التحكم ----
@@ -694,7 +695,7 @@ func finish_layout_edit() -> void:
 func _on_settings() -> void:
 	_refresh()
 	# إعادة بناء المشهد/الدقة فقط إن تغيّر ما يخص الرسوميات (تبديل اللغة أو الصوت لا يعيد البناء)
-	var sig := "%d|%d|%d" % [Settings.quality, Settings.res_pct, Settings.fps_cap]
+	var sig := "%d|%d|%d|%s" % [Settings.quality, Settings.res_pct, Settings.fps_cap, Settings.battery]
 	if sig != _q_sig: _q_sig = sig; apply_quality()
 
 func _fade_in(c: Control) -> void:
