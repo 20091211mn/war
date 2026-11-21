@@ -478,8 +478,12 @@ func _build_menu() -> void:
 	var b_set := _menu_row("gear", "الإعدادات", func(): _open(_set_ov)); lc.add_child(b_set); rows.append(b_set)
 	if not OS.has_feature("ios") and not OS.has_feature("web"):
 		var b_exit := _menu_row("exit", "خروج", func(): _confirm_exit()); lc.add_child(b_exit); rows.append(b_exit)
-	_ver_lab = Label.new(); _ver_lab.add_theme_font_size_override("font_size", 17); _ver_lab.add_theme_color_override("font_color", Color(0.55, 0.62, 0.8, 0.8)); lc.add_child(_ver_lab)
-	_menu_items = [tagrow, tstack] + rows + [_ver_lab]
+	_ver_lab = Label.new(); _ver_lab.add_theme_font_size_override("font_size", 17); _ver_lab.add_theme_color_override("font_color", Color(0.55, 0.62, 0.8, 0.8))
+	_lvl_lab = Label.new(); _lvl_lab.add_theme_font_size_override("font_size", 19); _lvl_lab.add_theme_color_override("font_color", Color(0.75, 0.85, 1.0)); lc.add_child(_lvl_lab)
+	_lvl_bar = ProgressBar.new(); _lvl_bar.show_percentage = false; _lvl_bar.add_theme_font_size_override("font_size", 1); _lvl_bar.custom_minimum_size = Vector2(0, 6); _lvl_bar.max_value = 1.0
+	_lvl_bar.add_theme_stylebox_override("background", UiTheme.flat(Color(1, 1, 1, 0.1), 4)); _lvl_bar.add_theme_stylebox_override("fill", UiTheme.flat(UiTheme.ACCENT, 4)); _lvl_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER; lc.add_child(_lvl_bar)
+	lc.add_child(_ver_lab)
+	_menu_items = [tagrow, tstack] + rows + [_lvl_lab, _lvl_bar, _ver_lab]
 	# ---- شاشة «لعب فردي»: الخريطة + الصعوبة + النمط ثم ابدأ ----
 	_sp_ov = _overlay("لعب فردي", 820)
 	_map_lab = Label.new(); _map_lab.add_theme_font_size_override("font_size", 19); _map_lab.add_theme_color_override("font_color", UiTheme.MUTED); _sp_ov.add_child(_map_lab)
@@ -586,6 +590,10 @@ func _refresh() -> void:
 	var rtl0 := Settings.lang == 0
 	for mr in _menu_rows:
 		var ml: Label = mr["lab"]; ml.text = Settings.t(mr["ar"]); ml.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	if _lvl_lab != null:
+		var lv := Settings.level(); var a := Settings.xp_floor(lv); var b := Settings.xp_floor(lv + 1)
+		_lvl_lab.text = "%s %d  ·  %d/%d" % [Settings.t("المستوى"), lv, Settings.xp - a, b - a]; _lvl_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_lvl_bar.value = float(Settings.xp - a) / float(b - a)
 	if _edit_btn != null: _edit_btn.text = Settings.t("تعديل مواضع وحجم الأزرار")
 	if _ver_lab != null: _ver_lab.text = "%s  %s" % [Settings.t("رقم الإصدار"), Updater.version()]; _ver_lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	for sd in _sliders:
@@ -685,6 +693,9 @@ func _cine(t: float) -> void:
 	prev_cam.position = Vector3(cos(a) * rad, h, sin(a) * rad); prev_cam.fov = lerpf(78.0, 58.0, k)
 	prev_cam.look_at(Vector3(0, 1.6 + k * 2.0, 0))
 
+var match_xp := 0
+var _lvl_lab: Label
+var _lvl_bar: ProgressBar
 var _q_sig := ""
 var _edit_btn: Button
 var _edit_prev := {}
@@ -1093,6 +1104,8 @@ func on_kill(src: Fighter, victim: Fighter, head: bool) -> void:
 		var lt := Time.get_ticks_msec() / 1000.0; var multi: int = (int(src.get_meta("multi", 0)) + 1) if lt - float(src.get_meta("lastk", -9.0)) < 4.0 else 1
 		src.set_meta("multi", multi); src.set_meta("lastk", lt)
 		if src == player:
+			match_xp += 15 if head else 10
+			if Settings.add_xp(15 if head else 10): hud.say(Settings.t("مستوى جديد!") + " " + str(Settings.level()))
 			var sm := {3: "ثلاث قتلات متتالية!", 5: "خمس قتلات - لا يُوقف!", 7: "سلسلة مرعبة x7", 10: "أسطورة! عشر قتلات"}
 			var mm := {2: "قتل مزدوج", 3: "قتل ثلاثي", 4: "قتل رباعي"}
 			if sm.has(ms): hud.say(Settings.t(sm[ms]))
@@ -1115,6 +1128,13 @@ func on_kill(src: Fighter, victim: Fighter, head: bool) -> void:
 
 func _end_match() -> void:
 	if state == "over": return
+	var my_t: int = player.team if player != null else 0
+	var won: bool = true
+	if ffa:
+		for f in fighters:
+			if is_instance_valid(f) and player != null and f.kills > player.kills: won = false
+	else: won = score[my_t] >= score[1 - my_t]
+	var gain := (50 if won else 20); match_xp += gain; Settings.add_xp(gain); Settings.save()
 	state = "over"; overlay = false; pause_root.visible = true; _set_paused(true); Input.mouse_mode = Input.MOUSE_MODE_VISIBLE; hud.mouse_look = false; _release_inputs(); _refresh()
 	if ffa:
 		var top: Fighter = null
@@ -1122,6 +1142,7 @@ func _end_match() -> void:
 			if is_instance_valid(f) and (top == null or f.kills > top.kills): top = f
 		over_label.text = Settings.t("الفائز") + ": " + (top.fname if top != null else "-")
 	else: over_label.text = Settings.t("فاز الفريق الأحمر") if score[0] >= score[1] else Settings.t("فاز الفريق الأزرق")
+	over_label.text += "   +%d XP" % match_xp; match_xp = 0
 	toggle_board(1); board_title.text = over_label.text
 
 # ---------------------------------------------------------------- الجودة والمشاهد
