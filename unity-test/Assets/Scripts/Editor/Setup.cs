@@ -7,7 +7,8 @@ using UnityEngine;
 public static class Setup
 {
     [MenuItem("Warzone/Setup Scene and Android")]
-    public static void Run()
+    public static void Run() { CreateScene(); EditorUtility.DisplayDialog("Warzone", "Done. Press Play. (If you get an Input error: Edit > Project Settings > Player > Active Input Handling = Both)", "OK"); }
+    public static void CreateScene()
     {
         var sc = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         System.IO.Directory.CreateDirectory("Assets/Scenes");
@@ -16,7 +17,6 @@ public static class Setup
         PlayerSettings.companyName = "Warzone"; PlayerSettings.productName = "Warzone Unity Test";
         PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
         PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, "com.warzone.unitytest");
-        EditorUtility.DisplayDialog("Warzone", "Done. Press Play. (If you get an Input error: Edit > Project Settings > Player > Active Input Handling = Both)", "OK");
     }
 }
 #endif
