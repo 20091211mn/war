@@ -18,7 +18,7 @@ public class Player : Fighter
         go.AddComponent<AudioListener>();
         var gun = GameObject.CreatePrimitive(PrimitiveType.Cube); Destroy(gun.GetComponent<Collider>());
         gun.transform.SetParent(go.transform); gun.transform.localPosition = new Vector3(0.25f, -0.22f, 0.5f); gun.transform.localScale = new Vector3(0.07f, 0.1f, 0.6f);
-        gun.GetComponent<Renderer>().material.color = new Color(0.12f, 0.12f, 0.14f);
+        Mat.Set(gun, new Color(0.12f, 0.12f, 0.14f));
     }
 
     void Update()

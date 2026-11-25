@@ -10,6 +10,24 @@ public static class Setup
     public static void Run() { CreateScene(); EditorUtility.DisplayDialog("Warzone", "Done. Press Play. (If you get an Input error: Edit > Project Settings > Player > Active Input Handling = Both)", "OK"); }
     public static void CreateScene()
     {
+        // إبقاء الـShaders في البناء (وإلا تظهر المجسمات وردية)
+        var gsa = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/GraphicsSettings.asset");
+        if (gsa != null && gsa.Length > 0) AddShaders(gsa[0]);
+        CreateSceneOnly();
+    }
+    static void AddShaders(Object gs)
+    {
+        var so = new SerializedObject(gs); var arr = so.FindProperty("m_AlwaysIncludedShaders");
+        foreach (var n in new[] { "Standard", "Unlit/Color", "Sprites/Default", "Legacy Shaders/Diffuse" })
+        {
+            var s = Shader.Find(n); if (s == null) continue; bool has = false;
+            for (int i = 0; i < arr.arraySize; i++) if (arr.GetArrayElementAtIndex(i).objectReferenceValue == s) has = true;
+            if (!has) { arr.arraySize++; arr.GetArrayElementAtIndex(arr.arraySize - 1).objectReferenceValue = s; }
+        }
+        so.ApplyModifiedProperties(); AssetDatabase.SaveAssets();
+    }
+    static void CreateSceneOnly()
+    {
         var sc = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         System.IO.Directory.CreateDirectory("Assets/Scenes");
         EditorSceneManager.SaveScene(sc, "Assets/Scenes/Main.unity");
