@@ -4,8 +4,21 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 
 // Warzone > Setup: ينشئ مشهداً فارغاً ويضيفه لإعدادات البناء ويضبط الجوال
+[InitializeOnLoad]
 public static class Setup
 {
+    // يعمل تلقائياً عند فتح المشروع (يشمل Unity Cloud): يضمن وجود المشهد في إعدادات البناء ونظام الإدخال Both
+    static Setup()
+    {
+        EditorApplication.delayCall += () =>
+        {
+            if (!System.IO.File.Exists("Assets/Scenes/Main.unity")) { CreateScene(); return; }
+            if (EditorBuildSettings.scenes.Length == 0) EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene("Assets/Scenes/Main.unity", true) };
+            var ps = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/ProjectSettings.asset");
+            if (ps != null && ps.Length > 0) { var o = new SerializedObject(ps[0]); var p = o.FindProperty("activeInputHandler"); if (p != null && p.intValue != 2) { p.intValue = 2; o.ApplyModifiedProperties(); AssetDatabase.SaveAssets(); } }
+        };
+    }
+
     [MenuItem("Warzone/Setup Scene and Android")]
     public static void Run() { CreateScene(); EditorUtility.DisplayDialog("Warzone", "Done. Press Play. (If you get an Input error: Edit > Project Settings > Player > Active Input Handling = Both)", "OK"); }
     public static void CreateScene()
