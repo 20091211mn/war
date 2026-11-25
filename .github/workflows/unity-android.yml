@@ -1,19 +1,35 @@
 name: Unity Android (تجريبي)
+# يتطلب أسرار: UNITY_EMAIL و UNITY_PASSWORD (حساب Unity مخصص بلا تحقق بخطوتين).
+# يفعّل الرخصة الشخصية عبر Unity.Licensing.Client (غير موثّق رسمياً وقد يتغيّر) ثم يبني APK ويعيد الرخصة.
 on: workflow_dispatch
 jobs:
   build:
     runs-on: ubuntu-latest
+    container: unityci/editor:ubuntu-2022.3.20f1-android-3.1.0
+    env:
+      UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+      UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
-      - uses: game-ci/unity-builder@v4
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-        with:
-          projectPath: unity-test
-          targetPlatform: Android
-          unityVersion: 2022.3.20f1
-          buildMethod: CIBuild.Android
+      - name: تحقق من الأسرار
+        run: |
+          [ -n "$UNITY_EMAIL" ] && [ -n "$UNITY_PASSWORD" ] || { echo "::error::أضف UNITY_EMAIL و UNITY_PASSWORD في Settings > Secrets > Actions"; exit 1; }
+      - name: تفعيل الرخصة الشخصية
+        run: |
+          CLIENT=$(find /opt/unity -name Unity.Licensing.Client -type f | head -1)
+          echo "client: $CLIENT"
+          [ -n "$CLIENT" ] || { echo "::error::لم يُعثر على Licensing Client"; exit 1; }
+          chmod +x "$CLIENT"
+          "$CLIENT" --activate-all --include-personal --username "$UNITY_EMAIL" --password "$UNITY_PASSWORD" || true
+      - name: بناء APK
+        run: |
+          mkdir -p unity-test/build
+          xvfb-run --auto-servernum unity-editor -batchmode -nographics -quit -projectPath unity-test -buildTarget Android -executeMethod CIBuild.Android -logFile - 
       - uses: actions/upload-artifact@v4
+        if: always()
         with: { name: Warzone-Unity-apk, path: unity-test/build }
+      - name: إعادة الرخصة
+        if: always()
+        run: |
+          CLIENT=$(find /opt/unity -name Unity.Licensing.Client -type f | head -1)
+          [ -n "$CLIENT" ] && "$CLIENT" --return-ulf --username "$UNITY_EMAIL" --password "$UNITY_PASSWORD" || true
