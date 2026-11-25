@@ -13,6 +13,9 @@ public static class Setup
         // إبقاء الـShaders في البناء (وإلا تظهر المجسمات وردية)
         var gsa = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/GraphicsSettings.asset");
         if (gsa != null && gsa.Length > 0) AddShaders(gsa[0]);
+        // نظام الإدخال القديم + الجديد معاً (Unity 6 يجعل الجديد فقط افتراضياً فيفشل Input.GetAxis)
+        var ps = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/ProjectSettings.asset");
+        if (ps != null && ps.Length > 0) { var pso = new SerializedObject(ps[0]); var p = pso.FindProperty("activeInputHandler"); if (p != null) { p.intValue = 2; pso.ApplyModifiedProperties(); } }
         CreateSceneOnly();
     }
     static void AddShaders(Object gs)
