@@ -1,7 +1,11 @@
 name: Unity Android (تجريبي)
 # يتطلب أسرار: UNITY_EMAIL و UNITY_PASSWORD (حساب Unity مخصص بلا تحقق بخطوتين).
 # يفعّل الرخصة الشخصية عبر Unity.Licensing.Client (غير موثّق رسمياً وقد يتغيّر) ثم يبني APK ويعيد الرخصة.
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['unity-test/**', '.github/workflows/unity-android.yml']
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -20,7 +24,10 @@ jobs:
           echo "client: $CLIENT"
           [ -n "$CLIENT" ] || { echo "::error::لم يُعثر على Licensing Client"; exit 1; }
           chmod +x "$CLIENT"
-          "$CLIENT" --activate-all --include-personal --username "$UNITY_EMAIL" --password "$UNITY_PASSWORD" || true
+          # إزالة المسافات/أسطر جديدة عالقة من لصق الأسرار
+          U=$(printf %s "$UNITY_EMAIL" | tr -d '\r\n' | sed 's/^ *//;s/ *$//'); P=$(printf %s "$UNITY_PASSWORD" | tr -d '\r\n')
+          OUT=$("$CLIENT" --activate-all --include-personal --username "$U" --password "$P" 2>&1); echo "$OUT"
+          if echo "$OUT" | grep -qi "Invalid Credential"; then echo "::error::بيانات حساب Unity غير صحيحة (Invalid Credential). تأكد من الإيميل وكلمة السر، وأن الحساب أُنشئ بإيميل وكلمة سر (ليس Google/Apple)، وبلا تحقق بخطوتين"; exit 1; fi
       - name: بناء APK
         run: |
           mkdir -p unity-test/build
