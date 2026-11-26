@@ -25,11 +25,11 @@ public class Game : MonoBehaviour
     void Awake()
     {
         I = this; Application.targetFrameRate = 60; QualitySettings.vSyncCount = 0;
-        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat; RenderSettings.ambientLight = new Color(0.5f, 0.52f, 0.56f);
+        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight; RenderSettings.ambientSkyColor = new Color(0.55f, 0.7f, 0.95f); RenderSettings.ambientEquatorColor = new Color(0.55f, 0.58f, 0.52f); RenderSettings.ambientGroundColor = new Color(0.32f, 0.28f, 0.22f);
         RenderSettings.fog = false;
         foreach (var c in FindObjectsOfType<Camera>()) Destroy(c.gameObject);
         foreach (var l in FindObjectsOfType<Light>()) Destroy(l.gameObject);
-        var sun = new GameObject("Sun").AddComponent<Light>(); sun.type = LightType.Directional; sun.transform.rotation = Quaternion.Euler(50, -30, 0); sun.intensity = 1.1f; sun.shadows = LightShadows.Soft;
+        var sun = new GameObject("Sun").AddComponent<Light>(); sun.type = LightType.Directional; sun.transform.rotation = Quaternion.Euler(38, -35, 0); sun.intensity = 1.25f; sun.color = new Color(1f, 0.95f, 0.84f); sun.shadows = LightShadows.Soft;
         Build();
         StartCoroutine(CheckUpdate());
     }
@@ -60,25 +60,8 @@ public class Game : MonoBehaviour
     void Build()
     {
         world = new GameObject("World").transform;
-        var g = GameObject.CreatePrimitive(PrimitiveType.Cube); g.name = "Ground"; g.transform.SetParent(world, false); groundR = g.GetComponent<Renderer>(); g.transform.position = new Vector3(0, -0.5f, 0); g.transform.localScale = new Vector3(160, 1, 160);
-        Mat.Set(g, new Color(0.62f, 0.55f, 0.42f));
-        var rnd = new System.Random(7);
-        for (int i = 0; i < 26; i++)
-        {
-            float x = (float)(rnd.NextDouble() * 120 - 60), z = (float)(rnd.NextDouble() * 120 - 60);
-            if (Mathf.Abs(x) < 8 && Mathf.Abs(z) < 8) continue;
-            float w = 4 + (float)rnd.NextDouble() * 9, d = 4 + (float)rnd.NextDouble() * 9, h = 2.5f + (float)rnd.NextDouble() * 8;
-            var b = GameObject.CreatePrimitive(PrimitiveType.Cube); b.transform.SetParent(world, false); bldR.Add(b.GetComponent<Renderer>()); b.transform.position = new Vector3(x, h / 2, z); b.transform.localScale = new Vector3(w, h, d);
-            float k = 0.45f + (float)rnd.NextDouble() * 0.3f; Mat.Set(b, new Color(k, k * 0.95f, k * 0.85f));
-            boxes.Add(new Vector3(x, 0, z));
-        }
-        // جدران الحدود
-        for (int i = 0; i < 4; i++)
-        {
-            var w = GameObject.CreatePrimitive(PrimitiveType.Cube); w.transform.SetParent(world, false); bool ns = i < 2; float s = (i % 2 == 0 ? 1 : -1) * 80;
-            w.transform.position = ns ? new Vector3(0, 3, s) : new Vector3(s, 3, 0); w.transform.localScale = ns ? new Vector3(162, 6, 1) : new Vector3(1, 6, 162);
-            Mat.Set(w, new Color(0.35f, 0.33f, 0.3f));
-        }
+        groundR = FarmMap.Build(world); bldR = FarmMap.Rends;
+        QualitySettings.shadowDistance = 90f;
         var pg = new GameObject("Player"); pg.transform.position = SpawnPoint(1); player = pg.AddComponent<Player>(); player.team = 1; all.Add(player);
         for (int i = 0; i < 8; i++) AddBot(i % 2 == 0 ? 0 : 1);
         for (int i = 0; i < 2; i++) AddBot(0);
