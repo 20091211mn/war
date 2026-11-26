@@ -1,10 +1,16 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Networking;
 
 // يبني العالم كله بالكود: أرض ومبانٍ وبوتات واجهة HUD (OnGUI) وأزرار لمس
 public class Game : MonoBehaviour
 {
+    public const string Version = "0.2.0";
+    const string UpdateUrl = "https://raw.githubusercontent.com/20091211mn/war/main/unity-test/version.json";
     public static Game I;
+    string updMsg = "", updLink = "";
+    List<KeyValuePair<string, float>> feed = new List<KeyValuePair<string, float>>();
     public int[] score = new int[2]; public int limit = 30;
     public LayerMask worldMask = ~0;
     Player player; List<Fighter> all = new List<Fighter>(); List<Vector3> boxes = new List<Vector3>();
@@ -18,11 +24,36 @@ public class Game : MonoBehaviour
     void Awake()
     {
         I = this; Application.targetFrameRate = 60; QualitySettings.vSyncCount = 0;
-        RenderSettings.ambientLight = new Color(0.55f, 0.57f, 0.62f); RenderSettings.fog = true; RenderSettings.fogColor = new Color(0.72f, 0.78f, 0.86f); RenderSettings.fogDensity = 0.006f;
+        RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat; RenderSettings.ambientLight = new Color(0.5f, 0.52f, 0.56f);
+        RenderSettings.fog = true; RenderSettings.fogMode = FogMode.Linear; RenderSettings.fogColor = new Color(0.62f, 0.76f, 0.92f); RenderSettings.fogStartDistance = 70f; RenderSettings.fogEndDistance = 260f;
         foreach (var c in FindObjectsOfType<Camera>()) Destroy(c.gameObject);
         foreach (var l in FindObjectsOfType<Light>()) Destroy(l.gameObject);
         var sun = new GameObject("Sun").AddComponent<Light>(); sun.type = LightType.Directional; sun.transform.rotation = Quaternion.Euler(50, -30, 0); sun.intensity = 1.1f; sun.shadows = LightShadows.Soft;
         Build();
+        StartCoroutine(CheckUpdate());
+    }
+
+    public void Feed(string t) { feed.Add(new KeyValuePair<string, float>(t, Time.time + 5f)); if (feed.Count > 5) feed.RemoveAt(0); }
+
+    // تحديث: يقرأ version.json من GitHub؛ إن كان الإصدار أحدث يظهر شريط تحديث يفتح رابط التنزيل
+    [System.Serializable] class VInfo { public string version; public string url; public string notes; }
+    IEnumerator CheckUpdate()
+    {
+        yield return new WaitForSeconds(2f);
+        using (var rq = UnityWebRequest.Get(UpdateUrl + "?t=" + (int)Time.realtimeSinceStartup))
+        {
+            rq.timeout = 8; yield return rq.SendWebRequest();
+            if (rq.result != UnityWebRequest.Result.Success) yield break;
+            VInfo v = null; try { v = JsonUtility.FromJson<VInfo>(rq.downloadHandler.text); } catch { }
+            if (v == null || string.IsNullOrEmpty(v.version) || !IsNewer(v.version, Version)) yield break;
+            updMsg = "Update " + v.version + (string.IsNullOrEmpty(v.notes) ? "" : ": " + v.notes); updLink = v.url;
+        }
+    }
+    static bool IsNewer(string a, string b)
+    {
+        var x = a.Split('.'); var y = b.Split('.');
+        for (int i = 0; i < 3; i++) { int p, q; int.TryParse(i < x.Length ? x[i] : "0", out p); int.TryParse(i < y.Length ? y[i] : "0", out q); if (p != q) return p > q; }
+        return false;
     }
 
     void Build()
@@ -90,6 +121,8 @@ public class Game : MonoBehaviour
 
     // لمس: النصف الأيسر عصا حركة، الأيمن سحب للنظر، وزرّان: إطلاق وتعبئة
     Rect FireRect() => new Rect(Screen.width - 220, Screen.height - 260, 170, 170);
+    Rect SwitchRect() => new Rect(Screen.width - 250, Screen.height - 400, 100, 100);
+    Rect UpdRect() => new Rect(Screen.width / 2f - 260, 70, 520, 70);
     Rect ReloadRect() => new Rect(Screen.width - 130, Screen.height - 400, 100, 100);
     void HandleTouch()
     {
@@ -100,6 +133,8 @@ public class Game : MonoBehaviour
             Vector2 p = new Vector2(t.position.x, Screen.height - t.position.y);
             if (t.phase == TouchPhase.Began)
             {
+                if (updLink != "" && UpdRect().Contains(p)) { Application.OpenURL(updLink); continue; }
+                if (SwitchRect().Contains(p)) { player.NextWeapon(); continue; }
                 if (ReloadRect().Contains(p)) { player.Reload(); continue; }
                 if (FireRect().Contains(p)) continue;
                 if (p.x < Screen.width * 0.45f && stickId < 0) { stickId = t.fingerId; stickOrigin = p; }
@@ -112,24 +147,44 @@ public class Game : MonoBehaviour
         player.touchFire = fire;
     }
 
-    GUIStyle st;
+    GUIStyle st, sm;
     void OnGUI()
     {
         if (player == null) return;
-        if (st == null) { st = new GUIStyle(GUI.skin.label) { fontSize = Mathf.Max(18, Screen.height / 32), fontStyle = FontStyle.Bold }; st.normal.textColor = Color.white; }
-        float cx = Screen.width / 2f, cy = Screen.height / 2f;
-        Color c = hitMark > 0 ? Color.red : Color.white; var old = GUI.color; GUI.color = c;
+        int fs = Mathf.Max(18, Screen.height / 36);
+        if (st == null || st.fontSize != fs)
+        {
+            st = new GUIStyle(GUI.skin.label) { fontSize = fs, fontStyle = FontStyle.Bold, wordWrap = false }; st.normal.textColor = Color.white;
+            sm = new GUIStyle(st) { fontSize = Mathf.RoundToInt(fs * 0.8f) };
+        }
+        float lh = fs * 1.7f, cx = Screen.width / 2f, cy = Screen.height / 2f;
+        var old = GUI.color;
+        // وميض الضرر
+        float hurt = Mathf.Clamp01(1f - (Time.time - player.lastHit) / 0.4f);
+        if (hurt > 0) { GUI.color = new Color(1, 0, 0, hurt * 0.35f); GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), Texture2D.whiteTexture); }
+        GUI.color = hitMark > 0 ? Color.red : Color.white;
         GUI.DrawTexture(new Rect(cx - 1, cy - 10, 2, 7), Texture2D.whiteTexture); GUI.DrawTexture(new Rect(cx - 1, cy + 3, 2, 7), Texture2D.whiteTexture);
         GUI.DrawTexture(new Rect(cx - 10, cy - 1, 7, 2), Texture2D.whiteTexture); GUI.DrawTexture(new Rect(cx + 3, cy - 1, 7, 2), Texture2D.whiteTexture); GUI.color = old;
-        GUI.Label(new Rect(20, 10, 600, 40), "RED " + score[0] + "  -  BLUE " + score[1] + "   (limit " + limit + ")", st);
-        GUI.Label(new Rect(20, Screen.height - 60, 600, 40), "HP " + Mathf.CeilToInt(Mathf.Max(0, player.hp)) + "     " + (player.Reloading ? "RELOADING" : player.ammo + " / " + player.reserve), st);
-        if (!player.Alive) GUI.Label(new Rect(cx - 120, cy - 20, 400, 40), "YOU DIED - respawning...", st);
-        if (Time.time < msgUntil) GUI.Label(new Rect(cx - 150, 80, 500, 40), msg, st);
+        GUI.Label(new Rect(20, 12, Screen.width * 0.6f, lh), "RED " + score[0] + "  -  BLUE " + score[1] + "   (" + limit + ")", st);
+        GUI.Label(new Rect(20, Screen.height - lh * 2.1f, Screen.width * 0.6f, lh), "HP " + Mathf.CeilToInt(Mathf.Max(0, player.hp)), st);
+        GUI.Label(new Rect(20, Screen.height - lh * 1.1f, Screen.width * 0.7f, lh), player.WeaponName + "   " + (player.Reloading ? "RELOADING" : player.ammo + " / " + player.reserve), st);
+        // سجل القتل
+        for (int i = feed.Count - 1; i >= 0; i--) if (feed[i].Value < Time.time) feed.RemoveAt(i);
+        for (int i = 0; i < feed.Count; i++) GUI.Label(new Rect(Screen.width - Screen.width * 0.4f - 20, 12 + i * lh * 0.8f, Screen.width * 0.4f, lh), feed[i].Key, new GUIStyle(sm) { alignment = TextAnchor.MiddleRight, normal = { textColor = Color.white } });
+        if (!player.Alive) GUI.Label(new Rect(cx - 200, cy - lh, 400, lh * 1.5f), "YOU DIED - respawning...", st);
+        if (Time.time < msgUntil) GUI.Label(new Rect(cx - 200, 12 + lh, 500, lh), msg, st);
+        GUI.Label(new Rect(Screen.width - 120, Screen.height - lh, 110, lh), "v" + Version, sm);
+        if (updLink != "")
+        {
+            var r = UpdRect(); GUI.color = new Color(0.1f, 0.5f, 0.2f, 0.9f); GUI.DrawTexture(r, Texture2D.whiteTexture); GUI.color = old;
+            GUI.Label(new Rect(r.x + 12, r.y + 10, r.width - 24, r.height - 20), updMsg + "  (tap)", sm);
+            if (!Application.isMobilePlatform && Event.current.type == EventType.MouseDown && r.Contains(Event.current.mousePosition)) Application.OpenURL(updLink);
+        }
         if (Application.isMobilePlatform)
         {
-            GUI.color = new Color(1, 1, 1, 0.35f); GUI.Box(FireRect(), "FIRE"); GUI.Box(ReloadRect(), "R"); GUI.color = old;
+            GUI.color = new Color(1, 1, 1, 0.35f); GUI.Box(FireRect(), "FIRE"); GUI.Box(ReloadRect(), "R"); GUI.Box(SwitchRect(), "SW"); GUI.color = old;
             if (stickId >= 0) { GUI.color = new Color(1, 1, 1, 0.3f); GUI.DrawTexture(new Rect(stickOrigin.x - 55, stickOrigin.y - 55, 110, 110), Texture2D.whiteTexture); GUI.color = old; }
         }
-        else if (Cursor.lockState != CursorLockMode.Locked) GUI.Label(new Rect(cx - 220, cy + 60, 600, 40), "Click to play  |  WASD move, Shift run, Space jump, R reload", st);
+        else if (Cursor.lockState != CursorLockMode.Locked) GUI.Label(new Rect(cx - 330, cy + 60, 700, lh * 2), "Click to play | WASD, Shift, Space | 1-3 / Q weapons | R reload", st);
     }
 }

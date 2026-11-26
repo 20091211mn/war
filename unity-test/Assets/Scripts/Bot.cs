@@ -10,7 +10,7 @@ public class Bot : Fighter
     void Awake() { cc = GetComponent<CharacterController>(); cc.height = 1.8f; cc.radius = 0.35f; cc.center = new Vector3(0, 0.9f, 0); }
     public void Init(int t)
     {
-        team = t; var body = GameObject.CreatePrimitive(PrimitiveType.Capsule); Destroy(body.GetComponent<Collider>());
+        team = t; label = (t == 0 ? "RED" : "BLUE") + Random.Range(1, 99); var body = GameObject.CreatePrimitive(PrimitiveType.Capsule); Destroy(body.GetComponent<Collider>());
         body.transform.SetParent(transform); body.transform.localPosition = new Vector3(0, 0.9f, 0); body.transform.localScale = new Vector3(0.7f, 0.9f, 0.7f);
         Mat.Set(body, t == 0 ? new Color(0.8f, 0.2f, 0.2f) : new Color(0.2f, 0.4f, 0.85f));
         var hit = body.AddComponent<CapsuleCollider>(); hit.height = 2f; hit.radius = 0.5f; body.layer = 0; body.name = "BotBody"; body.AddComponent<HitProxy>().owner = this;
