@@ -13,6 +13,7 @@ public class Game : MonoBehaviour
     List<KeyValuePair<string, float>> feed = new List<KeyValuePair<string, float>>();
     public int[] score = new int[2]; public int limit = 30;
     public LayerMask worldMask = ~0;
+    Transform world; Renderer groundR; List<Renderer> bldR = new List<Renderer>(); string dbg = ""; float dbgT;
     Player player; List<Fighter> all = new List<Fighter>(); List<Vector3> boxes = new List<Vector3>();
     float msgUntil; string msg = ""; float hitMark;
     // أدوات لمس
@@ -25,7 +26,7 @@ public class Game : MonoBehaviour
     {
         I = this; Application.targetFrameRate = 60; QualitySettings.vSyncCount = 0;
         RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat; RenderSettings.ambientLight = new Color(0.5f, 0.52f, 0.56f);
-        RenderSettings.fog = true; RenderSettings.fogMode = FogMode.Linear; RenderSettings.fogColor = new Color(0.62f, 0.76f, 0.92f); RenderSettings.fogStartDistance = 70f; RenderSettings.fogEndDistance = 260f;
+        RenderSettings.fog = false;
         foreach (var c in FindObjectsOfType<Camera>()) Destroy(c.gameObject);
         foreach (var l in FindObjectsOfType<Light>()) Destroy(l.gameObject);
         var sun = new GameObject("Sun").AddComponent<Light>(); sun.type = LightType.Directional; sun.transform.rotation = Quaternion.Euler(50, -30, 0); sun.intensity = 1.1f; sun.shadows = LightShadows.Soft;
@@ -58,7 +59,8 @@ public class Game : MonoBehaviour
 
     void Build()
     {
-        var g = GameObject.CreatePrimitive(PrimitiveType.Cube); g.name = "Ground"; g.transform.position = new Vector3(0, -0.5f, 0); g.transform.localScale = new Vector3(160, 1, 160);
+        world = new GameObject("World").transform;
+        var g = GameObject.CreatePrimitive(PrimitiveType.Cube); g.name = "Ground"; g.transform.SetParent(world, false); groundR = g.GetComponent<Renderer>(); g.transform.position = new Vector3(0, -0.5f, 0); g.transform.localScale = new Vector3(160, 1, 160);
         Mat.Set(g, new Color(0.62f, 0.55f, 0.42f));
         var rnd = new System.Random(7);
         for (int i = 0; i < 26; i++)
@@ -66,14 +68,14 @@ public class Game : MonoBehaviour
             float x = (float)(rnd.NextDouble() * 120 - 60), z = (float)(rnd.NextDouble() * 120 - 60);
             if (Mathf.Abs(x) < 8 && Mathf.Abs(z) < 8) continue;
             float w = 4 + (float)rnd.NextDouble() * 9, d = 4 + (float)rnd.NextDouble() * 9, h = 2.5f + (float)rnd.NextDouble() * 8;
-            var b = GameObject.CreatePrimitive(PrimitiveType.Cube); b.transform.position = new Vector3(x, h / 2, z); b.transform.localScale = new Vector3(w, h, d);
+            var b = GameObject.CreatePrimitive(PrimitiveType.Cube); b.transform.SetParent(world, false); bldR.Add(b.GetComponent<Renderer>()); b.transform.position = new Vector3(x, h / 2, z); b.transform.localScale = new Vector3(w, h, d);
             float k = 0.45f + (float)rnd.NextDouble() * 0.3f; Mat.Set(b, new Color(k, k * 0.95f, k * 0.85f));
             boxes.Add(new Vector3(x, 0, z));
         }
         // جدران الحدود
         for (int i = 0; i < 4; i++)
         {
-            var w = GameObject.CreatePrimitive(PrimitiveType.Cube); bool ns = i < 2; float s = (i % 2 == 0 ? 1 : -1) * 80;
+            var w = GameObject.CreatePrimitive(PrimitiveType.Cube); w.transform.SetParent(world, false); bool ns = i < 2; float s = (i % 2 == 0 ? 1 : -1) * 80;
             w.transform.position = ns ? new Vector3(0, 3, s) : new Vector3(s, 3, 0); w.transform.localScale = ns ? new Vector3(162, 6, 1) : new Vector3(1, 6, 162);
             Mat.Set(w, new Color(0.35f, 0.33f, 0.3f));
         }
@@ -117,6 +119,14 @@ public class Game : MonoBehaviour
         hitMark = Mathf.Max(0, hitMark - Time.deltaTime);
         if (score[0] >= limit || score[1] >= limit) { msg = score[1] >= limit ? "فاز الفريق الأزرق" : "فاز الفريق الأحمر"; msgUntil = Time.time + 5; score[0] = score[1] = 0; foreach (var f in all) { f.kills = f.deaths = 0; } }
         HandleTouch();
+        if (Time.time > dbgT && player != null)
+        {
+            dbgT = Time.time + 0.5f; int vis = 0; foreach (var r in bldR) if (r != null && r.isVisible) vis++;
+            var gm = groundR != null ? groundR.sharedMaterial : null;
+            dbg = "ground vis=" + (groundR != null && groundR.isVisible) + " en=" + (groundR != null && groundR.enabled) + " sh=" + (gm != null && gm.shader != null ? gm.shader.name : "null") + " sup=" + (gm != null && gm.shader != null && gm.shader.isSupported)
+                + "\nbuildings vis=" + vis + "/" + bldR.Count + "  cam=" + player.cam.transform.position.ToString("F0") + "  px=" + player.transform.position.ToString("F0")
+                + "\nlights=" + FindObjectsOfType<Light>().Length + " " + SystemInfo.graphicsDeviceType;
+        }
     }
 
     // لمس: النصف الأيسر عصا حركة، الأيمن سحب للنظر، وزرّان: إطلاق وتعبئة
@@ -174,6 +184,7 @@ public class Game : MonoBehaviour
         if (!player.Alive) GUI.Label(new Rect(cx - 200, cy - lh, 400, lh * 1.5f), "YOU DIED - respawning...", st);
         if (Time.time < msgUntil) GUI.Label(new Rect(cx - 200, 12 + lh, 500, lh), msg, st);
         GUI.Label(new Rect(Screen.width - 120, Screen.height - lh, 110, lh), "v" + Version, sm);
+        GUI.Label(new Rect(20, 12 + lh, Screen.width * 0.75f, lh * 3.2f), dbg, new GUIStyle(sm) { fontSize = Mathf.RoundToInt(fs * 0.6f), wordWrap = true, normal = { textColor = Color.yellow } });
         if (updLink != "")
         {
             var r = UpdRect(); GUI.color = new Color(0.1f, 0.5f, 0.2f, 0.9f); GUI.DrawTexture(r, Texture2D.whiteTexture); GUI.color = old;
