@@ -6,7 +6,7 @@ using UnityEngine.Networking;
 // يبني العالم كله بالكود: أرض ومبانٍ وبوتات واجهة HUD (OnGUI) وأزرار لمس
 public class Game : MonoBehaviour
 {
-    public const string Version = "0.2.0";
+    public const string Version = "0.2.1";
     const string UpdateUrl = "https://raw.githubusercontent.com/20091211mn/war/main/unity-test/version.json";
     public static Game I;
     string updMsg = "", updLink = "";
