@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- مكتبات LevelPlay الأصلية لأندرويد (تقرؤها أداة External Dependency Manager وتضيفها لـGradle).
+     الحزمة com.unity.services.levelplay 9.6.0 تلتفّ حول Android SDK 9.8.0 حسب سجل تغييرات LevelPlay. -->
+<dependencies>
+  <androidPackages>
+    <androidPackage spec="com.unity3d.ads-mediation:mediation-sdk:9.8.0">
+      <repositories>
+        <repository>https://repo.maven.apache.org/maven2</repository>
+      </repositories>
+    </androidPackage>
+    <androidPackage spec="com.google.android.gms:play-services-appset:16.0.2" />
+    <androidPackage spec="com.google.android.gms:play-services-ads-identifier:18.0.1" />
+    <androidPackage spec="com.google.android.gms:play-services-basement:18.1.0" />
+  </androidPackages>
+</dependencies>
