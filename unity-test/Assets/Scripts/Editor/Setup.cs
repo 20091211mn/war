@@ -48,9 +48,9 @@ public static class Setup
         System.IO.Directory.CreateDirectory("Assets/Scenes");
         EditorSceneManager.SaveScene(sc, "Assets/Scenes/Main.unity");
         EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene("Assets/Scenes/Main.unity", true) };
-        PlayerSettings.companyName = "Warzone"; PlayerSettings.productName = "Warzone Unity Test";
+        PlayerSettings.companyName = "Warzone"; PlayerSettings.productName = "Warzone";
         PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
-        PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, "com.warzone.unitytest");
+        PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, "com.warzone.game");
     }
 }
 #endif

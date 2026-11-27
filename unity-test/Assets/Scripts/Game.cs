@@ -6,7 +6,7 @@ using UnityEngine.Networking;
 // يبني العالم كله بالكود: أرض ومبانٍ وبوتات واجهة HUD (OnGUI) وأزرار لمس
 public class Game : MonoBehaviour
 {
-    public const string Version = "0.2.1";
+    public const string Version = "1.0.0";
     const string UpdateUrl = "https://raw.githubusercontent.com/20091211mn/war/main/unity-test/version.json";
     public static Game I;
     string updMsg = "", updLink = "";
@@ -14,7 +14,7 @@ public class Game : MonoBehaviour
     public int[] score = new int[2]; public int limit = 30;
     public LayerMask worldMask = ~0;
     Transform world; Renderer groundR; List<Renderer> bldR = new List<Renderer>(); string dbg = ""; float dbgT;
-    Player player; List<Fighter> all = new List<Fighter>(); List<Vector3> boxes = new List<Vector3>();
+    Player player; public List<Fighter> all = new List<Fighter>(); List<Vector3> boxes = new List<Vector3>();
     float msgUntil; string msg = ""; float hitMark;
     // أدوات لمس
     int stickId = -1, lookId = -1; Vector2 stickOrigin, lookLast;
@@ -84,8 +84,23 @@ public class Game : MonoBehaviour
         foreach (var f in all) { if (f == null || f.team == me.team || !f.Alive) continue; float d = (f.transform.position - me.transform.position).sqrMagnitude; if (d < bd) { bd = d; best = f; } }
         return best;
     }
+    AudioClip shotClip; float lastSnd;
+    // طلقة مولَّدة بالكود: فرقعة ضوضاء سريعة الخفوت + دفعة منخفضة
+    AudioClip MakeShot()
+    {
+        int rate = 22050, n = rate * 45 / 100; var data = new float[n]; var rnd = new System.Random(7); float lp = 0f;
+        for (int i = 0; i < n; i++)
+        {
+            float t = (float)i / rate; float nz = (float)(rnd.NextDouble() * 2 - 1); lp += (nz - lp) * 0.3f;
+            float crack = (nz - lp * 0.4f) * Mathf.Exp(-t * 80f), boom = Mathf.Sin(6.2832f * (50f + 70f * Mathf.Exp(-t * 30f)) * t) * Mathf.Exp(-t * 12f), tail = lp * Mathf.Exp(-t * 9f) * 0.8f;
+            data[i] = Mathf.Clamp((crack + boom + tail) * 0.8f, -1f, 1f);
+        }
+        var c = AudioClip.Create("shot", n, 1, rate, false); c.SetData(data, 0); return c;
+    }
     public void Shoot(Fighter shooter, Vector3 o, Vector3 d, float dmg, float range)
     {
+        if (shotClip == null) shotClip = MakeShot();
+        if (Time.time - lastSnd > 0.03f) { lastSnd = Time.time; AudioSource.PlayClipAtPoint(shotClip, o, shooter is Player ? 0.9f : 0.6f); }
         Debug.DrawRay(o, d * Mathf.Min(range, 40f), shooter is Player ? Color.yellow : Color.red, 0.1f);
         var hits = Physics.RaycastAll(o, d, range); System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
         foreach (var h in hits)
@@ -103,14 +118,6 @@ public class Game : MonoBehaviour
         hitMark = Mathf.Max(0, hitMark - Time.deltaTime);
         if (score[0] >= limit || score[1] >= limit) { msg = score[1] >= limit ? "فاز الفريق الأزرق" : "فاز الفريق الأحمر"; msgUntil = Time.time + 5; score[0] = score[1] = 0; foreach (var f in all) { f.kills = f.deaths = 0; } }
         HandleTouch();
-        if (Time.time > dbgT && player != null)
-        {
-            dbgT = Time.time + 0.5f; int vis = 0; foreach (var r in bldR) if (r != null && r.isVisible) vis++;
-            var gm = groundR != null ? groundR.sharedMaterial : null;
-            dbg = "ground vis=" + (groundR != null && groundR.isVisible) + " en=" + (groundR != null && groundR.enabled) + " sh=" + (gm != null && gm.shader != null ? gm.shader.name : "null") + " sup=" + (gm != null && gm.shader != null && gm.shader.isSupported)
-                + "\nbuildings vis=" + vis + "/" + bldR.Count + "  cam=" + player.cam.transform.position.ToString("F0") + "  px=" + player.transform.position.ToString("F0")
-                + "\nlights=" + FindObjectsOfType<Light>().Length + " " + SystemInfo.graphicsDeviceType;
-        }
     }
 
     // لمس: النصف الأيسر عصا حركة، الأيمن سحب للنظر، وزرّان: إطلاق وتعبئة
@@ -172,7 +179,6 @@ public class Game : MonoBehaviour
         }
         if (Time.time < msgUntil) GUI.Label(new Rect(cx - 200, 12 + lh, 500, lh), msg, st);
         GUI.Label(new Rect(Screen.width - 120, Screen.height - lh, 110, lh), "v" + Version, sm);
-        GUI.Label(new Rect(20, 12 + lh, Screen.width * 0.75f, lh * 3.2f), dbg, new GUIStyle(sm) { fontSize = Mathf.RoundToInt(fs * 0.6f), wordWrap = true, normal = { textColor = Color.yellow } });
         if (updLink != "")
         {
             var r = UpdRect(); GUI.color = new Color(0.1f, 0.5f, 0.2f, 0.9f); GUI.DrawTexture(r, Texture2D.whiteTexture); GUI.color = old;

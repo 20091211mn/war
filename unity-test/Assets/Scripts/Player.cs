@@ -27,13 +27,23 @@ public class Player : Fighter
         cam = go.AddComponent<Camera>(); cam.nearClipPlane = 0.05f; cam.farClipPlane = 400f; go.tag = "MainCamera";
         cam.clearFlags = CameraClearFlags.SolidColor; cam.backgroundColor = new Color(0.55f, 0.72f, 0.92f);
         go.AddComponent<AudioListener>();
-        var g = GameObject.CreatePrimitive(PrimitiveType.Cube); Destroy(g.GetComponent<Collider>());
-        g.transform.SetParent(go.transform); g.transform.localPosition = new Vector3(0.25f, -0.22f, 0.5f); gun = g.transform;
-        Mat.Set(g, new Color(0.12f, 0.12f, 0.14f));
+        var g = new GameObject("Gun"); g.transform.SetParent(go.transform); g.transform.localPosition = new Vector3(0.25f, -0.22f, 0.5f); gun = g.transform;
+        Color dk = new Color(0.1f, 0.1f, 0.12f), mt = new Color(0.2f, 0.21f, 0.24f), tan = new Color(0.42f, 0.36f, 0.26f);
+        GunPart(PrimitiveType.Cube, new Vector3(0, 0, 0), new Vector3(0.06f, 0.09f, 0.34f), mt);            // الجسم
+        GunPart(PrimitiveType.Cylinder, new Vector3(0, 0.012f, 0.30f), new Vector3(0.025f, 0.16f, 0.025f), dk, true); // الماسورة
+        GunPart(PrimitiveType.Cube, new Vector3(0, -0.02f, -0.24f), new Vector3(0.05f, 0.08f, 0.16f), tan);       // الكتف
+        GunPart(PrimitiveType.Cube, new Vector3(0, -0.11f, 0.02f), new Vector3(0.04f, 0.13f, 0.07f), dk);        // المخزن
+        GunPart(PrimitiveType.Cube, new Vector3(0, -0.085f, -0.1f), new Vector3(0.035f, 0.09f, 0.04f), dk);      // المقبض
+        GunPart(PrimitiveType.Cube, new Vector3(0, 0.065f, 0.0f), new Vector3(0.03f, 0.03f, 0.12f), dk);         // المشهد
         for (int i = 0; i < 3; i++) { ammoA[i] = Ws[i].mag; resA[i] = Ws[i].reserve; }
         Equip(0);
     }
-    void Equip(int i) { cur = i; reloadEnd = 0; gun.localScale = Ws[i].size; }
+    void GunPart(PrimitiveType pt, Vector3 pos, Vector3 scale, Color c, bool alongZ = false)
+    {
+        var q = GameObject.CreatePrimitive(pt); Destroy(q.GetComponent<Collider>());
+        q.transform.SetParent(gun); q.transform.localPosition = pos; q.transform.localScale = scale; if (alongZ) q.transform.localRotation = Quaternion.Euler(90, 0, 0); Mat.Set(q, c);
+    }
+    void Equip(int i) { cur = i; reloadEnd = 0; gun.localScale = new Vector3(1f, 1f, Ws[i].size.z / 0.6f); }
     public void NextWeapon() { Equip((cur + 1) % Ws.Length); }
 
     void Update()
