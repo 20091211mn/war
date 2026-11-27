@@ -4,14 +4,14 @@ using UnityEngine;
 using Unity.Services.LevelPlay;
 #endif
 
-// إعلانات Unity LevelPlay. لا تعمل إلا بعد: 1) إضافة الحزمة وتفعيل الرمز LEVELPLAY_ADS  2) وضع المفاتيح هنا.
-// بدون ذلك كل الدوال لا تفعل شيئاً (اللعبة تعمل كالمعتاد).
+// إعلانات Unity LevelPlay (الحزمة com.unity.services.levelplay + الرمز LEVELPLAY_ADS من Assets/csc.rsp).
+// تعمل على الجوال فقط؛ في المحرر وعلى الحاسوب كل الدوال بلا أثر.
 public static class Ads
 {
     // ضع القيم من لوحة LevelPlay (Unity Cloud). فارغ = الإعلانات متوقفة.
-    public const string AppKey = "";
-    public const string InterstitialId = "";
-    public const string RewardedId = "";
+    public const string AppKey = "29f92b3b5";
+    public const string InterstitialId = "oc9mqlyb2zdf2768";
+    public const string RewardedId = "8e5p6rtwhs6lcsv5";
 
     static int deaths; static bool ready;
     public static bool Enabled
