@@ -120,6 +120,7 @@ static const TrE TR_TAB[]={
 {"قاعدة القطب","Polar Base","Base polar"},
 {"المدينة القديمة (طرابلس)","Old City (Tripoli)","Ciudad vieja (Trípoli)"},
 {"قاعدة جوية (حرب F-35)","Air Base (F-35 War)","Base aérea (guerra F-35)"},
+{"مزرعة الحصاد","Harvest Farm","Granja de la cosecha"},
 {"كل واحد ضد الكل","Free-for-all","Todos contra todos"},
 {"الفائز","Winner","Ganador"},
 {"جارٍ تجهيز المعركة…","Preparing the battle…","Preparando la batalla…"},
@@ -265,4 +266,4 @@ static const TrE TR_TAB[]={
 {"Español","Español","Español"},
 {"تم حفظ الإعدادات","Settings saved","Ajustes guardados"},
 };
-static const int TR_N=262;
+static const int TR_N=263;
