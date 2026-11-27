@@ -62,7 +62,8 @@ func start_reload() -> void:
 	if String(w["kind"]) == "shotgun": reload_tot = 0.45 + 0.6 * mini(int(w["mag"]) - ammo, reserve)
 	else: reload_tot = float(w["reload"]) * (1.0 if rl_empty else 0.8)  # تعبئة تكتيكية أسرع من الفارغة
 	reload_t = reload_tot
-	if self == game.player: game.sfx_play("reload", global_position)
+	if String(w["kind"]) != "shotgun": game.sfx_reload_seq(global_position, reload_tot, rl_empty)
+	elif self == game.player: game.sfx_play("reload", global_position)
 
 func try_fire(origin: Vector3, dir: Vector3, ads: bool, extra_spread: float) -> bool:
 	if not alive or cd > 0.0: return false
@@ -70,6 +71,7 @@ func try_fire(origin: Vector3, dir: Vector3, ads: bool, extra_spread: float) -> 
 		if String(weapon()["kind"]) == "shotgun" and ammo > 0: reload_t = 0.0  # مقاطعة تعبئة الشوتغن
 		else: return false
 	if ammo <= 0:
+		if reserve <= 0 and self == game.player: game.sfx_play("dry", global_position, -2.0)
 		start_reload(); return false
 	var w := weapon()
 	ammo -= 1; cd = 60.0 / float(w["rpm"])
@@ -81,7 +83,7 @@ func try_fire(origin: Vector3, dir: Vector3, ads: bool, extra_spread: float) -> 
 		var up := right.cross(dir).normalized()
 		d = (dir + right * randf_range(-1, 1) * spread + up * randf_range(-1, 1) * spread).normalized()
 		game.hitscan(self, origin, d, w)
-	game.sfx_play("shot", origin)
+	game.sfx_shot(origin, self == game.player, -4.0 if self != game.player else 0.0)
 	if ammo <= 0 and reserve > 0: start_reload()
 	return true
 

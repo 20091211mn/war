@@ -193,14 +193,99 @@ func cam_pos() -> Vector3:
 
 # ---------------------------------------------------------------- الصوت (يُولَّد بالكود)
 func _make_sfx() -> void:
-	sfx["shot"] = _noise(0.16, 0.9, 5.0, 900.0)
-	sfx["reload"] = _noise(0.08, 0.5, 14.0, 2600.0)
+	for i in 3: sfx["shot%d" % i] = _gunshot(i)
+	sfx["shot"] = sfx["shot0"]
+	sfx["reload"] = _clack(0.12, 0.6)
+	sfx["mag_out"] = _mag_out(); sfx["mag_in"] = _mag_in(); sfx["bolt"] = _bolt()
+	sfx["casing"] = _casing(); sfx["dry"] = _dry()
 	sfx["boom"] = _noise(0.5, 1.0, 3.0, 220.0)
+	# ملفات حقيقية (ogg/mp3) في assets/sfx تحلّ محل المولَّد بالاسم نفسه (مثل shot0 أو mag_in)
+	for k in sfx.keys():
+		for ext in ["ogg", "mp3", "wav"]:
+			var p := "res://assets/sfx/%s.%s" % [k, ext]
+			if ResourceLoader.exists(p): sfx[k] = load(p); break
 	sfx["hit"] = _noise(0.05, 0.7, 10.0, 1800.0)
 	sfx["chirp"] = _chirp(0.16, [3200.0, 4600.0, 3600.0], 0.35)
 	sfx["chirp2"] = _chirp(0.28, [2400.0, 3800.0, 2600.0, 4200.0], 0.3)
 	sfx["rooster"] = _chirp(1.5, [420.0, 760.0, 600.0, 520.0, 380.0], 0.5, 6.0)
 	sfx["wind"] = _wind(4.0)
+
+# ---- مؤثرات سلاح مركّبة بالكود (طبقات: فرقعة + دفعة منخفضة + صدى بيئة) ----
+func _mk(dur: float, f: Callable, rate := 22050) -> AudioStreamWAV:
+	var n := int(dur * rate); var b := PackedByteArray(); b.resize(n * 2)
+	for i in n:
+		var v: float = tanh(f.call(float(i) / rate) * 1.4)
+		b.encode_s16(i * 2, int(clampf(v, -1.0, 1.0) * 29000.0))
+	var w := AudioStreamWAV.new(); w.format = AudioStreamWAV.FORMAT_16_BITS; w.mix_rate = rate; w.data = b
+	return w
+
+func _gunshot(variant: int) -> AudioStreamWAV:
+	var rng := RandomNumberGenerator.new(); rng.seed = 700 + variant * 31
+	var dur := 0.75; var rate := 22050; var n := int(dur * rate)
+	var raw := PackedFloat32Array(); raw.resize(n); var lp := 0.0; var lp2 := 0.0
+	for i in n:
+		var t := float(i) / rate
+		var nz := rng.randf_range(-1.0, 1.0)
+		lp += (nz - lp) * 0.55; lp2 += (nz - lp2) * 0.07
+		var crack := (nz - lp * 0.5) * exp(-t * 90.0) * 1.2                         # فرقعة حادة قصيرة
+		var boom := sin(TAU * (48.0 + 70.0 * exp(-t * 30.0)) * t) * exp(-t * 14.0) * 1.0   # دفعة منخفضة
+		var body := lp2 * exp(-t * 16.0) * 1.1                                      # جسم الصوت
+		raw[i] = crack + boom + body
+	# أصداء انعكاس البيئة (3 ارتدادات بتخفيت)
+	var delays := [0.07 + variant * 0.01, 0.16 + variant * 0.015, 0.31]; var gains := [0.35, 0.22, 0.12]
+	var out := PackedFloat32Array(); out.resize(n); var tail := 0.0
+	for i in n:
+		var v: float = raw[i]
+		for k in 3:
+			var j: int = i - int(float(delays[k]) * rate)
+			if j >= 0: v += raw[j] * float(gains[k]) * 0.6
+		tail += (v - tail) * 0.25
+		out[i] = lerpf(v, tail, 0.35 * minf(1.0, float(i) / (0.05 * rate)))
+	return _mk(dur, func(t: float) -> float: return out[mini(int(t * rate), n - 1)] * 0.8)
+
+func _tickf(t: float, t0: float, f1: float, f2: float, dec: float, amp: float) -> float:
+	var u := t - t0
+	if u < 0.0: return 0.0
+	return (sin(TAU * f1 * u) * 0.6 + sin(TAU * f2 * u) * 0.4) * exp(-u * dec) * amp
+
+func _clack(dur: float, amp: float) -> AudioStreamWAV:
+	var rng := RandomNumberGenerator.new(); rng.seed = 5
+	return _mk(dur, func(t: float) -> float: return _tickf(t, 0.0, 1900.0, 3300.0, 130.0, amp) + rng.randf_range(-1, 1) * exp(-t * 220.0) * amp * 0.5)
+
+func _mag_out() -> AudioStreamWAV:
+	var rng := RandomNumberGenerator.new(); rng.seed = 6
+	return _mk(0.3, func(t: float) -> float:
+		var v := _tickf(t, 0.0, 1500.0, 2600.0, 160.0, 0.55)                       # زر تحرير المخزن
+		v += rng.randf_range(-1, 1) * (exp(-maxf(t - 0.04, 0.0) * 40.0) * 0.18 if t > 0.04 and t < 0.16 else 0.0)  # احتكاك انزلاق
+		v += _tickf(t, 0.2, 380.0, 900.0, 60.0, 0.6)                              # سقوط المخزن
+		return v)
+
+func _mag_in() -> AudioStreamWAV:
+	var rng := RandomNumberGenerator.new(); rng.seed = 7
+	return _mk(0.35, func(t: float) -> float:
+		var v := rng.randf_range(-1, 1) * (sin(clampf(t / 0.12, 0.0, 1.0) * PI) * 0.16 if t < 0.12 else 0.0)   # انزلاق للأعلى
+		v += _tickf(t, 0.12, 700.0, 1700.0, 70.0, 0.75)                          # استقرار المخزن
+		v += _tickf(t, 0.14, 2200.0, 3600.0, 200.0, 0.4)
+		return v)
+
+func _bolt() -> AudioStreamWAV:
+	var rng := RandomNumberGenerator.new(); rng.seed = 8
+	return _mk(0.38, func(t: float) -> float:
+		var v := rng.randf_range(-1, 1) * (0.22 * exp(-t * 18.0) if t < 0.11 else 0.0)                         # سحب الترباس
+		v += _tickf(t, 0.1, 1100.0, 2800.0, 90.0, 0.6)                                                          # اصطدام خلفي
+		v += _tickf(t, 0.22, 800.0, 2000.0, 80.0, 0.8) + _tickf(t, 0.225, 3000.0, 4200.0, 220.0, 0.35)         # إغلاق الترباس
+		return v)
+
+func _casing() -> AudioStreamWAV:
+	return _mk(0.32, func(t: float) -> float:
+		var v := 0.0
+		for k in 4:
+			var t0: float = [0.0, 0.085, 0.145, 0.185][k]; var a: float = [0.55, 0.32, 0.18, 0.09][k]
+			v += _tickf(t, t0, 4300.0 + k * 220.0, 6200.0, 95.0, a)
+		return v)
+
+func _dry() -> AudioStreamWAV:
+	return _mk(0.1, func(t: float) -> float: return _tickf(t, 0.0, 2400.0, 4100.0, 170.0, 0.7))
 
 func _noise(dur: float, vol: float, decay: float, tone: float) -> AudioStreamWAV:
 	var rate := 22050; var n := int(dur * rate); var b := PackedByteArray(); b.resize(n * 2)
@@ -239,6 +324,20 @@ func _wind(dur: float) -> AudioStreamWAV:
 	w.loop_mode = AudioStreamWAV.LOOP_FORWARD; w.loop_begin = 0; w.loop_end = n
 	return w
 
+# طلقة بتنويع (3 تسجيلات + تغيير طفيف في الدرجة) وصوت الفوارغ للاعب المحلي
+func sfx_shot(pos: Vector3, local: bool, vol_db := 0.0) -> void:
+	sfx_play("shot%d" % (randi() % 3), pos, vol_db, randf_range(0.94, 1.06))
+	if local:
+		get_tree().create_timer(randf_range(0.28, 0.42)).timeout.connect(func(): sfx_play("casing", pos + Vector3(0.6, -1.0, 0.3), -6.0, randf_range(0.9, 1.1)))
+
+# تسلسل التعبئة: تحرير المخزن، إدخاله، ثم شدّ الترباس إن كان السلاح فارغاً
+func sfx_reload_seq(pos: Vector3, total: float, empty: bool) -> void:
+	if pos.distance_to(cam_pos()) > 45.0: return
+	var tr := get_tree()
+	sfx_play("mag_out", pos, -3.0)
+	tr.create_timer(total * 0.5).timeout.connect(func(): sfx_play("mag_in", pos, -2.0))
+	if empty: tr.create_timer(maxf(total - 0.35, total * 0.7)).timeout.connect(func(): sfx_play("bolt", pos, -1.0))
+
 # أجواء المزرعة: ريح دائمة + زقزقة وصياح ديك عشوائيان من أماكن بعيدة
 func _farm_ambience() -> void:
 	if selftest or not str(maps[map_idx]["name"]).contains("الحصاد"): return
@@ -252,9 +351,9 @@ func _farm_ambience() -> void:
 		var r := randf()
 		sfx_play("rooster" if r < 0.1 else ("chirp2" if r < 0.5 else "chirp"), pos))
 
-func sfx_play(name: String, pos: Vector3) -> void:
-	if selftest: return
-	var p := AudioStreamPlayer3D.new(); p.stream = sfx[name]; p.unit_size = 14.0; p.max_distance = 140.0; add_child(p); p.global_position = pos; p.play()
+func sfx_play(name: String, pos: Vector3, vol_db := 0.0, pitch := 1.0) -> void:
+	if selftest or not sfx.has(name): return
+	var p := AudioStreamPlayer3D.new(); p.stream = sfx[name]; p.unit_size = 14.0; p.max_distance = 140.0; p.volume_db = vol_db; p.pitch_scale = pitch; add_child(p); p.global_position = pos; p.play()
 	p.finished.connect(p.queue_free)
 
 # ---------------------------------------------------------------- القوائم (واجهة حديثة)
