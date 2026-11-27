@@ -10,6 +10,7 @@ extends RefCounted
 static func profile(m: Dictionary) -> Dictionary:
 	var nm := str(m.get("name", ""))
 	var sand := Color(0.84, 0.7, 0.46)
+	if nm.contains("الحصاد"): return {"ground": 3, "dust": Color(0.6, 0.56, 0.4), "kinds": [0, 2, 2, 1, 0, 2, 0, 2, 0], "custom": false, "palms": false, "extras": 1.0, "wind": 0, "rust": 0.25, "win": 0, "farm": true}
 	if nm.contains("الشاص"): return {"ground": 0, "dust": sand, "kinds": [0, 0, 0, 1, 0, 2, 0, 0, 0], "custom": true, "palms": true, "extras": 1.0, "wind": 1, "rust": 0.4, "win": 0}
 	if nm.contains("أطلال"): return {"ground": 0, "dust": sand, "kinds": [0, 0, 0, 3, 0, 2, 0, 0, 0], "custom": true, "palms": true, "extras": 0.8, "wind": 1, "rust": 0.3, "win": 2}
 	if nm.contains("الجيزة"): return {"ground": 0, "dust": Color(0.88, 0.74, 0.48), "kinds": [3, 3, 3, 3, 0, 2, 3, 0, 0], "custom": true, "palms": true, "extras": 0.8, "wind": 1, "rust": 0.2, "win": 0}
@@ -438,7 +439,8 @@ static func build(m: Dictionary, root: Node3D, dx: Dictionary, th: Dictionary, s
 	elif gm == 2: rcols = [Color(0.34, 0.36, 0.4), Color(0.42, 0.44, 0.48), Color(0.3, 0.32, 0.36)]
 	for i in 3: _mm(root, rm[i], solid_mat(rcols[i], 3, 0.0, pr["dust"], 0.0), rt[i], false, "Rocks")
 	# ---- شجيرات وأعشاب جافة ----
-	var gcol := Color(0.74, 0.62, 0.32) if gm == 0 else Color(0.5, 0.54, 0.32)
+	var farm: bool = pr.get("farm", false)
+	var gcol := Color(0.74, 0.62, 0.32) if gm == 0 else (Color(0.3, 0.5, 0.18) if farm else Color(0.5, 0.54, 0.32))
 	var dry := _tuft_mesh(9, 0.55, 0.09, gcol, 5)
 	var shrub := _tuft_mesh(16, 0.9, 0.12, Color(0.36, 0.38, 0.2), 9)
 	var tuf: Array = []; var shr: Array = []
@@ -458,8 +460,33 @@ static func build(m: Dictionary, root: Node3D, dx: Dictionary, th: Dictionary, s
 		if rng.randf() < 0.28: shr.append(tf)
 		else: tuf.append(tf)
 	_mm(root, dry, lm, tuf, false, "DryGrass"); _mm(root, shrub, lm, shr, false, "Shrubs")
+	if farm: _crops(root, m, q)
 	# ---- غبار تذروه الرياح ----
 	if q >= 2 and int(pr["wind"]) > 0: _wind_dust(root, W, D, q, int(pr["wind"]))
+
+# حقول المزرعة: يملأ بقع الألوان 4 الكبيرة بصفوف قمح (ذهبي) أو ذرة (أخضر عالٍ) بكثافة تتبع الجودة
+static func _crops(root: Node3D, m: Dictionary, q: int) -> void:
+	var rng := RandomNumberGenerator.new(); rng.seed = 5150
+	var dens := 1.0 if q >= 3 else (0.55 if q >= 2 else 0.3)
+	var wheat := _tuft_mesh(7, 1.0, 0.07, Color(0.78, 0.68, 0.3), 3)
+	var corn := _tuft_mesh(6, 1.7, 0.12, Color(0.32, 0.5, 0.16), 4)
+	var wt: Array = []; var ct: Array = []
+	for d in m["deco"]:
+		if int(d[6]) != 4 or (d[3] - d[0]) < 15.0 or (d[5] - d[2]) < 15.0: continue
+		var is_corn: bool = (d[3] - d[0]) < 31.0
+		var step := (1.15 if is_corn else 0.75) / sqrt(dens)
+		var x: float = d[0] + 0.6
+		while x < d[3] - 0.6:
+			var z: float = d[2] + 0.6
+			while z < d[5] - 0.6:
+				var s := rng.randf_range(0.85, 1.2)
+				var tf := Transform3D(Basis.from_euler(Vector3(0, rng.randf() * TAU, 0)).scaled(Vector3(s, s * rng.randf_range(0.85, 1.15), s)), Vector3(x + rng.randf_range(-0.15, 0.15), 0.0, z + rng.randf_range(-0.15, 0.15)))
+				if is_corn: ct.append(tf)
+				else: wt.append(tf)
+				z += step
+			x += step * (1.5 if is_corn else 1.3)   # صفوف: مسافة أوسع بين الصفوف
+	var lm := leaf_mat()
+	_mm(root, wheat, lm, wt, false, "Wheat"); _mm(root, corn, lm, ct, false, "Corn")
 
 static func _dunes(root: Node3D, th: Dictionary, W: float, D: float, q: int) -> void:
 	var fn := FastNoiseLite.new(); fn.seed = 77; fn.frequency = 0.0042; fn.fractal_octaves = 3; fn.noise_type = FastNoiseLite.TYPE_SIMPLEX
