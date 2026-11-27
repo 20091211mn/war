@@ -6,6 +6,17 @@
     "com.unity.modules.audio": "1.0.0",
     "com.unity.modules.androidjni": "1.0.0",
     "com.unity.modules.unitywebrequest": "1.0.0",
-    "com.unity.services.levelplay": "8.9.0"
-  }
+    "com.unity.services.levelplay": "8.9.0",
+    "com.google.external-dependency-manager": "1.2.186"
+  },
+  "scopedRegistries": [
+    {
+      "name": "OpenUPM",
+      "url": "https://package.openupm.com",
+      "scopes": [
+        "com.google.external-dependency-manager",
+        "com.openupm"
+      ]
+    }
+  ]
 }
