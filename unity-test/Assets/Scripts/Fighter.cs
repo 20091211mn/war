@@ -18,6 +18,7 @@ public abstract class Fighter : MonoBehaviour
             deaths++;
             if (src != null && src != this) { src.kills++; Game.I.score[src.team]++; Game.I.Feed(src.label + "  >  " + label); }
             OnDeath();
+            if (this is Player) Ads.PlayerDied();
         }
     }
     protected virtual void OnHurt(Fighter src) { }

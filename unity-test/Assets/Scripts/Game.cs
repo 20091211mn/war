@@ -32,6 +32,7 @@ public class Game : MonoBehaviour
         var sun = new GameObject("Sun").AddComponent<Light>(); sun.type = LightType.Directional; sun.transform.rotation = Quaternion.Euler(38, -35, 0); sun.intensity = 1.25f; sun.color = new Color(1f, 0.95f, 0.84f); sun.shadows = LightShadows.Soft;
         Build();
         StartCoroutine(CheckUpdate());
+        Ads.Init();
     }
 
     public void Feed(string t) { feed.Add(new KeyValuePair<string, float>(t, Time.time + 5f)); if (feed.Count > 5) feed.RemoveAt(0); }
@@ -164,7 +165,11 @@ public class Game : MonoBehaviour
         // سجل القتل
         for (int i = feed.Count - 1; i >= 0; i--) if (feed[i].Value < Time.time) feed.RemoveAt(i);
         for (int i = 0; i < feed.Count; i++) GUI.Label(new Rect(Screen.width - Screen.width * 0.4f - 20, 12 + i * lh * 0.8f, Screen.width * 0.4f, lh), feed[i].Key, new GUIStyle(sm) { alignment = TextAnchor.MiddleRight, normal = { textColor = Color.white } });
-        if (!player.Alive) GUI.Label(new Rect(cx - 200, cy - lh, 400, lh * 1.5f), "YOU DIED - respawning...", st);
+        if (!player.Alive)
+        {
+            GUI.Label(new Rect(cx - 200, cy - lh, 400, lh * 1.5f), "YOU DIED - respawning...", st);
+            if (Ads.RewardedReady && GUI.Button(new Rect(cx - 220, cy + lh * 0.6f, 440, lh * 1.6f), "WATCH AD: respawn now + full ammo", sm)) Ads.ShowRewarded(() => player.ReviveNow());
+        }
         if (Time.time < msgUntil) GUI.Label(new Rect(cx - 200, 12 + lh, 500, lh), msg, st);
         GUI.Label(new Rect(Screen.width - 120, Screen.height - lh, 110, lh), "v" + Version, sm);
         GUI.Label(new Rect(20, 12 + lh, Screen.width * 0.75f, lh * 3.2f), dbg, new GUIStyle(sm) { fontSize = Mathf.RoundToInt(fs * 0.6f), wordWrap = true, normal = { textColor = Color.yellow } });

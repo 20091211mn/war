@@ -82,6 +82,7 @@ public class Player : Fighter
     public bool Reloading => reloadEnd > 0;
     protected override void OnHurt(Fighter src) { lastHit = Time.time; }
     protected override void OnDeath() { respawnAt = Time.time + 3f; }
+    public void ReviveNow() { respawnAt = 0f; }
     void Respawn()
     {
         hp = 100; for (int i = 0; i < 3; i++) { ammoA[i] = Ws[i].mag; resA[i] = Ws[i].reserve; }
