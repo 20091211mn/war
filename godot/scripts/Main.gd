@@ -74,6 +74,7 @@ var test_frames := 0
 var shot_path := ""
 var menu_shot := ""
 var dbg_picker := false
+var dbg_loadout := false
 var dbg_settings := false
 var dbg_sp := false
 var dbg_editui := false
@@ -133,6 +134,7 @@ func _ready() -> void:
 		if a.begins_with("--menushot="): menu_shot = a.substr(11)
 		if a.begins_with("--introat="): dbg_intro_at = float(a.substr(10)); menu_shot = "/tmp/intro.png"
 		if a == "--picker": dbg_picker = true
+		if a == "--loadout": dbg_loadout = true
 		if a == "--settings": dbg_settings = true
 		if a == "--sp": dbg_sp = true
 		if a.begins_with("--updurl="): Updater.BASES = [a.substr(9)]
@@ -455,9 +457,6 @@ func _build_settings_screen() -> VBoxContainer:
 	var g: VBoxContainer = _set_pages[0]
 	_seg(g, "اللغة", func(): return Settings.LANGS, func(): return Settings.lang, func(i): Settings.lang = i; Settings.save())
 	_slider(g, "مستوى الصوت", 0.0, 100.0, 5.0, func(): return Settings.volume * 100.0, func(v): Settings.volume = v / 100.0; Settings.save(), "%.0f%%")
-	for at in [["كاتم صوت (ارتداد أقل)", 1], ["منظار (تقريب وتصويب أدق)", 2], ["مخزن موسّع (+40% ذخيرة)", 4]]:
-		var bit: int = at[1]
-		_toggle(g, at[0], func(): return (Settings.attach & bit) != 0, func(b): Settings.attach = (Settings.attach | bit) if b else (Settings.attach & ~bit); _wmod.clear())
 	_toggle(g, "التحديث التلقائي", func(): return Settings.auto_update, func(b): Settings.auto_update = b)
 	_update_row(g)
 	# ---- الرسوميات ----
@@ -544,8 +543,8 @@ func _map_card(i: int) -> Control:
 	pc.add_child(btn); return pc
 
 var _overlays: Array = []
-func _overlay(title_ar: String, min_w: float) -> VBoxContainer:
-	var root := Control.new(); root.set_anchors_preset(Control.PRESET_FULL_RECT); root.visible = false; menu_root.add_child(root)
+func _overlay(title_ar: String, min_w: float, parent: Control = null) -> VBoxContainer:
+	var root := Control.new(); root.set_anchors_preset(Control.PRESET_FULL_RECT); root.visible = false; (parent if parent != null else menu_root).add_child(root)
 	var dim := ColorRect.new(); dim.color = Color(0.03, 0.05, 0.09, 0.86); dim.set_anchors_preset(Control.PRESET_FULL_RECT); dim.mouse_filter = Control.MOUSE_FILTER_STOP; root.add_child(dim)
 	var cc := CenterContainer.new(); cc.set_anchors_preset(Control.PRESET_FULL_RECT); root.add_child(cc)
 	var vb := _card(cc, min_w)
@@ -617,6 +616,7 @@ func _build_menu() -> void:
 	var b_on := _menu_row("globe", "لعب أونلاين", func(): lan.show_online()); lc.add_child(b_on); rows.append(b_on)
 	var b_host := _menu_row("host", "إنشاء غرفة LAN", func(): lan.show_host()); lc.add_child(b_host); rows.append(b_host)
 	var b_join := _menu_row("join", "الانضمام إلى LAN", func(): lan.show_join()); lc.add_child(b_join); rows.append(b_join)
+	var b_lo := _menu_row("grid", "تجهيز السلاح", func(): _open(_loadout_ov)); lc.add_child(b_lo); rows.append(b_lo)
 	var b_set := _menu_row("gear", "الإعدادات", func(): _open(_set_ov)); lc.add_child(b_set); rows.append(b_set)
 	if not OS.has_feature("ios") and not OS.has_feature("web"):
 		var b_exit := _menu_row("exit", "خروج", func(): _confirm_exit()); lc.add_child(b_exit); rows.append(b_exit)
@@ -676,7 +676,20 @@ func _build_pause() -> void:
 	over_label = Label.new(); over_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; over_label.add_theme_font_size_override("font_size", 34); over_label.add_theme_color_override("font_color", UiTheme.ACCENT2); vb.add_child(over_label)
 	_settings_rows(vb)
 	_res_btn = Button.new(); _res_btn.custom_minimum_size = Vector2(0, 80); _res_btn.add_theme_font_size_override("font_size", 30); UiTheme.style_accent(_res_btn); UiTheme.juicy(_res_btn); _res_btn.pressed.connect(resume); vb.add_child(_res_btn)
+	_loadout_ov = _build_loadout()
+	var lb := Button.new(); lb.custom_minimum_size = Vector2(0, 72); lb.add_theme_font_size_override("font_size", 26); UiTheme.style_ghost(lb); UiTheme.juicy(lb); lb.pressed.connect(func(): _open(_loadout_ov)); lb.set_meta("ar", "تجهيز السلاح"); _loadout_btns.append(lb); vb.add_child(lb)
 	_menu_btn = Button.new(); _menu_btn.custom_minimum_size = Vector2(0, 72); _menu_btn.add_theme_font_size_override("font_size", 26); UiTheme.style_ghost(_menu_btn); UiTheme.juicy(_menu_btn); _menu_btn.pressed.connect(_show_menu); vb.add_child(_menu_btn)
+
+# شاشة تجهيز السلاح: الملحقات تنطبق على سلاح اللاعب في المباراة (تُفتح من القائمة الرئيسية وقائمة الإيقاف)
+var _loadout_ov: VBoxContainer
+var _loadout_btns: Array = []
+func _build_loadout() -> VBoxContainer:
+	var vb := _overlay("تجهيز السلاح", 640, ui_root)
+	for at in [["كاتم صوت (ارتداد أقل)", 1], ["منظار (تقريب وتصويب أدق)", 2], ["مخزن موسّع (+40% ذخيرة)", 4]]:
+		var bit: int = at[1]
+		_toggle(vb, at[0], func(): return (Settings.attach & bit) != 0, func(b): Settings.attach = (Settings.attach | bit) if b else (Settings.attach & ~bit); _wmod.clear())
+	var note := _glass_label("", 18, Color(0.7, 0.76, 0.86)); note.set_meta("ar", "الملحقات لا تؤثر على الشوتغن والقاذف"); note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; vb.add_child(note); _loadout_btns.append(note)
+	return vb
 
 func _build_board() -> void:
 	board_root = Control.new(); board_root.name = "Board"; board_root.set_anchors_preset(Control.PRESET_FULL_RECT); board_root.visible = false; board_root.mouse_filter = Control.MOUSE_FILTER_STOP; ui_root.add_child(board_root)
@@ -757,6 +770,8 @@ func _refresh() -> void:
 		(pc.find_child("nm", true, false) as Label).text = Settings.t(maps[i]["name"])
 	for o in _overlays:
 		var tl := o.get_meta("title") as Label; tl.text = Settings.t(tl.get_meta("ar"))
+	for lb in _loadout_btns:
+		if is_instance_valid(lb): (lb as Control).set("text", Settings.t(lb.get_meta("ar")))
 	if _map_title != null:
 		_map_lab.text = Settings.t("الخريطة"); _map_title.text = Settings.t(maps[map_idx]["name"])
 		_map_meta.text = "%d × %d m" % [int(maps[map_idx]["W"]), int(maps[map_idx]["D"])]
@@ -1435,6 +1450,7 @@ func _process(dt: float) -> void:
 			var im := get_viewport().get_texture().get_image(); im.resize(512, 288, Image.INTERPOLATE_LANCZOS); im.save_png(thumb_path); get_tree().quit(0)
 	if menu_shot != "":
 		if dbg_picker and _map_picker != null: _open(_map_picker)
+		if dbg_loadout and _loadout_ov != null: _open(_loadout_ov)
 		if dbg_settings and _set_ov != null: _open(_set_ov)
 		if dbg_sp and _sp_ov != null: _open(_sp_ov)
 		_mf += 1

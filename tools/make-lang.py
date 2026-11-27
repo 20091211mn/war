@@ -125,6 +125,8 @@ E=[
 ("قاعدة القطب","Polar Base","Base polar"),
 ("المدينة القديمة (طرابلس)","Old City (Tripoli)","Ciudad vieja (Trípoli)"),
 ("قاعدة جوية (حرب F-35)","Air Base (F-35 War)","Base aérea (guerra F-35)"),
+("تجهيز السلاح","Weapon loadout","Equipo del arma"),
+("الملحقات لا تؤثر على الشوتغن والقاذف","Attachments do not affect shotguns and launchers","Los accesorios no afectan a escopetas ni lanzadores"),
 ("مزرعة الحصاد","Harvest Farm","Granja de la cosecha"),
 ("كل واحد ضد الكل","Free-for-all","Todos contra todos"),
 ("الفائز","Winner","Ganador"),
