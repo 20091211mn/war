@@ -196,6 +196,11 @@ func _make_sfx() -> void:
 	sfx["shot"] = _noise(0.16, 0.9, 5.0, 900.0)
 	sfx["reload"] = _noise(0.08, 0.5, 14.0, 2600.0)
 	sfx["boom"] = _noise(0.5, 1.0, 3.0, 220.0)
+	sfx["hit"] = _noise(0.05, 0.7, 10.0, 1800.0)
+	sfx["chirp"] = _chirp(0.16, [3200.0, 4600.0, 3600.0], 0.35)
+	sfx["chirp2"] = _chirp(0.28, [2400.0, 3800.0, 2600.0, 4200.0], 0.3)
+	sfx["rooster"] = _chirp(1.5, [420.0, 760.0, 600.0, 520.0, 380.0], 0.5, 6.0)
+	sfx["wind"] = _wind(4.0)
 
 func _noise(dur: float, vol: float, decay: float, tone: float) -> AudioStreamWAV:
 	var rate := 22050; var n := int(dur * rate); var b := PackedByteArray(); b.resize(n * 2)
@@ -208,6 +213,44 @@ func _noise(dur: float, vol: float, decay: float, tone: float) -> AudioStreamWAV
 		b.encode_s16(i * 2, int(clampf(v, -1.0, 1.0) * 30000.0))
 	var w := AudioStreamWAV.new(); w.format = AudioStreamWAV.FORMAT_16_BITS; w.mix_rate = rate; w.data = b
 	return w
+
+# نغمة متغيّرة التردد بين نقاط (زقزقة/صياح) مع غلاف سعة
+func _chirp(dur: float, pts: Array, vol: float, vib := 0.0) -> AudioStreamWAV:
+	var rate := 22050; var n := int(dur * rate); var b := PackedByteArray(); b.resize(n * 2); var ph := 0.0
+	for i in n:
+		var u := float(i) / n; var seg := u * (pts.size() - 1); var k := mini(int(seg), pts.size() - 2)
+		var f: float = lerpf(pts[k], pts[k + 1], seg - k) * (1.0 + sin(u * 40.0) * vib * 0.01)
+		ph += TAU * f / rate
+		var env := sin(u * PI) * (1.0 - u * 0.3)
+		var v := (sin(ph) + 0.35 * sin(ph * 2.0) + 0.15 * sin(ph * 3.0)) * env * vol
+		b.encode_s16(i * 2, int(clampf(v, -1.0, 1.0) * 30000.0))
+	var w := AudioStreamWAV.new(); w.format = AudioStreamWAV.FORMAT_16_BITS; w.mix_rate = rate; w.data = b
+	return w
+
+# ريح متكررة بلا قطع: ضوضاء مفلترة بسعة بطيئة التموّج (الحلقة تنتهي بقيمة قريبة من بدايتها)
+func _wind(dur: float) -> AudioStreamWAV:
+	var rate := 11025; var n := int(dur * rate); var b := PackedByteArray(); b.resize(n * 2); var lp := 0.0
+	for i in n:
+		lp += (randf_range(-1.0, 1.0) - lp) * 0.06
+		var u := float(i) / n
+		var env := 0.55 + 0.45 * sin(u * TAU * 2.0)
+		b.encode_s16(i * 2, int(clampf(lp * env * 2.2, -1.0, 1.0) * 14000.0))
+	var w := AudioStreamWAV.new(); w.format = AudioStreamWAV.FORMAT_16_BITS; w.mix_rate = rate; w.data = b
+	w.loop_mode = AudioStreamWAV.LOOP_FORWARD; w.loop_begin = 0; w.loop_end = n
+	return w
+
+# أجواء المزرعة: ريح دائمة + زقزقة وصياح ديك عشوائيان من أماكن بعيدة
+func _farm_ambience() -> void:
+	if selftest or not str(maps[map_idx]["name"]).contains("الحصاد"): return
+	var wp := AudioStreamPlayer.new(); wp.stream = sfx["wind"]; wp.volume_db = -16.0; wp.autoplay = true; world.add_child(wp)
+	var t := Timer.new(); t.wait_time = 2.5; t.autostart = true; world.add_child(t)
+	t.timeout.connect(func():
+		t.wait_time = randf_range(1.5, 5.0)
+		if player == null or not is_instance_valid(player): return
+		var a := randf() * TAU; var d := randf_range(14.0, 60.0)
+		var pos := player.global_position + Vector3(cos(a) * d, 2.0, sin(a) * d)
+		var r := randf()
+		sfx_play("rooster" if r < 0.1 else ("chirp2" if r < 0.5 else "chirp"), pos))
 
 func sfx_play(name: String, pos: Vector3) -> void:
 	if selftest: return
@@ -793,6 +836,7 @@ func start_match() -> void:
 	world = Node3D.new(); world.name = "World"; add_child(world)
 	var m: Dictionary = maps[map_idx]
 	map_info = MapBuilder.build(m, world); map_w = m["W"]; map_d = m["D"]
+	_farm_ambience()
 	ffa = ffa_pref and map_idx != 8
 	score = [0, 0]; time_left = 600.0; time_cap = 600.0; match_t = 0.0; resp_t = 0.0; score_lim = 30
 	player = Player.new(); player.game = self; player.team = 0; player.fname = Settings.t("اللاعب"); world.add_child(player)
