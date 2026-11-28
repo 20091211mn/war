@@ -6,7 +6,7 @@ using UnityEngine.Networking;
 // يبني العالم كله بالكود: أرض ومبانٍ وبوتات واجهة HUD (OnGUI) وأزرار لمس
 public class Game : MonoBehaviour
 {
-    public const string Version = "1.0.4";
+    public const string Version = "1.0.5";
     const string UpdateUrl = "https://raw.githubusercontent.com/20091211mn/war/main/unity-test/version.json";
     public static Game I;
     string updMsg = "", updLink = "";
@@ -30,7 +30,7 @@ public class Game : MonoBehaviour
         foreach (var c in FindObjectsOfType<Camera>()) Destroy(c.gameObject);
         foreach (var l in FindObjectsOfType<Light>()) Destroy(l.gameObject);
         var sun = new GameObject("Sun").AddComponent<Light>(); sun.type = LightType.Directional; sun.transform.rotation = Quaternion.Euler(38, -35, 0); sun.intensity = 1.25f; sun.color = new Color(1f, 0.95f, 0.84f); sun.shadows = LightShadows.Soft;
-        Build();
+        ShowMenu();
         StartCoroutine(CheckUpdate());
         Ads.Init();
     }
@@ -60,12 +60,81 @@ public class Game : MonoBehaviour
 
     void Build()
     {
-        world = new GameObject("World").transform;
-        groundR = FarmMap.Build(world); bldR = FarmMap.Rends;
         QualitySettings.shadowDistance = 90f;
         var pg = new GameObject("Player"); pg.transform.position = SpawnPoint(1); player = pg.AddComponent<Player>(); player.team = 1; all.Add(player);
-        for (int i = 0; i < 8; i++) AddBot(i % 2 == 0 ? 0 : 1);
+        for (int i = 0; i < botCount; i++) AddBot(i % 2 == 0 ? 0 : 1);
         for (int i = 0; i < 2; i++) AddBot(0);
+        paused = false; Cursor.lockState = CursorLockMode.None;
+    }
+    void BuildWorld()
+    {
+        if (world != null) Destroy(world.gameObject);
+        world = new GameObject("World").transform;
+        if (mapIdx == 0) { groundR = FarmMap.Build(world); bldR = FarmMap.Rends; }
+        else { groundR = DesertMap.Build(world); bldR = DesertMap.Rends; }
+        RenderSettings.ambientSkyColor = mapIdx == 0 ? new Color(0.55f, 0.7f, 0.95f) : new Color(0.75f, 0.78f, 0.9f);
+    }
+
+    // ---------- القائمة الرئيسية ----------
+    static readonly string[] MapNames = { "FARM HARVEST", "DESERT OUTPOST" };
+    static readonly int[] BotOpts = { 6, 10, 16 };
+    int mapIdx = 0, botCount = 10; bool paused; Camera menuCam; float menuT;
+    void ShowMenu()
+    {
+        if (player != null) { Destroy(player.gameObject); player = null; }
+        foreach (var f in all) if (f != null) Destroy(f.gameObject);
+        all.Clear(); score[0] = score[1] = 0;
+        foreach (var c in FindObjectsOfType<Camera>()) Destroy(c.gameObject);
+        BuildWorld();
+        var cg = new GameObject("MenuCam"); menuCam = cg.AddComponent<Camera>(); cg.tag = "MainCamera"; menuCam.farClipPlane = 400f;
+        menuCam.clearFlags = CameraClearFlags.SolidColor; menuCam.backgroundColor = new Color(0.55f, 0.72f, 0.92f);
+        Cursor.lockState = CursorLockMode.None; Cursor.visible = true; paused = true;
+    }
+    void StartMatch()
+    {
+        if (menuCam != null) Destroy(menuCam.gameObject);
+        menuCam = null; Build();
+    }
+    void MenuCamUpdate()
+    {
+        if (menuCam == null) return;
+        menuT += Time.unscaledDeltaTime * 0.08f;
+        float r = 45f; menuCam.transform.position = new Vector3(Mathf.Cos(menuT) * r, 9f, Mathf.Sin(menuT) * r);
+        menuCam.transform.LookAt(new Vector3(0, 2f, 0));
+    }
+    GUIStyle titleSt, btnSt, subSt;
+    void MenuGUI()
+    {
+        float W = Screen.width, H = Screen.height; var old = GUI.color;
+        int fs = Mathf.Max(20, Mathf.RoundToInt(H / 24f));
+        if (titleSt == null || btnSt.fontSize != fs)
+        {
+            titleSt = new GUIStyle(GUI.skin.label) { fontSize = Mathf.RoundToInt(fs * 3f), fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter }; titleSt.normal.textColor = Color.white;
+            subSt = new GUIStyle(GUI.skin.label) { fontSize = Mathf.RoundToInt(fs * 0.85f), alignment = TextAnchor.MiddleCenter }; subSt.normal.textColor = new Color(1, 1, 1, 0.8f);
+            btnSt = new GUIStyle(GUI.skin.button) { fontSize = fs, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
+            btnSt.normal.textColor = Color.white; btnSt.hover.textColor = Color.white; btnSt.active.textColor = Color.white;
+        }
+        GUI.color = new Color(0, 0, 0, 0.45f); GUI.DrawTexture(new Rect(0, 0, W, H), Texture2D.whiteTexture);
+        GUI.color = new Color(0.85f, 0.18f, 0.18f, 0.95f); GUI.DrawTexture(new Rect(W * 0.5f - fs * 6.2f, H * 0.2f + fs * 3.2f, fs * 6.0f, fs * 0.18f), Texture2D.whiteTexture);
+        GUI.color = new Color(0.2f, 0.4f, 0.9f, 0.95f); GUI.DrawTexture(new Rect(W * 0.5f + fs * 0.2f, H * 0.2f + fs * 3.2f, fs * 6.0f, fs * 0.18f), Texture2D.whiteTexture);
+        GUI.color = Color.white;
+        GUI.Label(new Rect(0, H * 0.2f, W, fs * 3.2f), "WARZONE", titleSt);
+        GUI.Label(new Rect(0, H * 0.2f + fs * 3.5f, W, fs * 1.4f), "RED  vs  BLUE   -   Team Shooter", subSt);
+        float bw = Mathf.Min(W * 0.6f, fs * 16f), bh = fs * 2.3f, x = (W - bw) / 2f, y = H * 0.2f + fs * 5.6f;
+        GUI.backgroundColor = new Color(0.15f, 0.6f, 0.25f);
+        if (GUI.Button(new Rect(x, y, bw, bh * 1.2f), "PLAY", btnSt)) StartMatch();
+        GUI.backgroundColor = new Color(0.25f, 0.3f, 0.45f); y += bh * 1.45f;
+        if (GUI.Button(new Rect(x, y, bw, bh), "MAP:  " + MapNames[mapIdx] + "  >", btnSt)) { mapIdx = (mapIdx + 1) % MapNames.Length; BuildWorld(); }
+        y += bh * 1.2f;
+        if (GUI.Button(new Rect(x, y, bw, bh), "BOTS:  " + botCount + "  >", btnSt)) { int k = System.Array.IndexOf(BotOpts, botCount); botCount = BotOpts[(k + 1) % BotOpts.Length]; }
+        GUI.backgroundColor = Color.white;
+        GUI.Label(new Rect(0, H - fs * 2.2f, W, fs * 1.4f), "Controls: touch (stick left, look right) or WASD + mouse   |   v" + Version, subSt);
+        if (updLink != "")
+        {
+            var r = new Rect(W / 2f - bw / 2f, H - fs * 4.6f, bw, fs * 2f); GUI.color = new Color(0.1f, 0.5f, 0.2f, 0.95f); GUI.DrawTexture(r, Texture2D.whiteTexture); GUI.color = Color.white;
+            if (GUI.Button(r, updMsg + "  (tap)", btnSt)) Application.OpenURL(updLink);
+        }
+        GUI.color = old;
     }
     void AddBot(int t) { var go = new GameObject("Bot"); go.transform.position = SpawnPoint(t); var b = go.AddComponent<Bot>(); b.Init(t); all.Add(b); }
 
@@ -144,6 +213,7 @@ public class Game : MonoBehaviour
 
     void Update()
     {
+        if (player == null) { MenuCamUpdate(); return; }
         hitMark = Mathf.Max(0, hitMark - Time.deltaTime);
         if (score[0] >= limit || score[1] >= limit) { msg = score[1] >= limit ? "فاز الفريق الأزرق" : "فاز الفريق الأحمر"; msgUntil = Time.time + 5; score[0] = score[1] = 0; Ads.RoundEnded(); foreach (var f in all) { f.kills = f.deaths = 0; } }
         HandleTouch();
@@ -153,6 +223,7 @@ public class Game : MonoBehaviour
     Rect FireRect() => new Rect(Screen.width - 220, Screen.height - 260, 170, 170);
     Rect SwitchRect() => new Rect(Screen.width - 250, Screen.height - 400, 100, 100);
     Rect UpdRect() => new Rect(Screen.width / 2f - 260, 70, 520, 70);
+    Rect PauseRect() { float pb = Mathf.Max(18, Screen.height / 36) * 2.2f; return new Rect(Screen.width / 2f - pb / 2f, 8, pb, pb); }
     Rect ReloadRect() => new Rect(Screen.width - 130, Screen.height - 400, 100, 100);
     void HandleTouch()
     {
@@ -164,6 +235,7 @@ public class Game : MonoBehaviour
             if (t.phase == TouchPhase.Began)
             {
                 if (updLink != "" && UpdRect().Contains(p)) { Application.OpenURL(updLink); continue; }
+                if (PauseRect().Contains(p)) continue;
                 if (SwitchRect().Contains(p)) { player.NextWeapon(); continue; }
                 if (ReloadRect().Contains(p)) { player.Reload(); continue; }
                 if (FireRect().Contains(p)) continue;
@@ -180,7 +252,7 @@ public class Game : MonoBehaviour
     GUIStyle st, sm;
     void OnGUI()
     {
-        if (player == null) return;
+        if (player == null) { MenuGUI(); return; }
         int fs = Mathf.Max(18, Screen.height / 36);
         if (st == null || st.fontSize != fs)
         {
@@ -206,6 +278,7 @@ public class Game : MonoBehaviour
             GUI.Label(new Rect(cx - 200, cy - lh, 400, lh * 1.5f), "YOU DIED - respawning...", st);
             if (Ads.RewardedReady && GUI.Button(new Rect(cx - 220, cy + lh * 0.6f, 440, lh * 1.6f), "WATCH AD: respawn now + full ammo", sm)) Ads.ShowRewarded(() => player.ReviveNow());
         }
+        { float pb = fs * 2.2f; if (GUI.Button(new Rect(Screen.width / 2f - pb / 2f, 8, pb, pb), "II", sm)) { ShowMenu(); return; } }
         if (Time.time < msgUntil) GUI.Label(new Rect(cx - 200, 12 + lh, 500, lh), msg, st);
         GUI.Label(new Rect(Screen.width - 120, Screen.height - lh, 110, lh), "v" + Version, sm);
         if (updLink != "")
