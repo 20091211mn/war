@@ -8,7 +8,7 @@ public class Bot : Fighter
     Renderer[] rs;
 
     void Awake() { cc = GetComponent<CharacterController>(); cc.height = 1.8f; cc.radius = 0.35f; cc.center = new Vector3(0, 0.9f, 0); }
-    Transform legL, legR; float walkT;
+    Transform legL, legR; float walkT; int burst;
     Transform Part(PrimitiveType pt, Vector3 pos, Vector3 scale, Color c)
     {
         var p = GameObject.CreatePrimitive(pt); Destroy(p.GetComponent<Collider>());
@@ -44,13 +44,19 @@ public class Bot : Fighter
             Vector3 to = target.transform.position - transform.position; to.y = 0; float dist = to.magnitude;
             Vector3 dir = to.normalized;
             transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(dir), Time.deltaTime * 8f);
-            bool los = !Physics.Linecast(transform.position + Vector3.up * 1.5f, target.transform.position + Vector3.up * 1.2f, Game.I.worldMask);
+            bool los = Game.I.LineClear(transform.position + Vector3.up * 1.5f, target.transform.position + Vector3.up * 1.2f);
             if (dist > 14f || !los) move = dir; else move = transform.right * strafe * 0.6f;
-            if (Physics.Raycast(transform.position + Vector3.up * 0.5f, move.normalized, 1.5f, Game.I.worldMask)) move = Quaternion.Euler(0, 70f * Mathf.Sign(strafe + 0.01f), 0) * move;
-            if (los && dist < 45f && Time.time >= nextShot)
+            if (Game.I.WallAhead(transform.position + Vector3.up * 0.5f, move, 1.5f)) move = Quaternion.Euler(0, 70f * Mathf.Sign(strafe + 0.01f), 0) * move;
+            if (los && dist < 55f && Time.time >= nextShot)
             {
-                nextShot = Time.time + 0.45f; Vector3 o = transform.position + Vector3.up * 1.5f; Vector3 d = (target.transform.position + Vector3.up * 1.2f - o).normalized + Random.insideUnitSphere * 0.05f;
-                Game.I.Shoot(this, o, d.normalized, 9f, 60f);
+                // رشقات من 3-5 طلقات ثم توقف قصير؛ الدقة تنخفض مع المسافة
+                if (burst <= 0) burst = Random.Range(3, 6);
+                {
+                    burst--; nextShot = Time.time + (burst > 0 ? 0.11f : Random.Range(0.7f, 1.3f));
+                    Vector3 o = transform.position + Vector3.up * 1.5f; Vector3 aim = target.transform.position + Vector3.up * Random.Range(0.8f, 1.5f);
+                    Vector3 d = (aim - o).normalized + Random.insideUnitSphere * (0.018f + dist * 0.0014f);
+                    Game.I.Shoot(this, o, d.normalized, 8f, 70f);
+                }
             }
         }
         // فصل البوتات عن بعضها (حتى لا تتداخل أجسامها)

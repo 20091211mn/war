@@ -75,6 +75,14 @@ public static class Ads
 #endif
     }
 
+    // إعلان بيني عند نهاية كل جولة (عندما يصل فريق لحدّ القتلى)
+    public static void RoundEnded()
+    {
+#if LEVELPLAY_ADS
+        if (Enabled && ready && inter != null && inter.IsAdReady()) inter.ShowAd();
+#endif
+    }
+
     // إعلان بمكافأة: يُنفَّذ onDone فقط إذا أكمل اللاعب المشاهدة
     public static void ShowRewarded(Action onDone)
     {

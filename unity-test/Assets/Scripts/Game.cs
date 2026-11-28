@@ -6,7 +6,7 @@ using UnityEngine.Networking;
 // يبني العالم كله بالكود: أرض ومبانٍ وبوتات واجهة HUD (OnGUI) وأزرار لمس
 public class Game : MonoBehaviour
 {
-    public const string Version = "1.0.0";
+    public const string Version = "1.0.1";
     const string UpdateUrl = "https://raw.githubusercontent.com/20091211mn/war/main/unity-test/version.json";
     public static Game I;
     string updMsg = "", updLink = "";
@@ -84,6 +84,32 @@ public class Game : MonoBehaviour
         foreach (var f in all) { if (f == null || f.team == me.team || !f.Alive) continue; float d = (f.transform.position - me.transform.position).sqrMagnitude; if (d < bd) { bd = d; best = f; } }
         return best;
     }
+    // خط رؤية/عائق يتجاهل المقاتلين (كان Linecast يصطدم بمجسّم الهدف نفسه فيظنه حاجزاً فلا تطلق البوتات)
+    static bool IsFighterHit(RaycastHit h) { return h.collider.GetComponentInParent<Fighter>() != null || h.collider.GetComponent<HitProxy>() != null; }
+    public bool LineClear(Vector3 a, Vector3 b)
+    {
+        Vector3 d = b - a; float len = d.magnitude; if (len < 0.01f) return true;
+        foreach (var h in Physics.RaycastAll(a, d / len, len, worldMask)) if (!IsFighterHit(h)) return false;
+        return true;
+    }
+    public bool WallAhead(Vector3 o, Vector3 dir, float dist)
+    {
+        if (dir.sqrMagnitude < 1e-4f) return false;
+        foreach (var h in Physics.RaycastAll(o, dir.normalized, dist, worldMask)) if (!IsFighterHit(h)) return true;
+        return false;
+    }
+    // مؤثرات: وميض فوهة، خط مقذوف، شرارة اصطدام
+    void Fx(Vector3 pos, Vector3 scale, Color c, float life, Quaternion rot)
+    {
+        var p = GameObject.CreatePrimitive(PrimitiveType.Cube); Destroy(p.GetComponent<Collider>());
+        p.transform.position = pos; p.transform.rotation = rot; p.transform.localScale = scale; Mat.Set(p, c); Destroy(p, life);
+    }
+    void ShotFx(Vector3 o, Vector3 d, Vector3 end, bool hitFighter)
+    {
+        Fx(o + d * 0.9f, new Vector3(0.14f, 0.14f, 0.2f), new Color(1f, 0.85f, 0.4f), 0.04f, Quaternion.LookRotation(d));
+        float len = Vector3.Distance(o + d, end); if (len > 1.5f) Fx((o + d + end) * 0.5f, new Vector3(0.025f, 0.025f, len), new Color(1f, 0.9f, 0.5f), 0.05f, Quaternion.LookRotation(d));
+        Fx(end, hitFighter ? new Vector3(0.18f, 0.18f, 0.18f) : new Vector3(0.12f, 0.12f, 0.12f), hitFighter ? new Color(0.7f, 0.05f, 0.05f) : new Color(0.75f, 0.7f, 0.6f), 0.12f, Random.rotation);
+    }
     AudioClip shotClip; float lastSnd;
     // طلقة مولَّدة بالكود: فرقعة ضوضاء سريعة الخفوت + دفعة منخفضة
     AudioClip MakeShot()
@@ -103,20 +129,23 @@ public class Game : MonoBehaviour
         if (Time.time - lastSnd > 0.03f) { lastSnd = Time.time; AudioSource.PlayClipAtPoint(shotClip, o, shooter is Player ? 0.9f : 0.6f); }
         Debug.DrawRay(o, d * Mathf.Min(range, 40f), shooter is Player ? Color.yellow : Color.red, 0.1f);
         var hits = Physics.RaycastAll(o, d, range); System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+        Vector3 end = o + d * Mathf.Min(range, 60f); bool hitF = false;
         foreach (var h in hits)
         {
             if (h.collider.transform.IsChildOf(shooter.transform)) continue;
             Fighter f = h.collider.GetComponentInParent<Fighter>();
             var p = h.collider.GetComponent<HitProxy>(); if (p != null) f = p.owner;
-            if (f != null) { if (f.team != shooter.team) { f.TakeDamage(dmg, shooter); if (shooter is Player) hitMark = 0.15f; } }
+            end = h.point;
+            if (f != null) { hitF = true; if (f.team != shooter.team) { f.TakeDamage(dmg, shooter); if (shooter is Player) hitMark = 0.15f; } }
             break;
         }
+        if (shooter is Player || (player != null && (player.transform.position - o).sqrMagnitude < 60f * 60f)) ShotFx(o, d, end, hitF);
     }
 
     void Update()
     {
         hitMark = Mathf.Max(0, hitMark - Time.deltaTime);
-        if (score[0] >= limit || score[1] >= limit) { msg = score[1] >= limit ? "فاز الفريق الأزرق" : "فاز الفريق الأحمر"; msgUntil = Time.time + 5; score[0] = score[1] = 0; foreach (var f in all) { f.kills = f.deaths = 0; } }
+        if (score[0] >= limit || score[1] >= limit) { msg = score[1] >= limit ? "فاز الفريق الأزرق" : "فاز الفريق الأحمر"; msgUntil = Time.time + 5; score[0] = score[1] = 0; Ads.RoundEnded(); foreach (var f in all) { f.kills = f.deaths = 0; } }
         HandleTouch();
     }
 
