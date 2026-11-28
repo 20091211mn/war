@@ -1,10 +1,8 @@
 using System;
 using UnityEngine;
-#if LEVELPLAY_ADS
 using Unity.Services.LevelPlay;
-#endif
 
-// إعلانات Unity LevelPlay (الحزمة com.unity.services.levelplay + الرمز LEVELPLAY_ADS من Assets/csc.rsp).
+// إعلانات Unity LevelPlay (الحزمة com.unity.services.levelplay ).
 // تعمل على الجوال فقط؛ في المحرر وعلى الحاسوب كل الدوال بلا أثر.
 public static class Ads
 {
@@ -19,32 +17,21 @@ public static class Ads
     {
         get
         {
-#if LEVELPLAY_ADS
-            return AppKey != "" && Application.isMobilePlatform;
-#else
-            return false;
-#endif
+            return AppKey != "" && (Application.platform == RuntimePlatform.Android || Application.platform == RuntimePlatform.IPhonePlayer);
         }
     }
     public static bool RewardedReady
     {
         get
         {
-#if LEVELPLAY_ADS
             return ready && rewarded != null && rewarded.IsAdReady();
-#else
-            return false;
-#endif
         }
     }
 
-#if LEVELPLAY_ADS
     static LevelPlayInterstitialAd inter; static LevelPlayRewardedAd rewarded; static Action onReward;
-#endif
 
     public static void Init()
     {
-#if LEVELPLAY_ADS
         if (!Enabled) { Status = "ADS: disabled (not mobile / no key)"; return; }
         Status = "ADS: init...";
         try
@@ -65,31 +52,24 @@ public static class Ads
             LevelPlay.Init(AppKey);
         }
         catch (Exception e) { Status = "ADS: init error: " + e.Message; Debug.Log("Ads init error: " + e.Message); }
-#endif
     }
 
     // إعلان بيني بعد كل 3 وفيات للاعب (لا يزعج كثيراً)
     public static void PlayerDied()
     {
         deaths++;
-#if LEVELPLAY_ADS
         if (Enabled && ready && inter != null && deaths % 3 == 0 && inter.IsAdReady()) inter.ShowAd();
-#endif
     }
 
     // إعلان بيني عند نهاية كل جولة (عندما يصل فريق لحدّ القتلى)
     public static void RoundEnded()
     {
-#if LEVELPLAY_ADS
         if (Enabled && ready && inter != null && inter.IsAdReady()) inter.ShowAd();
-#endif
     }
 
     // إعلان بمكافأة: يُنفَّذ onDone فقط إذا أكمل اللاعب المشاهدة
     public static void ShowRewarded(Action onDone)
     {
-#if LEVELPLAY_ADS
         if (RewardedReady) { onReward = onDone; rewarded.ShowAd(); }
-#endif
     }
 }
