@@ -8,7 +8,7 @@ public class Bot : Fighter
     Renderer[] rs;
 
     void Awake() { cc = GetComponent<CharacterController>(); cc.height = 1.8f; cc.radius = 0.35f; cc.center = new Vector3(0, 0.9f, 0); }
-    Transform legL, legR; float walkT; int burst;
+    Transform legL, legR; float walkT; int burst, wid; float skill = 1f, deathT = -10f, reactUntil, retreatUntil; Collider hitCol; Fighter lastTarget;
     Transform Part(PrimitiveType pt, Vector3 pos, Vector3 scale, Color c)
     {
         var p = GameObject.CreatePrimitive(pt); Destroy(p.GetComponent<Collider>());
@@ -29,15 +29,21 @@ public class Bot : Fighter
         Part(PrimitiveType.Cube, new Vector3(0.30f, 1.2f, 0.22f), new Vector3(0.13f, 0.14f, 0.5f), uni);
         Part(PrimitiveType.Cube, new Vector3(0.12f, 1.18f, 0.5f), new Vector3(0.06f, 0.1f, 0.7f), dark);
         var hb = new GameObject("BotBody"); hb.transform.SetParent(transform); hb.transform.localPosition = new Vector3(0, 0.95f, 0);
-        var hit = hb.AddComponent<CapsuleCollider>(); hit.height = 1.95f; hit.radius = 0.42f; hb.AddComponent<HitProxy>().owner = this;
+        var hit = hb.AddComponent<CapsuleCollider>(); hit.height = 1.95f; hit.radius = 0.42f; hb.AddComponent<HitProxy>().owner = this; hitCol = hit; skill = Random.Range(0.65f, 1.25f); wid = Random.Range(0, 3);
         rs = GetComponentsInChildren<Renderer>();
     }
 
     void Update()
     {
-        bool a = Alive; foreach (var r in rs) r.enabled = a;
-        if (!a) { if (Time.time > respawnAt) { hp = 100; cc.enabled = false; transform.position = Game.I.SpawnPoint(team); cc.enabled = true; } return; }
-        if (Time.time > nextThink) { nextThink = Time.time + 0.4f; target = Game.I.NearestEnemy(this); strafe = Random.Range(-1f, 1f); }
+        bool a = Alive; bool vis = a || Time.time < deathT + 1.2f; foreach (var r in rs) r.enabled = vis;
+        if (hitCol != null) hitCol.enabled = a;
+        if (!a)
+        {
+            float fall = Mathf.Clamp01((Time.time - deathT) / 0.35f); transform.rotation = Quaternion.Euler(-88f * fall, transform.eulerAngles.y, 0f);
+            if (Time.time > respawnAt) { hp = 100; cc.enabled = false; transform.position = Game.I.SpawnPoint(team); transform.rotation = Quaternion.identity; cc.enabled = true; target = null; }
+            return;
+        }
+        if (Time.time > nextThink) { nextThink = Time.time + 0.4f; var nt = Game.I.NearestEnemy(this); if (nt != target) reactUntil = Time.time + Random.Range(0.25f, 0.6f) / skill; target = nt; strafe = Random.Range(-1f, 1f); }
         Vector3 move = Vector3.zero;
         if (target != null)
         {
@@ -45,17 +51,19 @@ public class Bot : Fighter
             Vector3 dir = to.normalized;
             transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(dir), Time.deltaTime * 8f);
             bool los = Game.I.LineClear(transform.position + Vector3.up * 1.5f, target.transform.position + Vector3.up * 1.2f);
-            if (dist > 14f || !los) move = dir; else move = transform.right * strafe * 0.6f;
+            if (hp < 30f && Time.time > retreatUntil - 2.5f && los) retreatUntil = Mathf.Max(retreatUntil, Time.time + 2.5f);
+            if (Time.time < retreatUntil) move = -dir * 0.9f + transform.right * strafe * 0.5f;
+            else if (dist > 14f || !los) move = dir; else move = transform.right * strafe * 0.6f;
             if (Game.I.WallAhead(transform.position + Vector3.up * 0.5f, move, 1.5f)) move = Quaternion.Euler(0, 70f * Mathf.Sign(strafe + 0.01f), 0) * move;
-            if (los && dist < 55f && Time.time >= nextShot)
+            if (los && dist < 55f && Time.time >= nextShot && Time.time >= reactUntil)
             {
                 // رشقات من 3-5 طلقات ثم توقف قصير؛ الدقة تنخفض مع المسافة
                 if (burst <= 0) burst = Random.Range(3, 6);
                 {
                     burst--; nextShot = Time.time + (burst > 0 ? 0.11f : Random.Range(0.7f, 1.3f));
                     Vector3 o = transform.position + Vector3.up * 1.5f; Vector3 aim = target.transform.position + Vector3.up * Random.Range(0.8f, 1.5f);
-                    Vector3 d = (aim - o).normalized + Random.insideUnitSphere * (0.018f + dist * 0.0014f);
-                    Game.I.Shoot(this, o, d.normalized, 8f, 70f);
+                    Vector3 d = (aim - o).normalized + Random.insideUnitSphere * ((0.018f + dist * 0.0014f) / skill);
+                    Game.I.Shoot(this, o, d.normalized, 8f * Mathf.Lerp(0.8f, 1.15f, skill - 0.65f), 70f, wid);
                 }
             }
         }
@@ -72,9 +80,10 @@ public class Bot : Fighter
             legL.localPosition = new Vector3(-0.13f, 0.42f, s); legR.localPosition = new Vector3(0.13f, 0.42f, -s);
         }
         vy = cc.isGrounded ? -1f : vy - 20f * Time.deltaTime;
-        cc.Move((move.normalized * 4.2f + Vector3.up * vy) * Time.deltaTime);
+        cc.Move((move.normalized * (Time.time < retreatUntil ? 5f : 4.2f) + Vector3.up * vy) * Time.deltaTime);
     }
-    protected override void OnDeath() { respawnAt = Time.time + 3f; }
+    protected override void OnHurt(Fighter src) { if (src != null && src.team != team && src.Alive) { target = src; reactUntil = Mathf.Min(reactUntil, Time.time + 0.2f / skill); nextThink = Time.time + 1.2f; strafe = Random.Range(-1f, 1f); } }
+    protected override void OnDeath() { respawnAt = Time.time + 4f; deathT = Time.time; }
 }
 
 // يمرّر إصابات الـRaycast من مجسّم البوت إلى البوت نفسه

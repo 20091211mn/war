@@ -6,9 +6,9 @@ using UnityEngine.Networking;
 // يبني العالم كله بالكود: أرض ومبانٍ وبوتات واجهة HUD (OnGUI) وأزرار لمس
 public class Game : MonoBehaviour
 {
-    public const string Version = "1.0.5";
+    public const string Version = "1.0.6";
     const string UpdateUrl = "https://raw.githubusercontent.com/20091211mn/war/main/unity-test/version.json";
-    public static Game I;
+    public static Game I; Light sun; public Color skyCol = new Color(0.55f, 0.72f, 0.92f);
     string updMsg = "", updLink = "";
     List<KeyValuePair<string, float>> feed = new List<KeyValuePair<string, float>>();
     public int[] score = new int[2]; public int limit = 30;
@@ -29,7 +29,8 @@ public class Game : MonoBehaviour
         RenderSettings.fog = false;
         foreach (var c in FindObjectsOfType<Camera>()) Destroy(c.gameObject);
         foreach (var l in FindObjectsOfType<Light>()) Destroy(l.gameObject);
-        var sun = new GameObject("Sun").AddComponent<Light>(); sun.type = LightType.Directional; sun.transform.rotation = Quaternion.Euler(38, -35, 0); sun.intensity = 1.25f; sun.color = new Color(1f, 0.95f, 0.84f); sun.shadows = LightShadows.Soft;
+        sun = new GameObject("Sun").AddComponent<Light>(); sun.type = LightType.Directional; sun.transform.rotation = Quaternion.Euler(38, -35, 0); sun.intensity = 1.25f; sun.color = new Color(1f, 0.95f, 0.84f); sun.shadows = LightShadows.Soft;
+        mapIdx = PlayerPrefs.GetInt("map", 0); botCount = PlayerPrefs.GetInt("bots", 10); lowQ = PlayerPrefs.GetInt("lowq", Application.isMobilePlatform ? 1 : 0) == 1; ApplyQuality();
         ShowMenu();
         StartCoroutine(CheckUpdate());
         Ads.Init();
@@ -60,7 +61,6 @@ public class Game : MonoBehaviour
 
     void Build()
     {
-        QualitySettings.shadowDistance = 90f;
         var pg = new GameObject("Player"); pg.transform.position = SpawnPoint(1); player = pg.AddComponent<Player>(); player.team = 1; all.Add(player);
         for (int i = 0; i < botCount; i++) AddBot(i % 2 == 0 ? 0 : 1);
         for (int i = 0; i < 2; i++) AddBot(0);
@@ -70,15 +70,21 @@ public class Game : MonoBehaviour
     {
         if (world != null) Destroy(world.gameObject);
         world = new GameObject("World").transform;
-        if (mapIdx == 0) { groundR = FarmMap.Build(world); bldR = FarmMap.Rends; }
-        else { groundR = DesertMap.Build(world); bldR = DesertMap.Rends; }
-        RenderSettings.ambientSkyColor = mapIdx == 0 ? new Color(0.55f, 0.7f, 0.95f) : new Color(0.75f, 0.78f, 0.9f);
+        if (mapIdx == 0) { groundR = FarmMap.Build(world); bldR = FarmMap.Rends; skyCol = new Color(0.55f, 0.72f, 0.92f); }
+        else { groundR = ArenaMap.Build(world, mapIdx); bldR = ArenaMap.Rends; skyCol = mapIdx == 1 ? new Color(0.72f, 0.82f, 0.95f) : mapIdx == 2 ? new Color(0.74f, 0.8f, 0.88f) : new Color(0.58f, 0.64f, 0.74f); }
+        RenderSettings.ambientSkyColor = skyCol;
+        if (menuCam != null) menuCam.backgroundColor = skyCol;
+    }
+    void ApplyQuality()
+    {
+        if (sun != null) sun.shadows = lowQ ? LightShadows.None : LightShadows.Soft;
+        QualitySettings.shadowDistance = lowQ ? 0f : 90f; QualitySettings.pixelLightCount = lowQ ? 1 : 2;
     }
 
     // ---------- القائمة الرئيسية ----------
-    static readonly string[] MapNames = { "FARM HARVEST", "DESERT OUTPOST" };
+    static readonly string[] MapNames = { "FARM HARVEST", "DESERT OUTPOST", "SNOW BASE", "URBAN RUINS" };
     static readonly int[] BotOpts = { 6, 10, 16 };
-    int mapIdx = 0, botCount = 10; bool paused; Camera menuCam; float menuT;
+    int mapIdx = 0, botCount = 10; bool paused, lowQ; Camera menuCam; float menuT;
     void ShowMenu()
     {
         if (player != null) { Destroy(player.gameObject); player = null; }
@@ -87,7 +93,7 @@ public class Game : MonoBehaviour
         foreach (var c in FindObjectsOfType<Camera>()) Destroy(c.gameObject);
         BuildWorld();
         var cg = new GameObject("MenuCam"); menuCam = cg.AddComponent<Camera>(); cg.tag = "MainCamera"; menuCam.farClipPlane = 400f;
-        menuCam.clearFlags = CameraClearFlags.SolidColor; menuCam.backgroundColor = new Color(0.55f, 0.72f, 0.92f);
+        menuCam.clearFlags = CameraClearFlags.SolidColor; menuCam.backgroundColor = skyCol;
         Cursor.lockState = CursorLockMode.None; Cursor.visible = true; paused = true;
     }
     void StartMatch()
@@ -123,10 +129,12 @@ public class Game : MonoBehaviour
         float bw = Mathf.Min(W * 0.6f, fs * 16f), bh = fs * 2.3f, x = (W - bw) / 2f, y = H * 0.2f + fs * 5.6f;
         GUI.backgroundColor = new Color(0.15f, 0.6f, 0.25f);
         if (GUI.Button(new Rect(x, y, bw, bh * 1.2f), "PLAY", btnSt)) StartMatch();
-        GUI.backgroundColor = new Color(0.25f, 0.3f, 0.45f); y += bh * 1.45f;
-        if (GUI.Button(new Rect(x, y, bw, bh), "MAP:  " + MapNames[mapIdx] + "  >", btnSt)) { mapIdx = (mapIdx + 1) % MapNames.Length; BuildWorld(); }
+        GUI.backgroundColor = new Color(0.25f, 0.3f, 0.45f); y += bh * 1.35f;
+        if (GUI.Button(new Rect(x, y, bw, bh), "MAP:  " + MapNames[mapIdx] + "  >", btnSt)) { mapIdx = (mapIdx + 1) % MapNames.Length; PlayerPrefs.SetInt("map", mapIdx); BuildWorld(); }
+        y += bh * 1.15f;
+        if (GUI.Button(new Rect(x, y, bw, bh), "BOTS:  " + botCount + "  >", btnSt)) { int k = System.Array.IndexOf(BotOpts, botCount); botCount = BotOpts[(k + 1) % BotOpts.Length]; PlayerPrefs.SetInt("bots", botCount); }
         y += bh * 1.2f;
-        if (GUI.Button(new Rect(x, y, bw, bh), "BOTS:  " + botCount + "  >", btnSt)) { int k = System.Array.IndexOf(BotOpts, botCount); botCount = BotOpts[(k + 1) % BotOpts.Length]; }
+        if (GUI.Button(new Rect(x, y, bw, bh), "GRAPHICS:  " + (lowQ ? "SMOOTH (low)" : "HIGH") + "  >", btnSt)) { lowQ = !lowQ; PlayerPrefs.SetInt("lowq", lowQ ? 1 : 0); ApplyQuality(); }
         GUI.backgroundColor = Color.white;
         GUI.Label(new Rect(0, H - fs * 2.2f, W, fs * 1.4f), "Controls: touch (stick left, look right) or WASD + mouse   |   v" + Version, subSt);
         if (updLink != "")
@@ -179,23 +187,10 @@ public class Game : MonoBehaviour
         float len = Vector3.Distance(o + d, end); if (len > 1.5f) Fx((o + d + end) * 0.5f, new Vector3(0.025f, 0.025f, len), new Color(1f, 0.9f, 0.5f), 0.05f, Quaternion.LookRotation(d));
         Fx(end, hitFighter ? new Vector3(0.18f, 0.18f, 0.18f) : new Vector3(0.12f, 0.12f, 0.12f), hitFighter ? new Color(0.7f, 0.05f, 0.05f) : new Color(0.75f, 0.7f, 0.6f), 0.12f, Random.rotation);
     }
-    AudioClip shotClip; float lastSnd;
-    // طلقة مولَّدة بالكود: فرقعة ضوضاء سريعة الخفوت + دفعة منخفضة
-    AudioClip MakeShot()
+    float lastSnd;
+    public void Shoot(Fighter shooter, Vector3 o, Vector3 d, float dmg, float range, int wid = 0)
     {
-        int rate = 22050, n = rate * 45 / 100; var data = new float[n]; var rnd = new System.Random(7); float lp = 0f;
-        for (int i = 0; i < n; i++)
-        {
-            float t = (float)i / rate; float nz = (float)(rnd.NextDouble() * 2 - 1); lp += (nz - lp) * 0.3f;
-            float crack = (nz - lp * 0.4f) * Mathf.Exp(-t * 80f), boom = Mathf.Sin(6.2832f * (50f + 70f * Mathf.Exp(-t * 30f)) * t) * Mathf.Exp(-t * 12f), tail = lp * Mathf.Exp(-t * 9f) * 0.8f;
-            data[i] = Mathf.Clamp((crack + boom + tail) * 0.8f, -1f, 1f);
-        }
-        var c = AudioClip.Create("shot", n, 1, rate, false); c.SetData(data, 0); return c;
-    }
-    public void Shoot(Fighter shooter, Vector3 o, Vector3 d, float dmg, float range)
-    {
-        if (shotClip == null) shotClip = MakeShot();
-        if (Time.time - lastSnd > 0.03f) { lastSnd = Time.time; AudioSource.PlayClipAtPoint(shotClip, o, shooter is Player ? 0.9f : 0.6f); }
+        if (Time.time - lastSnd > 0.02f || wid == 2) { lastSnd = Time.time; Snd.PlayShot(wid, o, shooter is Player ? 0.9f : 0.7f); }
         Debug.DrawRay(o, d * Mathf.Min(range, 40f), shooter is Player ? Color.yellow : Color.red, 0.1f);
         var hits = Physics.RaycastAll(o, d, range); System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
         Vector3 end = o + d * Mathf.Min(range, 60f); bool hitF = false;
@@ -205,7 +200,7 @@ public class Game : MonoBehaviour
             Fighter f = h.collider.GetComponentInParent<Fighter>();
             var p = h.collider.GetComponent<HitProxy>(); if (p != null) f = p.owner;
             end = h.point;
-            if (f != null) { hitF = true; if (f.team != shooter.team) { f.TakeDamage(dmg, shooter); if (shooter is Player) hitMark = 0.15f; } }
+            if (f != null) { hitF = true; if (f.team != shooter.team) { f.TakeDamage(dmg, shooter); if (shooter is Player) { hitMark = 0.15f; Snd.PlayHit(o); } } }
             break;
         }
         if (shooter is Player || (player != null && (player.transform.position - o).sqrMagnitude < 60f * 60f)) ShotFx(o, d, end, hitF);
@@ -224,6 +219,7 @@ public class Game : MonoBehaviour
     Rect SwitchRect() => new Rect(Screen.width - 250, Screen.height - 400, 100, 100);
     Rect UpdRect() => new Rect(Screen.width / 2f - 260, 70, 520, 70);
     Rect PauseRect() { float pb = Mathf.Max(18, Screen.height / 36) * 2.2f; return new Rect(Screen.width / 2f - pb / 2f, 8, pb, pb); }
+    Rect AimRect() => new Rect(Screen.width - 250, Screen.height - 520, 100, 100);
     Rect ReloadRect() => new Rect(Screen.width - 130, Screen.height - 400, 100, 100);
     void HandleTouch()
     {
@@ -237,6 +233,7 @@ public class Game : MonoBehaviour
                 if (updLink != "" && UpdRect().Contains(p)) { Application.OpenURL(updLink); continue; }
                 if (PauseRect().Contains(p)) continue;
                 if (SwitchRect().Contains(p)) { player.NextWeapon(); continue; }
+                if (AimRect().Contains(p)) { player.ToggleAim(); continue; }
                 if (ReloadRect().Contains(p)) { player.Reload(); continue; }
                 if (FireRect().Contains(p)) continue;
                 if (p.x < Screen.width * 0.45f && stickId < 0) { stickId = t.fingerId; stickOrigin = p; }
@@ -268,7 +265,8 @@ public class Game : MonoBehaviour
         GUI.DrawTexture(new Rect(cx - 1, cy - 10, 2, 7), Texture2D.whiteTexture); GUI.DrawTexture(new Rect(cx - 1, cy + 3, 2, 7), Texture2D.whiteTexture);
         GUI.DrawTexture(new Rect(cx - 10, cy - 1, 7, 2), Texture2D.whiteTexture); GUI.DrawTexture(new Rect(cx + 3, cy - 1, 7, 2), Texture2D.whiteTexture); GUI.color = old;
         GUI.Label(new Rect(20, 12, Screen.width * 0.6f, lh), "RED " + score[0] + "  -  BLUE " + score[1] + "   (" + limit + ")", st);
-        GUI.Label(new Rect(20, Screen.height - lh * 2.1f, Screen.width * 0.6f, lh), "HP " + Mathf.CeilToInt(Mathf.Max(0, player.hp)), st);
+        { float bw2 = Screen.width * 0.22f, hp01 = Mathf.Clamp01(player.hp / 100f); GUI.color = new Color(0, 0, 0, 0.5f); GUI.DrawTexture(new Rect(20, Screen.height - lh * 2.55f, bw2, lh * 0.3f), Texture2D.whiteTexture); GUI.color = Color.Lerp(new Color(0.9f, 0.15f, 0.1f), new Color(0.2f, 0.85f, 0.3f), hp01); GUI.DrawTexture(new Rect(20, Screen.height - lh * 2.55f, bw2 * hp01, lh * 0.3f), Texture2D.whiteTexture); GUI.color = old; }
+        GUI.Label(new Rect(20, Screen.height - lh * 2.1f, Screen.width * 0.6f, lh), "HP " + Mathf.CeilToInt(Mathf.Max(0, player.hp)) + "     K " + player.kills + "  D " + player.deaths, st);
         GUI.Label(new Rect(20, Screen.height - lh * 1.1f, Screen.width * 0.7f, lh), player.WeaponName + "   " + (player.Reloading ? "RELOADING" : player.ammo + " / " + player.reserve), st);
         // سجل القتل
         for (int i = feed.Count - 1; i >= 0; i--) if (feed[i].Value < Time.time) feed.RemoveAt(i);
@@ -289,7 +287,7 @@ public class Game : MonoBehaviour
         }
         if (Application.isMobilePlatform)
         {
-            GUI.color = new Color(1, 1, 1, 0.35f); GUI.Box(FireRect(), "FIRE"); GUI.Box(ReloadRect(), "R"); GUI.Box(SwitchRect(), "SW"); GUI.color = old;
+            GUI.color = new Color(1, 1, 1, 0.35f); GUI.Box(FireRect(), "FIRE"); GUI.Box(ReloadRect(), "R"); GUI.Box(SwitchRect(), "SW"); GUI.Box(AimRect(), player.aim ? "AIM*" : "AIM"); GUI.color = old;
             if (stickId >= 0) { GUI.color = new Color(1, 1, 1, 0.3f); GUI.DrawTexture(new Rect(stickOrigin.x - 55, stickOrigin.y - 55, 110, 110), Texture2D.whiteTexture); GUI.color = old; }
         }
         else if (Cursor.lockState != CursorLockMode.Locked) GUI.Label(new Rect(cx - 330, cy + 60, 700, lh * 2), "Click to play | WASD, Shift, Space | 1-3 / Q weapons | R reload", st);
