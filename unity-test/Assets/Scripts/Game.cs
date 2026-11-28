@@ -6,7 +6,7 @@ using UnityEngine.Networking;
 // يبني العالم كله بالكود: أرض ومبانٍ وبوتات واجهة HUD (OnGUI) وأزرار لمس
 public class Game : MonoBehaviour
 {
-    public const string Version = "1.0.3";
+    public const string Version = "1.0.4";
     const string UpdateUrl = "https://raw.githubusercontent.com/20091211mn/war/main/unity-test/version.json";
     public static Game I;
     string updMsg = "", updLink = "";
@@ -201,7 +201,6 @@ public class Game : MonoBehaviour
         // سجل القتل
         for (int i = feed.Count - 1; i >= 0; i--) if (feed[i].Value < Time.time) feed.RemoveAt(i);
         for (int i = 0; i < feed.Count; i++) GUI.Label(new Rect(Screen.width - Screen.width * 0.4f - 20, 12 + i * lh * 0.8f, Screen.width * 0.4f, lh), feed[i].Key, new GUIStyle(sm) { alignment = TextAnchor.MiddleRight, normal = { textColor = Color.white } });
-        GUI.Label(new Rect(Screen.width * 0.2f, Screen.height - lh * 0.8f, Screen.width * 0.6f, lh * 0.8f), Ads.Status, new GUIStyle(sm) { fontSize = Mathf.RoundToInt(fs * 0.5f), alignment = TextAnchor.MiddleCenter, normal = { textColor = new Color(1f, 1f, 1f, 0.55f) } });
         if (!player.Alive)
         {
             GUI.Label(new Rect(cx - 200, cy - lh, 400, lh * 1.5f), "YOU DIED - respawning...", st);
