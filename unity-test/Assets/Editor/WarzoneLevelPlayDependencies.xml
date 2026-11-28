@@ -8,6 +8,8 @@
         <repository>https://repo.maven.apache.org/maven2</repository>
       </repositories>
     </androidPackage>
+    <!-- شبكة Unity Ads (الـadapter يضم الـSDK من النسخة 5.15 فصاعداً) -->
+    <androidPackage spec="com.unity3d.ads-mediation:unityads-adapter:5.17.0" />
     <androidPackage spec="com.google.android.gms:play-services-appset:16.0.2" />
     <androidPackage spec="com.google.android.gms:play-services-ads-identifier:18.0.1" />
     <androidPackage spec="com.google.android.gms:play-services-basement:18.1.0" />

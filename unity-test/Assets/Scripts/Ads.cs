@@ -13,6 +13,7 @@ public static class Ads
     public const string InterstitialId = "oc9mqlyb2zdf2768";
     public const string RewardedId = "8e5p6rtwhs6lcsv5";
 
+    public static string Status = "ADS: off";
     static int deaths; static bool ready;
     public static bool Enabled
     {
@@ -44,25 +45,26 @@ public static class Ads
     public static void Init()
     {
 #if LEVELPLAY_ADS
-        if (!Enabled) return;
+        if (!Enabled) { Status = "ADS: disabled (not mobile / no key)"; return; }
+        Status = "ADS: init...";
         try
         {
             LevelPlay.OnInitSuccess += _ =>
             {
-                ready = true;
-                if (InterstitialId != "") { inter = new LevelPlayInterstitialAd(InterstitialId); inter.OnAdClosed += _2 => inter.LoadAd(); inter.LoadAd(); }
+                ready = true; Status = "ADS: init OK";
+                if (InterstitialId != "") { inter = new LevelPlayInterstitialAd(InterstitialId); inter.OnAdClosed += _2 => inter.LoadAd(); inter.OnAdLoaded += _2 => Status = "ADS: interstitial loaded"; inter.OnAdLoadFailed += err => Status = "ADS: inter load failed: " + err; inter.LoadAd(); }
                 if (RewardedId != "")
                 {
                     rewarded = new LevelPlayRewardedAd(RewardedId);
                     rewarded.OnAdRewarded += (_2, _3) => { var a = onReward; onReward = null; if (a != null) a(); };
-                    rewarded.OnAdClosed += _2 => rewarded.LoadAd();
+                    rewarded.OnAdClosed += _2 => rewarded.LoadAd(); rewarded.OnAdLoaded += _2 => Status = "ADS: rewarded loaded"; rewarded.OnAdLoadFailed += err => Status = "ADS: rewarded load failed: " + err;
                     rewarded.LoadAd();
                 }
             };
-            LevelPlay.OnInitFailed += e => Debug.Log("LevelPlay init failed: " + e);
+            LevelPlay.OnInitFailed += e => { Status = "ADS: init FAILED: " + e; Debug.Log("LevelPlay init failed: " + e); };
             LevelPlay.Init(AppKey);
         }
-        catch (Exception e) { Debug.Log("Ads init error: " + e.Message); }
+        catch (Exception e) { Status = "ADS: init error: " + e.Message; Debug.Log("Ads init error: " + e.Message); }
 #endif
     }
 
